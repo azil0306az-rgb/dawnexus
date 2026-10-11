@@ -90,11 +90,18 @@ export const Hero: React.FC = () => {
               {/* Center D Icon Showcase */}
               <div className="my-auto py-6 flex flex-col items-center justify-center relative">
                 <div className="relative p-6 rounded-2xl bg-[#050505]/80 border border-[#252525] glow-lime-subtle transition-transform duration-500 group-hover:scale-105">
-                  <img
-                    src="/brand/dawnexus-d-symbol.png"
-                    alt="Dawnexus D Symbol"
-                    className="w-36 h-auto object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]"
-                  />
+                  <picture>
+                    <source srcSet="/brand/dawnexus-d-symbol.webp" type="image/webp" />
+                    <img
+                      src="/brand/dawnexus-d-symbol.png"
+                      alt="Dawnexus D Symbol"
+                      width="144"
+                      height="144"
+                      fetchPriority="high"
+                      decoding="async"
+                      className="w-36 h-auto object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]"
+                    />
+                  </picture>
                 </div>
               </div>
 

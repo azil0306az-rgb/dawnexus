@@ -11,3 +11,4 @@ server/data/*.sqlite-shm
 
 .vercel
 .env*
+lh-*.json

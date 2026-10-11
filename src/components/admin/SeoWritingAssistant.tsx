@@ -240,3 +240,4 @@ export const SeoWritingAssistant: React.FC<SeoWritingAssistantProps> = ({ input,
     </div>
   );
 };
+

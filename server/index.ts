@@ -140,7 +140,16 @@ app.get('/api/health', (req, res) => {
 const distPath = path.resolve('dist');
 if (fs.existsSync(distPath)) {
   console.log(`[Server] Serving production static files from ${distPath}`);
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    maxAge: '7d',
+    setHeaders: (res, filePath) => {
+      if (filePath.includes(path.sep + 'assets' + path.sep)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      }
+    }
+  }));
 
   // SPA fallback for /admin and any frontend routes
   app.use((req, res, next) => {

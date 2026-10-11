@@ -404,3 +404,4 @@ export const BlogPostPage: React.FC<BlogPostPageProps> = ({ slug: propSlug }) =>
     </main>
   );
 };
+

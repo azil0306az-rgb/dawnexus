@@ -8,16 +8,24 @@ import { Work } from './components/public/Work';
 import { ContactForm } from './components/public/ContactForm';
 import { Footer } from './components/public/Footer';
 import { PrivacyModal } from './components/public/PrivacyModal';
-import { AdminLogin } from './components/admin/AdminLogin';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { WebsiteDesignPage } from './pages/services/WebsiteDesignPage';
-import { SeoServicesPage } from './pages/services/SeoServicesPage';
-import { AiVideoCreationPage } from './pages/services/AiVideoCreationPage';
-import { DigitalMarketingPage } from './pages/services/DigitalMarketingPage';
-import { BlogListingPage } from './pages/blog/BlogListingPage';
-import { BlogPostPage } from './pages/blog/BlogPostPage';
 import { usePageSeo } from './utils/seo';
 import { Loader2 } from 'lucide-react';
+
+// Code-split route components to minimize initial homepage JavaScript payload
+const AdminLogin = React.lazy(() => import('./components/admin/AdminLogin').then(m => ({ default: m.AdminLogin })));
+const AdminDashboard = React.lazy(() => import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const WebsiteDesignPage = React.lazy(() => import('./pages/services/WebsiteDesignPage').then(m => ({ default: m.WebsiteDesignPage })));
+const SeoServicesPage = React.lazy(() => import('./pages/services/SeoServicesPage').then(m => ({ default: m.SeoServicesPage })));
+const AiVideoCreationPage = React.lazy(() => import('./pages/services/AiVideoCreationPage').then(m => ({ default: m.AiVideoCreationPage })));
+const DigitalMarketingPage = React.lazy(() => import('./pages/services/DigitalMarketingPage').then(m => ({ default: m.DigitalMarketingPage })));
+const BlogListingPage = React.lazy(() => import('./pages/blog/BlogListingPage').then(m => ({ default: m.BlogListingPage })));
+const BlogPostPage = React.lazy(() => import('./pages/blog/BlogPostPage').then(m => ({ default: m.BlogPostPage })));
+
+const RouteLoadingFallback: React.FC = () => (
+  <div className="flex-1 min-h-[50vh] flex items-center justify-center text-white">
+    <Loader2 className="w-8 h-8 animate-spin text-[#C7FF4D]" />
+  </div>
+);
 
 const HomePageContent: React.FC = () => {
   usePageSeo({
@@ -110,31 +118,63 @@ export const App: React.FC = () => {
     }
 
     if (isAuthenticated) {
-      return <AdminDashboard onLogout={handleLogout} />;
+      return (
+        <React.Suspense fallback={<RouteLoadingFallback />}>
+          <AdminDashboard onLogout={handleLogout} />
+        </React.Suspense>
+      );
     }
 
-    return <AdminLogin onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <React.Suspense fallback={<RouteLoadingFallback />}>
+        <AdminLogin onLoginSuccess={handleLoginSuccess} />
+      </React.Suspense>
+    );
   }
 
   // 2. Blog, Service Pages & Public Marketing Website
   const renderContent = () => {
     if (currentPath === '/blog') {
-      return <BlogListingPage />;
+      return (
+        <React.Suspense fallback={<RouteLoadingFallback />}>
+          <BlogListingPage />
+        </React.Suspense>
+      );
     }
     if (currentPath.startsWith('/blog/')) {
       const slug = currentPath.replace('/blog/', '').split('?')[0];
-      return <BlogPostPage slug={slug} />;
+      return (
+        <React.Suspense fallback={<RouteLoadingFallback />}>
+          <BlogPostPage slug={slug} />
+        </React.Suspense>
+      );
     }
 
     switch (currentPath) {
       case '/services/website-design':
-        return <WebsiteDesignPage />;
+        return (
+          <React.Suspense fallback={<RouteLoadingFallback />}>
+            <WebsiteDesignPage />
+          </React.Suspense>
+        );
       case '/services/seo-services':
-        return <SeoServicesPage />;
+        return (
+          <React.Suspense fallback={<RouteLoadingFallback />}>
+            <SeoServicesPage />
+          </React.Suspense>
+        );
       case '/services/ai-video-creation':
-        return <AiVideoCreationPage />;
+        return (
+          <React.Suspense fallback={<RouteLoadingFallback />}>
+            <AiVideoCreationPage />
+          </React.Suspense>
+        );
       case '/services/digital-marketing':
-        return <DigitalMarketingPage />;
+        return (
+          <React.Suspense fallback={<RouteLoadingFallback />}>
+            <DigitalMarketingPage />
+          </React.Suspense>
+        );
       default:
         return <HomePageContent />;
     }

@@ -35,13 +35,30 @@
 
     <meta name="theme-color" content="#050505" />
 
-    <!-- Google Fonts: Inter & Manrope -->
+    <!-- Preload Critical Above-The-Fold Assets for Fast LCP/FCP -->
+    <link rel="preload" as="image" href="/brand/dawnexus-horizontal.webp" type="image/webp" />
+    <link rel="preload" as="image" href="/brand/dawnexus-d-symbol.webp" type="image/webp" fetchpriority="high" />
+
+    <!-- Google Fonts: Inter & Manrope (Non-render-blocking with optimized weights) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap"
     />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap"
+      />
+    </noscript>
 
     <!-- JSON-LD Structured Data -->
     <script type="application/ld+json">

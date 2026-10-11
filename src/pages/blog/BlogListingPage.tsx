@@ -327,3 +327,4 @@ export const BlogListingPage: React.FC = () => {
     </main>
   );
 };
+

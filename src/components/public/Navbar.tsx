@@ -61,11 +61,18 @@ export const Navbar: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         {/* Brand Logo */}
         <a href="#hero" onClick={handleLogoClick} className="flex items-center gap-2 group cursor-pointer focus:outline-none">
-          <img
-            src="/brand/dawnexus-horizontal.png"
-            alt="Dawnexus Logo"
-            className="h-8 md:h-9 w-auto object-contain transition-transform duration-200 group-hover:scale-[1.02]"
-          />
+          <picture>
+            <source srcSet="/brand/dawnexus-horizontal.webp" type="image/webp" />
+            <img
+              src="/brand/dawnexus-horizontal.png"
+              alt="Dawnexus Logo"
+              width="180"
+              height="36"
+              fetchPriority="high"
+              decoding="async"
+              className="h-8 md:h-9 w-auto object-contain transition-transform duration-200 group-hover:scale-[1.02]"
+            />
+          </picture>
         </a>
 
         {/* Desktop Navigation Links */}

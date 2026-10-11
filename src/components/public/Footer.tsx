@@ -20,11 +20,18 @@ export const Footer: React.FC = () => {
           
           {/* Brand Info */}
           <div className="lg:col-span-5 space-y-4">
-            <img
-              src="/brand/dawnexus-horizontal.png"
-              alt="Dawnexus Logo"
-              className="h-8 w-auto object-contain"
-            />
+            <picture>
+              <source srcSet="/brand/dawnexus-horizontal.webp" type="image/webp" />
+              <img
+                src="/brand/dawnexus-horizontal.png"
+                alt="Dawnexus Logo"
+                width="160"
+                height="32"
+                loading="lazy"
+                decoding="async"
+                className="h-8 w-auto object-contain"
+              />
+            </picture>
             <p className="text-sm text-[#A5A5A5] max-w-sm leading-relaxed">
               Modern digital marketing and AI-powered creative agency helping ambitious businesses engineer their next stage of digital growth.
             </p>
