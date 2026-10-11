@@ -12,6 +12,7 @@ dotenv.config();
 import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogs, getPublishedBlogsForSitemap } from './db.js';
 import { publicRouter } from './routes/api.js';
 import { adminRouter } from './routes/admin.js';
+import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
 
 // Initialize DB schema & tables
 initDatabase();
@@ -146,6 +147,9 @@ ${urlsXml}
 app.get('/sitemap.xml', handleSitemapRequest);
 app.get('/api/sitemap.xml', handleSitemapRequest);
 
+
+// Google OAuth 2.0 callback endpoint (needs to be reachable by Google redirection without requiring pre-existing admin cookie)
+app.get('/api/admin/seo-research/google/callback', handleGoogleOAuthCallback);
 
 // API route mounts
 app.use('/api', publicRouter);

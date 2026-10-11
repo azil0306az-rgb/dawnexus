@@ -436,7 +436,7 @@ seoResearchRouter.get('/google/auth-url', (req, res) => {
 
 // GET /api/admin/seo-research/google/callback
 // Handles OAuth callback and token exchange
-seoResearchRouter.get('/google/callback', async (req, res) => {
+export async function handleGoogleOAuthCallback(req: any, res: any) {
   try {
     const { code, state, error } = req.query;
 
@@ -503,7 +503,9 @@ seoResearchRouter.get('/google/callback', async (req, res) => {
     console.error('[Google Callback Exception]:', err);
     return res.redirect('/admin?seo_error=internal_error');
   }
-});
+}
+
+seoResearchRouter.get('/google/callback', handleGoogleOAuthCallback);
 
 // POST /api/admin/seo-research/disconnect
 // Clears stored Google credentials safely

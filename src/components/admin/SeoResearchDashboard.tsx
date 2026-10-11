@@ -76,7 +76,9 @@ export const SeoResearchDashboard: React.FC = () => {
   // Fetch connection status
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/seo-research/status');
+      const res = await fetch('/api/admin/seo-research/status', {
+        credentials: 'include'
+      });
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -93,12 +95,17 @@ export const SeoResearchDashboard: React.FC = () => {
     try {
       const res = await fetch('/api/admin/seo-research/opportunities', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dateRange })
       });
       const data = await res.json();
       if (!res.ok) {
-        setApiError(data.error || 'Failed to fetch search console queries.');
+        if (res.status === 401) {
+          setApiError('Administrative session expired. Please refresh the page and re-enter your admin password.');
+        } else {
+          setApiError(data.error || 'Failed to fetch search console queries.');
+        }
         setOpportunities([]);
         setOverviewStats(null);
       } else {
@@ -115,8 +122,13 @@ export const SeoResearchDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchStatus();
-    fetchOpportunities();
-  }, [fetchStatus, fetchOpportunities]);
+  }, [fetchStatus]);
+
+  useEffect(() => {
+    if (status?.isConnected) {
+      fetchOpportunities();
+    }
+  }, [status?.isConnected, fetchOpportunities]);
 
   // Open prompt modal for an opportunity
   const handleOpenPromptGenerator = (opp: Opportunity) => {
