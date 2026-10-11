@@ -79,6 +79,33 @@ export function initDatabase() {
     );
   `);
 
+  // Table for admin notification email settings
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      active_email TEXT DEFAULT NULL,
+      is_verified INTEGER DEFAULT 0,
+      verified_at TEXT DEFAULT NULL,
+      pending_email TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // Table for secure OTP verification challenges
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_otp_challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      otp_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      max_attempts INTEGER DEFAULT 5,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      used_at TEXT DEFAULT NULL
+    );
+  `);
+
   // Create indexes for fast lookup and filtering
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_enquiries_status ON enquiries(status);
@@ -88,9 +115,27 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_blogs_slug ON blogs(slug);
     CREATE INDEX IF NOT EXISTS idx_blogs_scheduled_at ON blogs(scheduled_at);
     CREATE INDEX IF NOT EXISTS idx_blogs_published_at ON blogs(published_at);
+    CREATE INDEX IF NOT EXISTS idx_otp_challenges_email ON notification_otp_challenges(email);
+  `);
+
+  // Ensure singleton row exists in notification_settings
+  db.exec(`
+    INSERT OR IGNORE INTO notification_settings (id, active_email, is_verified, verified_at, pending_email, updated_at)
+    VALUES (1, NULL, 0, NULL, NULL, datetime('now'));
   `);
 
   seedBlogsIfEmpty();
+
+  // Migration: Ensure Local SEO Playbook article (Seed 3) is Published so it is immediately eligible for dynamic sitemap
+  try {
+    db.exec(`
+      UPDATE blogs 
+      SET status = 'Published', published_at = '2026-10-11T09:00:00.000Z'
+      WHERE slug = 'local-seo-google-maps-playbook' AND (status != 'Published' OR published_at IS NULL);
+    `);
+  } catch {
+    // Non-fatal if table not yet populated
+  }
 
   console.log(`[Database] SQLite initialized successfully at: ${path.resolve(dbPath)}`);
 }
@@ -842,12 +887,156 @@ function seedBlogsIfEmpty() {
     seo_title: 'Local SEO & Google Maps Playbook | Dawnexus Guide',
     meta_description: 'Step-by-step strategies to optimize your Google Business Profile and capture top rankings in local map search queries.',
     canonical_url: 'https://dawnexus.in/blog/local-seo-google-maps-playbook',
-    status: 'Scheduled',
-    scheduled_at: twoDaysAhead
+    status: 'Published',
+    published_at: '2026-10-11T09:00:00.000Z',
+    scheduled_at: null
   });
+}
+
+// ----------------------------------------------------
+// NOTIFICATION SETTINGS & OTP CHALLENGES
+// ----------------------------------------------------
+
+export interface NotificationSettingsRecord {
+  id: number;
+  active_email: string | null;
+  is_verified: number;
+  verified_at: string | null;
+  pending_email: string | null;
+  updated_at: string;
+}
+
+export interface OtpChallengeRecord {
+  id: number;
+  email: string;
+  otp_hash: string;
+  salt: string;
+  attempts: number;
+  max_attempts: number;
+  expires_at: string;
+  created_at: string;
+  used_at: string | null;
+}
+
+export function getNotificationSettings(): NotificationSettingsRecord {
+  const row = db.prepare('SELECT * FROM notification_settings WHERE id = 1').get() as unknown as NotificationSettingsRecord | undefined;
+  if (!row) {
+    db.prepare(`
+      INSERT OR IGNORE INTO notification_settings (id, active_email, is_verified, verified_at, pending_email, updated_at)
+      VALUES (1, NULL, 0, NULL, NULL, datetime('now'))
+    `).run();
+    return db.prepare('SELECT * FROM notification_settings WHERE id = 1').get() as unknown as NotificationSettingsRecord;
+  }
+  return row;
+}
+
+export function getActiveNotificationEmail(): string | null {
+  const settings = getNotificationSettings();
+  if (settings && settings.is_verified === 1 && settings.active_email) {
+    return settings.active_email;
+  }
+  return null;
+}
+
+export function createOtpChallenge(email: string, otpHash: string, salt: string, expiresAt: string): OtpChallengeRecord {
+  const now = new Date().toISOString();
+  
+  // Invalidate any active, superseded challenges for this email
+  db.prepare(`
+    UPDATE notification_otp_challenges
+    SET used_at = ?
+    WHERE email = ? AND used_at IS NULL
+  `).run(now, email);
+
+  // Insert new challenge
+  const stmt = db.prepare(`
+    INSERT INTO notification_otp_challenges (
+      email, otp_hash, salt, attempts, max_attempts, expires_at, created_at, used_at
+    ) VALUES (?, ?, ?, 0, 5, ?, ?, NULL)
+  `);
+  const info = stmt.run(email, otpHash, salt, expiresAt, now);
+
+  // Update pending email in settings without overriding the existing active email
+  db.prepare(`
+    UPDATE notification_settings
+    SET pending_email = ?, updated_at = ?
+    WHERE id = 1
+  `).run(email, now);
+
+  const getStmt = db.prepare('SELECT * FROM notification_otp_challenges WHERE id = ?');
+  return getStmt.get(Number(info.lastInsertRowid)) as unknown as OtpChallengeRecord;
+}
+
+export function getLatestOtpChallenge(email: string): OtpChallengeRecord | null {
+  const stmt = db.prepare(`
+    SELECT * FROM notification_otp_challenges 
+    WHERE email = ? AND used_at IS NULL
+    ORDER BY id DESC LIMIT 1
+  `);
+  const res = stmt.get(email);
+  return (res as unknown as OtpChallengeRecord) || null;
+}
+
+export function recordOtpFailedAttempt(challengeId: number): number {
+  db.prepare(`
+    UPDATE notification_otp_challenges
+    SET attempts = attempts + 1
+    WHERE id = ?
+  `).run(challengeId);
+
+  const res = db.prepare('SELECT attempts, max_attempts FROM notification_otp_challenges WHERE id = ?').get(challengeId) as { attempts: number; max_attempts: number };
+  return res ? res.attempts : 5;
+}
+
+export function completeOtpVerification(challengeId: number, email: string): NotificationSettingsRecord {
+  const now = new Date().toISOString();
+
+  // Mark challenge as used
+  db.prepare(`
+    UPDATE notification_otp_challenges
+    SET used_at = ?
+    WHERE id = ?
+  `).run(now, challengeId);
+
+  // Invalidate any remaining challenges for this email
+  db.prepare(`
+    UPDATE notification_otp_challenges
+    SET used_at = ?
+    WHERE email = ? AND used_at IS NULL
+  `).run(now, email);
+
+  // Activate the new verified recipient in settings
+  db.prepare(`
+    UPDATE notification_settings
+    SET active_email = ?, is_verified = 1, verified_at = ?, pending_email = NULL, updated_at = ?
+    WHERE id = 1
+  `).run(email, now, now);
+
+  return getNotificationSettings();
+}
+
+export function deactivateNotificationSettings(): NotificationSettingsRecord {
+  const now = new Date().toISOString();
+
+  // Invalidate all open challenges
+  db.prepare(`
+    UPDATE notification_otp_challenges
+    SET used_at = ?
+    WHERE used_at IS NULL
+  `).run(now);
+
+  // Clear active and pending recipient
+  db.prepare(`
+    UPDATE notification_settings
+    SET active_email = NULL, is_verified = 0, verified_at = NULL, pending_email = NULL, updated_at = ?
+    WHERE id = 1
+  `).run(now);
+
+  return getNotificationSettings();
 }
 
 // Call initialization
 initDatabase();
+
 
 

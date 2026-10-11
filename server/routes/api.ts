@@ -109,6 +109,68 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
+export const ALLOWED_BUDGETS = [
+  '₹5,000–₹10,000',
+  '₹10,000–₹20,000',
+  '₹20,000–₹30,000',
+  '₹30,000–₹50,000',
+  '₹50,000'
+];
+
+/**
+ * Validates and normalizes an Indian mobile phone number into +91XXXXXXXXXX format.
+ * Accepts numbers with or without +91, with spaces, dashes, or leading 0.
+ * Rejects non-Indian country codes (such as US +1) and invalid lengths.
+ */
+export function normalizeIndianPhone(raw: string): { valid: boolean; normalized?: string; error?: string } {
+  if (!raw || !raw.trim()) {
+    return { valid: true, normalized: '' };
+  }
+  const trimmed = raw.trim();
+
+  // Reject foreign country prefixes (e.g. +1 for US, +44 for UK, etc.)
+  if (/^\+/.test(trimmed)) {
+    if (!/^\+91\b|^\+91\d/.test(trimmed)) {
+      return { valid: false, error: 'Only Indian phone numbers (+91) are accepted.' };
+    }
+  }
+
+  // Strip spaces, dashes, dots, brackets
+  let cleaned = trimmed.replace(/[\s\-\(\)\.]/g, '');
+
+  // Strip all leading +91 occurrences (guards against duplicate +91+91)
+  while (cleaned.startsWith('+91')) {
+    cleaned = cleaned.slice(3);
+  }
+
+  // Strip leading 91 if length > 10 (e.g. 919876543210 -> 9876543210)
+  if (cleaned.startsWith('91') && cleaned.length > 10) {
+    cleaned = cleaned.slice(2);
+  }
+
+  // Strip leading 0 for domestic trunk dialing (e.g. 09876543210 -> 9876543210)
+  if (cleaned.startsWith('0') && cleaned.length === 11) {
+    cleaned = cleaned.slice(1);
+  }
+
+  // If there are still non-digit characters
+  if (!/^\d+$/.test(cleaned)) {
+    return { valid: false, error: 'Please enter a valid 10-digit Indian mobile number.' };
+  }
+
+  // Check length
+  if (cleaned.length !== 10) {
+    return { valid: false, error: 'Indian mobile numbers must be exactly 10 digits.' };
+  }
+
+  // Indian mobile numbers must start with 6, 7, 8, or 9
+  if (!/^[6-9]/.test(cleaned)) {
+    return { valid: false, error: 'Indian mobile numbers must start with 6, 7, 8, or 9.' };
+  }
+
+  return { valid: true, normalized: `+91${cleaned}` };
+}
+
 // POST /api/enquiries
 publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
   try {
@@ -153,6 +215,28 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
       errors.project_details = 'Project details must be under 4000 characters.';
     }
 
+    // Validate and normalize Indian phone number (optional field)
+    let normalizedPhone = '';
+    if (phone && typeof phone === 'string' && phone.trim()) {
+      const phoneRes = normalizeIndianPhone(phone);
+      if (!phoneRes.valid) {
+        errors.phone = phoneRes.error || 'Please provide a valid Indian mobile number (+91).';
+      } else {
+        normalizedPhone = phoneRes.normalized || '';
+      }
+    }
+
+    // Validate budget against allowed INR options (optional field)
+    let validatedBudget = '';
+    if (budget && typeof budget === 'string' && budget.trim()) {
+      const trimmedBudget = budget.trim();
+      if (!ALLOWED_BUDGETS.includes(trimmedBudget)) {
+        errors.budget = 'Please select a valid budget option from the allowed rupee ranges.';
+      } else {
+        validatedBudget = trimmedBudget;
+      }
+    }
+
     // Validate requested services
     let services: string[] = [];
     if (Array.isArray(requested_services)) {
@@ -173,9 +257,9 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
       full_name: full_name.trim(),
       business_name: typeof business_name === 'string' ? business_name.trim() : '',
       email: email.trim().toLowerCase(),
-      phone: typeof phone === 'string' ? phone.trim() : '',
+      phone: normalizedPhone,
       requested_services: services,
-      budget: typeof budget === 'string' ? budget.trim() : '',
+      budget: validatedBudget,
       project_details: project_details.trim()
     });
 

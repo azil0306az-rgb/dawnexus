@@ -11,12 +11,40 @@ const availableServices = [
 ];
 
 const budgetRanges = [
-  'Under $2,500',
-  '$2,500 – $5,000',
-  '$5,000 – $10,000',
-  '$10,000 – $25,000',
-  '$25,000+'
+  '₹5,000–₹10,000',
+  '₹10,000–₹20,000',
+  '₹20,000–₹30,000',
+  '₹30,000–₹50,000',
+  '₹50,000'
 ];
+
+/**
+ * Validates Indian mobile number format. Accepts 10 digits starting with 6-9,
+ * with or without +91, 91, or leading 0. Rejects foreign country codes (+1, etc.).
+ */
+function validateIndianPhone(phoneStr: string): { valid: boolean; normalized?: string; error?: string } {
+  if (!phoneStr || !phoneStr.trim()) return { valid: true, normalized: '' };
+  const trimmed = phoneStr.trim();
+  if (/^\+/.test(trimmed)) {
+    if (!/^\+91\b|^\+91\d/.test(trimmed)) {
+      return { valid: false, error: 'Only Indian phone numbers (+91) are accepted.' };
+    }
+  }
+  let cleaned = trimmed.replace(/[\s\-\(\)\.]/g, '');
+  while (cleaned.startsWith('+91')) cleaned = cleaned.slice(3);
+  if (cleaned.startsWith('91') && cleaned.length > 10) cleaned = cleaned.slice(2);
+  if (cleaned.startsWith('0') && cleaned.length === 11) cleaned = cleaned.slice(1);
+  if (!/^\d+$/.test(cleaned)) {
+    return { valid: false, error: 'Please enter a valid 10-digit Indian mobile number.' };
+  }
+  if (cleaned.length !== 10) {
+    return { valid: false, error: 'Indian mobile numbers must be exactly 10 digits.' };
+  }
+  if (!/^[6-9]/.test(cleaned)) {
+    return { valid: false, error: 'Indian mobile numbers must start with 6, 7, 8, or 9.' };
+  }
+  return { valid: true, normalized: `+91${cleaned}` };
+}
 
 export const ContactForm: React.FC = () => {
   const [formData, setFormData] = useState<EnquiryFormData>({
@@ -108,6 +136,19 @@ export const ContactForm: React.FC = () => {
       newErrors.email = 'Please provide a valid email address.';
     }
 
+    if (formData.phone && formData.phone.trim()) {
+      const phoneRes = validateIndianPhone(formData.phone);
+      if (!phoneRes.valid) {
+        newErrors.phone = phoneRes.error || 'Please enter a valid 10-digit Indian mobile number (+91).';
+      }
+    }
+
+    if (formData.budget && formData.budget.trim()) {
+      if (!budgetRanges.includes(formData.budget.trim())) {
+        newErrors.budget = 'Please select a valid budget option from the allowed ranges.';
+      }
+    }
+
     if (!formData.project_details.trim()) {
       newErrors.project_details = 'Project details are required.';
     } else if (formData.project_details.trim().length < 10) {
@@ -129,12 +170,18 @@ export const ContactForm: React.FC = () => {
     setIsSubmitting(true);
 
     try {
+      const phoneRes = validateIndianPhone(formData.phone);
+      const submissionPayload = {
+        ...formData,
+        phone: phoneRes.normalized || ''
+      };
+
       const response = await fetch('/api/enquiries', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submissionPayload)
       });
 
       const data = await response.json();
@@ -336,15 +383,31 @@ export const ContactForm: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-mono uppercase tracking-wider text-[#A5A5A5] mb-2">
-                        Phone Number <span className="text-xs text-[#555]">(Optional)</span>
+                        Phone Number <span className="text-xs text-[#555]">(Optional, India +91)</span>
                       </label>
-                      <input
-                        type="tel"
-                        placeholder="+1 (555) 000-0000"
-                        value={formData.phone}
-                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full bg-[#050505] border border-[#252525] rounded-xl px-4 py-3.5 text-sm text-white placeholder-[#555] focus:outline-none focus:border-[#C7FF4D] transition-colors"
-                      />
+                      <div className={`flex rounded-xl border bg-[#050505] transition-colors overflow-hidden ${
+                        errors.phone ? 'border-red-500 focus-within:border-red-400' : 'border-[#252525] focus-within:border-[#C7FF4D]'
+                      }`}>
+                        <div className="flex items-center gap-1.5 px-3.5 py-3.5 border-r border-[#252525] bg-[#0B0B0B] text-xs font-mono font-semibold text-[#C7FF4D] select-none shrink-0">
+                          <span className="text-sm">🇮🇳</span>
+                          <span>+91</span>
+                        </div>
+                        <input
+                          type="tel"
+                          placeholder="98765 43210"
+                          value={formData.phone}
+                          onChange={e => {
+                            let val = e.target.value;
+                            if (val.startsWith('+91')) val = val.slice(3).trim();
+                            setFormData({ ...formData, phone: val });
+                            if (errors.phone) setErrors({ ...errors, phone: '' });
+                          }}
+                          className="w-full bg-transparent px-4 py-3.5 text-sm text-white placeholder-[#555] focus:outline-none"
+                        />
+                      </div>
+                      {errors.phone && (
+                        <p className="mt-1.5 text-xs text-red-400">{errors.phone}</p>
+                      )}
                     </div>
                   </div>
 
@@ -379,30 +442,41 @@ export const ContactForm: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Budget Dropdown / Pills */}
+                  {/* Single-Select Target Budget Dropdown */}
                   <div>
-                    <label className="block text-xs font-mono uppercase tracking-wider text-[#A5A5A5] mb-2">
-                      Target Budget <span className="text-xs text-[#555]">(Optional)</span>
+                    <label htmlFor="target-budget-select" className="block text-xs font-mono uppercase tracking-wider text-[#A5A5A5] mb-2">
+                      Target Budget <span className="text-xs text-[#555]">(Optional, INR)</span>
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {budgetRanges.map((range) => {
-                        const isSelected = formData.budget === range;
-                        return (
-                          <button
-                            type="button"
-                            key={range}
-                            onClick={() => setFormData({ ...formData, budget: isSelected ? '' : range })}
-                            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                              isSelected
-                                ? 'bg-[#C7FF4D] text-[#050505] font-bold border-[#C7FF4D]'
-                                : 'bg-[#050505] border-[#252525] text-[#A5A5A5] hover:text-white hover:border-[#444]'
-                            }`}
-                          >
+                    <div className="relative">
+                      <select
+                        id="target-budget-select"
+                        value={formData.budget}
+                        onChange={e => {
+                          setFormData({ ...formData, budget: e.target.value });
+                          if (errors.budget) setErrors({ ...errors, budget: '' });
+                        }}
+                        className={`w-full bg-[#050505] border rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none transition-colors appearance-none cursor-pointer pr-10 ${
+                          errors.budget ? 'border-red-500 focus:border-red-400' : 'border-[#252525] focus:border-[#C7FF4D]'
+                        }`}
+                      >
+                        <option value="" className="bg-[#0B0B0B] text-[#777]">
+                          Select target budget range (Optional)
+                        </option>
+                        {budgetRanges.map((range) => (
+                          <option key={range} value={range} className="bg-[#0B0B0B] text-white">
                             {range}
-                          </button>
-                        );
-                      })}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-[#A5A5A5]">
+                        <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                          <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                        </svg>
+                      </div>
                     </div>
+                    {errors.budget && (
+                      <p className="mt-1.5 text-xs text-red-400">{errors.budget}</p>
+                    )}
                   </div>
 
                   {/* Project Details */}

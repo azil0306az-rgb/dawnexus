@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import {
   handleAdminLogin,
   handleAdminSession,
@@ -19,8 +20,23 @@ import {
   deleteBlog,
   duplicateBlog,
   getBlogStats,
-  publishDueScheduledBlogs
+  publishDueScheduledBlogs,
+  getNotificationSettings,
+  createOtpChallenge,
+  getLatestOtpChallenge,
+  recordOtpFailedAttempt,
+  completeOtpVerification,
+  deactivateNotificationSettings
 } from '../db.js';
+import {
+  sendOtpVerificationEmail,
+  getEmailProviderStatus
+} from '../email.js';
+
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
 
 export const adminRouter = Router();
 
@@ -436,4 +452,144 @@ adminRouter.get('/export', (req, res) => {
     return res.status(500).json({ error: 'Failed to generate CSV export' });
   }
 });
+
+// ==========================================
+// NOTIFICATION EMAIL / EMAIL ALERTS ENDPOINTS
+// ==========================================
+
+// GET /api/admin/notification-settings
+adminRouter.get('/notification-settings', (req, res) => {
+  try {
+    const settings = getNotificationSettings();
+    const providerStatus = getEmailProviderStatus();
+    return res.json({
+      ...settings,
+      provider_status: providerStatus
+    });
+  } catch (error) {
+    console.error('[Admin Get Notification Settings Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve notification settings' });
+  }
+});
+
+// POST /api/admin/notification-settings/request-otp
+adminRouter.post('/notification-settings/request-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string' || !isValidEmail(email.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Enforce 60-second cooldown
+    const latest = getLatestOtpChallenge(normalizedEmail);
+    if (latest) {
+      const elapsedMs = Date.now() - new Date(latest.created_at).getTime();
+      if (elapsedMs < 60 * 1000) {
+        const remainingSec = Math.ceil((60 * 1000 - elapsedMs) / 1000);
+        return res.status(429).json({
+          error: `Please wait ${remainingSec} seconds before requesting a new verification code.`,
+          remaining_seconds: remainingSec
+        });
+      }
+    }
+
+    // Generate 6-digit numeric OTP and cryptographic salt
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const otpHash = crypto.createHmac('sha256', salt).update(`${normalizedEmail}:${otp}`).digest('hex');
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5-minute expiry
+
+    // Save challenge to database (marks previous challenges superseded)
+    createOtpChallenge(normalizedEmail, otpHash, salt, expiresAt);
+
+    // Send email to the requested address
+    const sendSuccess = await sendOtpVerificationEmail(normalizedEmail, otp);
+    const providerStatus = getEmailProviderStatus();
+
+    return res.status(200).json({
+      success: true,
+      message: `A 6-digit verification code has been dispatched to ${normalizedEmail}.`,
+      email: normalizedEmail,
+      expires_in_seconds: 300,
+      resend_cooldown_seconds: 60,
+      provider_configured: providerStatus !== 'none',
+      email_dispatched: sendSuccess
+    });
+  } catch (error) {
+    console.error('[Admin Request OTP Error]:', error);
+    return res.status(500).json({ error: 'Failed to generate verification code. Please try again.' });
+  }
+});
+
+// POST /api/admin/notification-settings/verify-otp
+adminRouter.post('/notification-settings/verify-otp', (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email address is required.' });
+    }
+    if (!otp || typeof otp !== 'string' || !/^\d{6}$/.test(otp.trim())) {
+      return res.status(400).json({ error: 'Please enter a valid 6-digit numeric verification code.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedOtp = otp.trim();
+
+    const challenge = getLatestOtpChallenge(normalizedEmail);
+    if (!challenge) {
+      return res.status(400).json({ error: 'No active verification code found for this address. Please request a new code.' });
+    }
+
+    // Check failed attempts (max 5)
+    if (challenge.attempts >= challenge.max_attempts) {
+      return res.status(400).json({ error: 'Maximum verification attempts exceeded. Please request a new code.' });
+    }
+
+    // Check expiration (5 minutes)
+    if (new Date() > new Date(challenge.expires_at)) {
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    // Verify cryptographic digest
+    const testHash = crypto.createHmac('sha256', challenge.salt).update(`${normalizedEmail}:${trimmedOtp}`).digest('hex');
+    if (testHash !== challenge.otp_hash) {
+      const attemptsMade = recordOtpFailedAttempt(challenge.id);
+      const remaining = Math.max(0, challenge.max_attempts - attemptsMade);
+      if (remaining === 0) {
+        return res.status(400).json({ error: 'Maximum verification attempts exceeded for this code. Please request a new code.' });
+      }
+      return res.status(400).json({ error: `Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` });
+    }
+
+    // Success: activate verified recipient
+    const updatedSettings = completeOtpVerification(challenge.id, normalizedEmail);
+
+    return res.json({
+      success: true,
+      message: `${normalizedEmail} has been verified and activated for all inquiry alerts.`,
+      settings: updatedSettings
+    });
+  } catch (error) {
+    console.error('[Admin Verify OTP Error]:', error);
+    return res.status(500).json({ error: 'Failed to verify code. Please try again.' });
+  }
+});
+
+// POST /api/admin/notification-settings/deactivate
+adminRouter.post('/notification-settings/deactivate', (req, res) => {
+  try {
+    const updated = deactivateNotificationSettings();
+    return res.json({
+      success: true,
+      message: 'Email alerts deactivated successfully. Inquiries will continue to be safely recorded in the database.',
+      settings: updated
+    });
+  } catch (error) {
+    console.error('[Admin Deactivate Notification Error]:', error);
+    return res.status(500).json({ error: 'Failed to deactivate notification recipient' });
+  }
+});
+
 

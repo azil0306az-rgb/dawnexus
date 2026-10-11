@@ -17,19 +17,21 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  FileText
+  FileText,
+  Bell
 } from 'lucide-react';
 import type { EnquiryRecord, EnquiryStats } from '../../types';
 import { EnquiryDetailModal } from './EnquiryDetailModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BlogManager } from './BlogManager';
+import { NotificationSettings } from './NotificationSettings';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'blogs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'blogs' | 'notifications'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -268,6 +270,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <span>Blogs & CMS</span>
               </div>
             </button>
+
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'notifications'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Bell className="w-4 h-4" />
+                <span>Notification Email</span>
+              </div>
+            </button>
           </nav>
         </div>
 
@@ -298,6 +314,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         
         {activeTab === 'blogs' ? (
           <BlogManager />
+        ) : activeTab === 'notifications' ? (
+          <NotificationSettings />
         ) : (
           <>
             {/* Top Header Bar */}

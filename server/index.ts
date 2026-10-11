@@ -17,18 +17,20 @@ import { adminRouter } from './routes/admin.js';
 initDatabase();
 
 // Clean up expired sessions every hour
-setInterval(() => {
+const sessionTimer = setInterval(() => {
   cleanupExpiredSessions();
 }, 60 * 60 * 1000);
+sessionTimer.unref();
 
 // Check and publish scheduled blogs every 60 seconds (for node server runtime)
-setInterval(() => {
+const blogTimer = setInterval(() => {
   try {
     publishDueScheduledBlogs();
   } catch (err) {
     console.error('[Scheduled Blog Interval Error]:', err);
   }
 }, 60 * 1000);
+blogTimer.unref();
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -57,9 +59,26 @@ app.use(express.json({ limit: '200kb' }));
 app.use(express.urlencoded({ extended: true, limit: '200kb' }));
 app.use(cookieParser());
 
+// Helper to escape XML special characters
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 // Dynamic Sitemap Generation (includes homepage, all 4 services, blog hub, and all published articles)
-app.get('/sitemap.xml', (req, res) => {
+const handleSitemapRequest = (req: express.Request, res: express.Response) => {
   try {
+    // Lazily publish any due scheduled blogs
+    try {
+      publishDueScheduledBlogs();
+    } catch {
+      // Non-fatal
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const publishedBlogs = getPublishedBlogsForSitemap();
 
@@ -103,7 +122,7 @@ app.get('/sitemap.xml', (req, res) => {
     for (const blog of publishedBlogs) {
       const lastModDate = (blog.updated_at || blog.published_at || today).split('T')[0];
       urlsXml += `\n  <url>
-    <loc>https://dawnexus.in/blog/${blog.slug}</loc>
+    <loc>https://dawnexus.in/blog/${escapeXml(blog.slug)}</loc>
     <lastmod>${lastModDate}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -115,13 +134,18 @@ app.get('/sitemap.xml', (req, res) => {
 ${urlsXml}
 </urlset>`;
 
-    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
     return res.status(200).send(xml);
   } catch (error) {
     console.error('[Sitemap Generation Error]:', error);
     return res.status(500).send('Error generating sitemap');
   }
-});
+};
+
+app.get('/sitemap.xml', handleSitemapRequest);
+app.get('/api/sitemap.xml', handleSitemapRequest);
+
 
 // API route mounts
 app.use('/api', publicRouter);

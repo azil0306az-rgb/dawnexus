@@ -142,4 +142,14 @@ export interface SeoAuditResult {
   recommendations: string[];
 }
 
+export interface NotificationSettingsData {
+  id: number;
+  active_email: string | null;
+  is_verified: number;
+  verified_at: string | null;
+  pending_email: string | null;
+  provider_status: 'resend' | 'smtp' | 'none';
+  updated_at: string;
+}
+
 

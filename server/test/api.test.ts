@@ -59,9 +59,9 @@ test('Public Enquiry: Accepts valid submission and saves to SQLite', async () =>
     full_name: 'Test Customer Alpha',
     business_name: 'Alpha Growth Labs',
     email: 'alpha@growthlabs.test',
-    phone: '+1 555 123 4567',
+    phone: '+91 98765 43210',
     requested_services: ['Website Design & Development', 'AI Video Creation'],
-    budget: '$5,000 – $10,000',
+    budget: '₹5,000–₹10,000',
     project_details: 'We need a high-converting agency website and 5 AI reels for our launch.'
   };
 

@@ -86,7 +86,8 @@ async function main() {
   console.log(`Running baseline audits for: ${url}`);
   const mobile = await runLighthouse(url, true);
   const desktop = await runLighthouse(url, false);
-  fs.writeFileSync('server/test/baseline-report.json', JSON.stringify({ mobile, desktop, timestamp: new Date().toISOString() }, null, 2));
+  const outFile = process.argv[3] || 'server/test/post-report.json';
+  fs.writeFileSync(outFile, JSON.stringify({ mobile, desktop, timestamp: new Date().toISOString() }, null, 2));
 }
 
 main().catch(err => {
