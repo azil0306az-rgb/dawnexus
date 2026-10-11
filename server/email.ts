@@ -183,14 +183,12 @@ If you did not request this verification code, please ignore this email. Never s
 </html>
 `;
 
-  const result = await sendTransactionalEmail({
+  return await sendTransactionalEmail({
     to: email,
     subject,
     html,
     text
   });
-
-  return result.success;
 }
 
 /**

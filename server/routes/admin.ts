@@ -506,17 +506,23 @@ adminRouter.post('/notification-settings/request-otp', async (req, res) => {
     createOtpChallenge(normalizedEmail, otpHash, salt, expiresAt);
 
     // Send email to the requested address
-    const sendSuccess = await sendOtpVerificationEmail(normalizedEmail, otp);
+    const sendResult = await sendOtpVerificationEmail(normalizedEmail, otp);
     const providerStatus = getEmailProviderStatus();
+
+    let message = `A 6-digit verification code has been dispatched to ${normalizedEmail}.`;
+    if (!sendResult.success && sendResult.error) {
+      message = `Code generated, but email delivery returned: ${sendResult.error}`;
+    }
 
     return res.status(200).json({
       success: true,
-      message: `A 6-digit verification code has been dispatched to ${normalizedEmail}.`,
+      message,
       email: normalizedEmail,
       expires_in_seconds: 300,
       resend_cooldown_seconds: 60,
       provider_configured: providerStatus !== 'none',
-      email_dispatched: sendSuccess
+      email_dispatched: sendResult.success,
+      delivery_error: sendResult.error || null
     });
   } catch (error) {
     console.error('[Admin Request OTP Error]:', error);

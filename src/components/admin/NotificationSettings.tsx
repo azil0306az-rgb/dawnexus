@@ -94,10 +94,17 @@ export const NotificationSettings: React.FC = () => {
 
       setStep('otp_sent');
       setCooldownSeconds(data.resend_cooldown_seconds || 60);
-      setStatusMessage({
-        type: 'success',
-        text: data.message || `Verification code dispatched to ${emailToVerify}.`
-      });
+      if (data.delivery_error || data.email_dispatched === false) {
+        setStatusMessage({
+          type: 'error',
+          text: data.delivery_error ? `Email delivery issue: ${data.delivery_error}` : 'Code created, but email could not be delivered.'
+        });
+      } else {
+        setStatusMessage({
+          type: 'success',
+          text: data.message || `Verification code dispatched to ${emailToVerify}.`
+        });
+      }
       // Refresh pending state
       fetchSettings();
     } catch (err: unknown) {

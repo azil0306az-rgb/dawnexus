@@ -108,3 +108,4 @@ test('Encryption: Securely encrypts and decrypts OAuth tokens with AES-256-GCM',
   const decrypted = decryptPayload(encrypted);
   assert.equal(decrypted, sampleTokenPayload);
 });
+
