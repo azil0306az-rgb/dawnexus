@@ -7,7 +7,7 @@ export async function sendEnquiryNotification(enquiry: EnquiryRecord): Promise<b
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
   const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-  const smtpFrom = process.env.SMTP_FROM || 'Dawnexus Enquiries <no-reply@dawnexus.com>';
+  const smtpFrom = process.env.SMTP_FROM || 'Dawnexus Enquiries <no-reply@dawnexus.in>';
 
   // Check if SMTP is configured
   if (!adminEmail || !smtpHost || !smtpUser || !smtpPass) {
