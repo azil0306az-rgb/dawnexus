@@ -40,7 +40,7 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
   // 1. Send via Resend HTTP API
   if (provider === 'resend') {
     const resendApiKey = process.env.RESEND_API_KEY!.trim();
-    const fromAddress = process.env.RESEND_FROM || process.env.INQUIRY_FROM_EMAIL || 'Dawnexus <onboarding@resend.dev>';
+    const fromAddress = process.env.RESEND_FROM || process.env.INQUIRY_FROM_EMAIL || 'Dawnexus Alerts <alerts@dawnexus.in>';
 
     try {
       const response = await fetch('https://api.resend.com/emails', {

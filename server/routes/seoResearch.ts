@@ -49,6 +49,57 @@ export function decryptPayload(cipherString: string): string | null {
 // In-memory state storage for OAuth CSRF protection (valid 10 minutes)
 const oauthStates = new Map<string, number>();
 
+// Refreshes Google OAuth access token if expired
+async function getValidAccessToken(tokens: any): Promise<string | null> {
+  if (!tokens) return null;
+  
+  // Test existing access token with lightweight request
+  try {
+    const testRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
+    });
+    if (testRes.ok) {
+      return tokens.access_token;
+    }
+  } catch {
+    // Continue to refresh
+  }
+
+  // If expired and refresh_token exists, exchange with Google OAuth token endpoint
+  if (tokens.refresh_token && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    try {
+      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          refresh_token: tokens.refresh_token,
+          grant_type: 'refresh_token'
+        })
+      });
+
+      if (refreshRes.ok) {
+        const refreshedData = await refreshRes.json();
+        const updatedTokens = {
+          ...tokens,
+          access_token: refreshedData.access_token,
+          expires_in: refreshedData.expires_in
+        };
+        const conn = getSeoConnection();
+        if (conn && conn.google_email) {
+          saveSeoConnection(conn.google_email, encryptPayload(JSON.stringify(updatedTokens)), conn.selected_property || undefined);
+        }
+        return refreshedData.access_token;
+      }
+    } catch (err) {
+      console.error('[SEO Research] Token refresh failed:', err);
+    }
+  }
+
+  return tokens.access_token || null;
+}
+
 // Canonical internal services and assets for smart link injection
 const DAWNEXUS_CORE_PAGES = [
   { url: 'https://dawnexus.in/', title: 'Dawnexus — AI Digital Marketing Agency', anchor: 'Dawnexus AI Digital Marketing' },
@@ -349,7 +400,6 @@ seoResearchRouter.get('/status', (req, res) => {
       isConnected,
       googleEmail,
       selectedProperty: selectedProperty || 'https://dawnexus.in/',
-      isDemoMode: !isConnected,
       redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || 'https://dawnexus.in/api/admin/seo-research/google/callback'
     });
   } catch (error) {
@@ -366,7 +416,7 @@ seoResearchRouter.get('/google/auth-url', (req, res) => {
 
   if (!clientId) {
     return res.status(400).json({
-      error: 'GOOGLE_CLIENT_ID is not configured in environment variables. Configure Google OAuth credentials or use Demo Mode.',
+      error: 'GOOGLE_CLIENT_ID is not configured in environment variables.',
       hasCredentials: false
     });
   }
@@ -490,11 +540,8 @@ seoResearchRouter.get('/properties', async (req, res) => {
     const conn = getSeoConnection();
     if (!conn || !conn.encrypted_tokens) {
       return res.json({
-        properties: [
-          { siteUrl: 'https://dawnexus.in/', permissionLevel: 'siteOwner (Simulated)' },
-          { siteUrl: 'sc-domain:dawnexus.in', permissionLevel: 'siteOwner (Simulated)' }
-        ],
-        isDemo: true
+        properties: [],
+        isConnected: false
       });
     }
 
@@ -504,18 +551,25 @@ seoResearchRouter.get('/properties', async (req, res) => {
     }
 
     const tokens = JSON.parse(decrypted);
+    const accessToken = await getValidAccessToken(tokens);
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Google session expired. Please reconnect your Google account.' });
+    }
+
     const sitesRes = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
-      headers: { Authorization: `Bearer ${tokens.access_token}` }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
 
     if (!sitesRes.ok) {
-      return res.status(sitesRes.status).json({ error: 'Failed to fetch sites from Google Search Console' });
+      const errText = await sitesRes.text();
+      console.error('[Google Search Console Sites Error]:', errText);
+      return res.status(sitesRes.status).json({ error: 'Failed to fetch sites from Google Search Console. Ensure the Google Search Console API is enabled in your Google Cloud Console.' });
     }
 
     const sitesData = await sitesRes.json();
     return res.json({
       properties: sitesData.siteEntry || [],
-      isDemo: false
+      isConnected: true
     });
   } catch (error) {
     console.error('[SEO Research Properties Error]:', error);
@@ -530,61 +584,76 @@ seoResearchRouter.post('/opportunities', async (req, res) => {
     const { dateRange = '28d', customQueryLimit = 50 } = req.body || {};
     const conn = getSeoConnection();
 
-    let queryRows: SearchQueryRow[] = [];
-    let isDemo = true;
+    if (!conn || !conn.encrypted_tokens) {
+      return res.status(400).json({
+        error: 'Google Search Console is not connected yet. Please connect your Google account above to load live search queries.',
+        isConnected: false,
+        opportunities: [],
+        stats: null
+      });
+    }
 
-    // If live connection exists, query Google Search Analytics API
-    if (conn && conn.encrypted_tokens) {
-      const decrypted = decryptPayload(conn.encrypted_tokens);
-      if (decrypted) {
-        try {
-          const tokens = JSON.parse(decrypted);
-          const property = encodeURIComponent(conn.selected_property || 'https://dawnexus.in/');
-          
-          // Calculate startDate and endDate
-          const end = new Date();
-          const start = new Date();
-          const days = dateRange === '3m' ? 90 : 28;
-          start.setDate(end.getDate() - days);
+    const decrypted = decryptPayload(conn.encrypted_tokens);
+    if (!decrypted) {
+      return res.status(401).json({ error: 'Token decryption failed. Please reconnect your Google account.' });
+    }
 
-          const gscRes = await fetch(`https://www.googleapis.com/webmasters/v3/sites/${property}/searchAnalytics/query`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${tokens.access_token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              startDate: start.toISOString().split('T')[0],
-              endDate: end.toISOString().split('T')[0],
-              dimensions: ['query'],
-              rowLimit: customQueryLimit
-            })
-          });
+    const tokens = JSON.parse(decrypted);
+    const accessToken = await getValidAccessToken(tokens);
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Google session expired. Please reconnect your Google account.' });
+    }
 
-          if (gscRes.ok) {
-            const gscData = await gscRes.json();
-            if (Array.isArray(gscData.rows)) {
-              queryRows = gscData.rows.map((r: any) => ({
-                query: r.keys?.[0] || '',
-                clicks: r.clicks || 0,
-                impressions: r.impressions || 0,
-                ctr: r.ctr || 0,
-                position: r.position || 0
-              }));
-              isDemo = false;
-            }
-          }
-        } catch (fetchErr) {
-          console.warn('[SEO Research Live Fetch Fallback to Fixtures]:', fetchErr);
+    const property = encodeURIComponent(conn.selected_property || 'https://dawnexus.in/');
+    
+    // Calculate startDate and endDate
+    const end = new Date();
+    const start = new Date();
+    const days = dateRange === '3m' ? 90 : 28;
+    start.setDate(end.getDate() - days);
+
+    const gscRes = await fetch(`https://www.googleapis.com/webmasters/v3/sites/${property}/searchAnalytics/query`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
+        dimensions: ['query'],
+        rowLimit: customQueryLimit
+      })
+    });
+
+    if (!gscRes.ok) {
+      const errText = await gscRes.text();
+      console.error('[Google Search Analytics Error]:', errText);
+      let errMsg = 'Failed to fetch search data from Google Search Console.';
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error && parsed.error.message) {
+          errMsg = parsed.error.message;
         }
+      } catch {
+        // Fallback
       }
+      return res.status(gscRes.status).json({
+        error: `Search Console error: ${errMsg}. Ensure "${conn.selected_property || 'https://dawnexus.in/'}" is verified in Google Search Console for this Google account.`,
+        isConnected: true
+      });
     }
 
-    // If no live rows retrieved, use simulated dataset
-    if (queryRows.length === 0) {
-      queryRows = SIMULATED_GSC_DATA;
-      isDemo = true;
-    }
+    const gscData = await gscRes.json();
+    const queryRows: SearchQueryRow[] = Array.isArray(gscData.rows)
+      ? gscData.rows.map((r: any) => ({
+          query: r.keys?.[0] || '',
+          clicks: r.clicks || 0,
+          impressions: r.impressions || 0,
+          ctr: r.ctr || 0,
+          position: r.position || 0
+        }))
+      : [];
 
     // Retrieve existing blogs from database for cannibalization check
     const existingBlogsRes = getBlogs({ limit: 100 });
@@ -626,7 +695,7 @@ seoResearchRouter.post('/opportunities', async (req, res) => {
     const avgPosition = queryRows.length > 0 ? queryRows.reduce((acc, r) => acc + r.position, 0) / queryRows.length : 0;
 
     return res.json({
-      isDemo,
+      isConnected: true,
       stats: {
         totalQueries: queryRows.length,
         totalClicks,

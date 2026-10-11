@@ -62,7 +62,7 @@ export const SeoResearchDashboard: React.FC = () => {
   const [intentFilter, setIntentFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
   const [isLoading, setIsLoading] = useState(false);
-  const [isDemo, setIsDemo] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Prompt Generator State
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -89,20 +89,25 @@ export const SeoResearchDashboard: React.FC = () => {
   // Fetch opportunities
   const fetchOpportunities = useCallback(async () => {
     setIsLoading(true);
+    setApiError(null);
     try {
       const res = await fetch('/api/admin/seo-research/opportunities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dateRange })
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        setApiError(data.error || 'Failed to fetch search console queries.');
+        setOpportunities([]);
+        setOverviewStats(null);
+      } else {
         setOpportunities(data.opportunities || []);
         setOverviewStats(data.stats || null);
-        setIsDemo(Boolean(data.isDemo));
       }
-    } catch (err) {
-      console.error('Failed to fetch opportunities:', err);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setApiError(error.message || 'Error connecting to search opportunities endpoint.');
     } finally {
       setIsLoading(false);
     }
@@ -227,22 +232,22 @@ export const SeoResearchDashboard: React.FC = () => {
       <div className="p-5 rounded-2xl bg-[#0B0B0B] border border-[#252525]">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-xl border ${status?.isConnected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'}`}>
-              {status?.isConnected ? <ShieldCheck className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
+            <div className={`p-3 rounded-xl border ${status?.isConnected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800 border-zinc-700 text-zinc-300'}`}>
+              {status?.isConnected ? <ShieldCheck className="w-6 h-6" /> : <Target className="w-6 h-6 text-[#C7FF4D]" />}
             </div>
             <div>
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-white">
-                  {status?.isConnected ? 'Google Search Console Connected' : 'Search Console Data Source: Demo & Simulation Mode'}
+                  {status?.isConnected ? 'Google Search Console Connected' : 'Google Search Console Not Connected'}
                 </h3>
-                <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-medium ${status?.isConnected ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                  {status?.isConnected ? 'Live OAuth Active' : 'Offline Fixtures'}
+                <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-medium ${status?.isConnected ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {status?.isConnected ? 'Production Live Sync' : 'Awaiting Connection'}
                 </span>
               </div>
               <p className="text-xs text-[#A5A5A5] mt-1">
                 {status?.isConnected
-                  ? `Authenticated as ${status.googleEmail || 'Authorized Account'}. Analyzing property: ${status.selectedProperty}`
-                  : 'Displaying realistic Dawnexus query data. To connect live Google Search Console, configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel environment variables.'}
+                  ? `Authenticated as ${status.googleEmail || 'Authorized Google Account'}. Querying property: ${status.selectedProperty}`
+                  : 'Connect your verified Google account to load actual search queries and rankings from Google Search Console.'}
               </p>
             </div>
           </div>
@@ -262,14 +267,40 @@ export const SeoResearchDashboard: React.FC = () => {
                 Disconnect
               </button>
             ) : (
-              <div className="flex items-center gap-2 text-xs text-[#A5A5A5] bg-[#141414] px-3.5 py-2 rounded-xl border border-[#252525]">
-                <Info className="w-4 h-4 text-[#C7FF4D]" />
-                <span>Redirect URI: <code className="font-mono text-zinc-300">/api/admin/seo-research/google/callback</code></span>
-              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/admin/seo-research/google/auth-url');
+                    const data = await res.json();
+                    if (data.authUrl) {
+                      window.location.href = data.authUrl;
+                    } else {
+                      alert(data.error || 'Failed to initialize Google login.');
+                    }
+                  } catch (err) {
+                    console.error('OAuth initiation failed:', err);
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#C7FF4D] text-[#050505] hover:bg-[#b8f53a] transition-all shadow-lg shadow-[#C7FF4D]/10"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Connect Google Search Console</span>
+              </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Live API Error Notice */}
+      {apiError && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-200">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-semibold text-white">Search Console Notice:</div>
+            <div>{apiError}</div>
+          </div>
+        </div>
+      )}
 
       {/* Overview Analytics Bar */}
       {overviewStats && (
