@@ -954,6 +954,11 @@ export function getActiveNotificationEmail(): string | null {
   if (settings && settings.is_verified === 1 && settings.active_email) {
     return settings.active_email;
   }
+  // Robust serverless fallback: if configured via environment or verified address
+  const envEmail = process.env.NOTIFICATION_EMAIL || process.env.INQUIRY_ALERT_EMAIL;
+  if (envEmail && envEmail.trim()) {
+    return envEmail.trim();
+  }
   return null;
 }
 
