@@ -1,5 +1,4 @@
-import React from 'react';
-import { ArrowUp, Lock } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   const scrollToTop = () => {
@@ -86,16 +85,6 @@ export const Footer: React.FC = () => {
               className="hover:text-[#C7FF4D] transition-colors"
             >
               Privacy Policy
-            </a>
-
-            {/* Direct Admin Login Link */}
-            <a
-              href="/admin"
-              className="flex items-center gap-1.5 hover:text-[#C7FF4D] transition-colors font-mono"
-              title="Administrator Portal"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Admin Portal</span>
             </a>
 
             <button

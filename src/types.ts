@@ -40,6 +40,7 @@ export interface ServiceItem {
   description: string;
   deliverables: string[];
   icon: string;
+  route?: string;
 }
 
 export interface PortfolioItem {

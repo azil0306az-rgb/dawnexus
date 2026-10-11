@@ -10,11 +10,14 @@ import {
 } from 'lucide-react';
 import type { ServiceItem } from '../../types';
 
+import { navigateTo } from '../../utils/navigation';
+
 export const servicesData: ServiceItem[] = [
   {
     id: 'web-development',
     number: '01',
     title: 'Website Design & Development',
+    route: '/services/website-design',
     description: 'Modern, responsive websites designed around your brand, business goals, and customer experience.',
     deliverables: [
       'Responsive & High-Performance Websites',
@@ -29,6 +32,7 @@ export const servicesData: ServiceItem[] = [
     id: 'ai-video',
     number: '02',
     title: 'AI Video Creation',
+    route: '/services/ai-video-creation',
     description: 'Creative, AI-assisted video content that helps businesses communicate, promote, and capture attention.',
     deliverables: [
       'High-Impact Promotional Videos',
@@ -43,6 +47,7 @@ export const servicesData: ServiceItem[] = [
     id: 'ai-advertising',
     number: '03',
     title: 'AI-Integrated Advertising',
+    route: '/services/digital-marketing',
     description: 'Smarter advertising campaigns supported by AI-assisted creative production, analytics, and ongoing optimization.',
     deliverables: [
       'Google Ads (Search, Display & Performance Max)',
@@ -57,6 +62,7 @@ export const servicesData: ServiceItem[] = [
     id: 'seo',
     number: '04',
     title: 'Search Engine Optimization',
+    route: '/services/seo-services',
     description: 'Improve your organic search visibility with a structured SEO strategy designed for sustainable growth.',
     deliverables: [
       'Targeted Keyword & Competitor Research',
@@ -71,6 +77,7 @@ export const servicesData: ServiceItem[] = [
     id: 'gbp',
     number: '05',
     title: 'Google Business Profile Optimization',
+    route: '/services/seo-services',
     description: 'Help customers discover your business on Google Search and Google Maps through an accurate, optimized business profile.',
     deliverables: [
       'Complete Profile Setup & Verification',
@@ -95,12 +102,9 @@ export const Services: React.FC = () => {
     }
   };
 
-  const handleSelectService = (serviceTitle: string) => {
-    const contactEl = document.getElementById('contact');
-    if (contactEl) {
-      contactEl.scrollIntoView({ behavior: 'smooth' });
-      // Dispatch a custom event to check this service in the contact form
-      window.dispatchEvent(new CustomEvent('select-service', { detail: serviceTitle }));
+  const handleCardClick = (route?: string) => {
+    if (route) {
+      navigateTo(route);
     }
   };
 
@@ -128,7 +132,8 @@ export const Services: React.FC = () => {
             return (
               <div
                 key={service.id}
-                className={`group rounded-2xl bg-[#0B0B0B] border border-[#252525] p-8 flex flex-col justify-between transition-all duration-300 hover:border-[#C7FF4D]/50 hover:bg-[#0e0e0e] relative overflow-hidden ${
+                onClick={() => handleCardClick(service.route)}
+                className={`group rounded-2xl bg-[#0B0B0B] border border-[#252525] p-8 flex flex-col justify-between transition-all duration-300 hover:border-[#C7FF4D]/50 hover:bg-[#0e0e0e] relative overflow-hidden cursor-pointer ${
                   isFeatured ? 'md:col-span-2 lg:col-span-2' : ''
                 }`}
               >
@@ -167,14 +172,11 @@ export const Services: React.FC = () => {
 
                 {/* Bottom Action */}
                 <div className="pt-4 border-t border-[#252525] flex items-center justify-between">
-                  <button
-                    onClick={() => handleSelectService(service.title)}
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-[#FFFFFF] group-hover:text-[#C7FF4D] transition-colors"
-                  >
-                    <span>Request Service</span>
-                    <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
-                  </button>
-                  <span className="text-xs text-[#A5A5A5] font-mono">Tailored Scope</span>
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#FFFFFF] group-hover:text-[#C7FF4D] transition-colors">
+                    <span>Explore Service</span>
+                    <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1.5 transition-transform" />
+                  </span>
+                  <span className="text-xs text-[#A5A5A5] font-mono group-hover:text-white transition-colors">View Details &rarr;</span>
                 </div>
 
               </div>

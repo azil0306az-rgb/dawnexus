@@ -10,22 +10,56 @@ import { Footer } from './components/public/Footer';
 import { PrivacyModal } from './components/public/PrivacyModal';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { WebsiteDesignPage } from './pages/services/WebsiteDesignPage';
+import { SeoServicesPage } from './pages/services/SeoServicesPage';
+import { AiVideoCreationPage } from './pages/services/AiVideoCreationPage';
+import { DigitalMarketingPage } from './pages/services/DigitalMarketingPage';
+import { usePageSeo } from './utils/seo';
 import { Loader2 } from 'lucide-react';
 
-export const App: React.FC = () => {
-  const [isAdminRoute, setIsAdminRoute] = useState(
-    window.location.pathname.startsWith('/admin')
+const HomePageContent: React.FC = () => {
+  usePageSeo({
+    title: 'Dawnexus | Web Development, AI Video & Digital Marketing',
+    description: 'Dawnexus helps businesses grow with professional website development, AI-powered video creation, digital advertising, SEO, and Google Business Profile optimization.',
+    canonicalUrl: 'https://dawnexus.in/',
+    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    schema: {
+      '@context': 'https://schema.org',
+      '@type': 'ProfessionalService',
+      'name': 'Dawnexus',
+      'url': 'https://dawnexus.in/',
+      'logo': 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+      'image': 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+      'description': 'Professional website development, AI video creation, digital advertising, SEO, and Google Business Profile optimization.'
+    }
+  });
+
+  return (
+    <main className="flex-1">
+      <Hero />
+      <Services />
+      <WhyUs />
+      <Process />
+      <Work />
+      <ContactForm />
+    </main>
   );
+};
+
+export const App: React.FC = () => {
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
-  // Check URL changes (e.g. browser back/forward buttons)
+  // Check URL changes (e.g. browser back/forward buttons, pushState)
   useEffect(() => {
-    const handlePopState = () => {
-      setIsAdminRoute(window.location.pathname.startsWith('/admin'));
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
+
+  const isAdminRoute = currentPath.startsWith('/admin');
 
   // Check Admin session status if on /admin route
   useEffect(() => {
@@ -60,10 +94,9 @@ export const App: React.FC = () => {
     setIsAuthenticated(true);
   };
 
-  // If visiting /admin
+  // 1. Admin Route
   if (isAdminRoute) {
     if (isAuthenticated === null) {
-      // Loading session check
       return (
         <div className="min-h-screen bg-[#050505] flex items-center justify-center text-white">
           <div className="text-center space-y-3">
@@ -81,18 +114,26 @@ export const App: React.FC = () => {
     return <AdminLogin onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // Public Marketing Website
+  // 2. Service Pages & Public Marketing Website
+  const renderContent = () => {
+    switch (currentPath) {
+      case '/services/website-design':
+        return <WebsiteDesignPage />;
+      case '/services/seo-services':
+        return <SeoServicesPage />;
+      case '/services/ai-video-creation':
+        return <AiVideoCreationPage />;
+      case '/services/digital-marketing':
+        return <DigitalMarketingPage />;
+      default:
+        return <HomePageContent />;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#FFFFFF] flex flex-col">
       <Navbar />
-      <main className="flex-1">
-        <Hero />
-        <Services />
-        <WhyUs />
-        <Process />
-        <Work />
-        <ContactForm />
-      </main>
+      {renderContent()}
       <Footer />
       <PrivacyModal />
     </div>
@@ -100,4 +141,3 @@ export const App: React.FC = () => {
 };
 
 export default App;
-

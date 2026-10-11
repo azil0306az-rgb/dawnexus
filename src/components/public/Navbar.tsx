@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowUpRight, Menu, X } from 'lucide-react';
 
+import { navigateTo } from '../../utils/navigation';
+
 export const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -24,9 +26,22 @@ export const Navbar: React.FC = () => {
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
     setMobileMenuOpen(false);
-    const element = document.querySelector(href);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+    if (window.location.pathname !== '/') {
+      navigateTo('/' + href);
+    } else {
+      const element = document.querySelector(href);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
+
+  const handleLogoClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (window.location.pathname !== '/') {
+      navigateTo('/');
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -40,7 +55,7 @@ export const Navbar: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         {/* Brand Logo */}
-        <a href="#hero" className="flex items-center gap-2 group cursor-pointer focus:outline-none">
+        <a href="#hero" onClick={handleLogoClick} className="flex items-center gap-2 group cursor-pointer focus:outline-none">
           <img
             src="/brand/dawnexus-horizontal.png"
             alt="Dawnexus Logo"
