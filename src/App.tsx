@@ -14,6 +14,8 @@ import { WebsiteDesignPage } from './pages/services/WebsiteDesignPage';
 import { SeoServicesPage } from './pages/services/SeoServicesPage';
 import { AiVideoCreationPage } from './pages/services/AiVideoCreationPage';
 import { DigitalMarketingPage } from './pages/services/DigitalMarketingPage';
+import { BlogListingPage } from './pages/blog/BlogListingPage';
+import { BlogPostPage } from './pages/blog/BlogPostPage';
 import { usePageSeo } from './utils/seo';
 import { Loader2 } from 'lucide-react';
 
@@ -114,8 +116,16 @@ export const App: React.FC = () => {
     return <AdminLogin onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // 2. Service Pages & Public Marketing Website
+  // 2. Blog, Service Pages & Public Marketing Website
   const renderContent = () => {
+    if (currentPath === '/blog') {
+      return <BlogListingPage />;
+    }
+    if (currentPath.startsWith('/blog/')) {
+      const slug = currentPath.replace('/blog/', '').split('?')[0];
+      return <BlogPostPage slug={slug} />;
+    }
+
     switch (currentPath) {
       case '/services/website-design':
         return <WebsiteDesignPage />;

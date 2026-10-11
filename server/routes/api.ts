@@ -1,9 +1,96 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { createEnquiry } from '../db.js';
+import { createEnquiry, getPublicBlogs, getBlogBySlug, publishDueScheduledBlogs } from '../db.js';
 import { sendEnquiryNotification } from '../email.js';
 
 export const publicRouter = Router();
+
+// ==========================================
+// CRON / AUTOMATED PUBLISHING ENDPOINT
+// ==========================================
+const handleCronPublish = (req: any, res: any) => {
+  try {
+    const result = publishDueScheduledBlogs();
+    return res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      ...result
+    });
+  } catch (error) {
+    console.error('[Cron Publish Error]:', error);
+    return res.status(500).json({ error: 'Failed to run publication scheduler' });
+  }
+};
+
+publicRouter.get('/cron/publish', handleCronPublish);
+publicRouter.post('/cron/publish', handleCronPublish);
+
+// ==========================================
+// PUBLIC BLOG ENDPOINTS
+// ==========================================
+
+// GET /api/blogs
+publicRouter.get('/blogs', (req, res) => {
+  try {
+    // Lazily ensure any due scheduled posts are published
+    try {
+      publishDueScheduledBlogs();
+    } catch {
+      // Ignore background errors
+    }
+
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '12', 10);
+
+    const result = getPublicBlogs({ category, search, page, limit });
+    return res.json(result);
+  } catch (error) {
+    console.error('[Public Get Blogs Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve blog articles' });
+  }
+});
+
+// GET /api/blogs/:slug
+publicRouter.get('/blogs/:slug', (req, res) => {
+  try {
+    const slug = req.params.slug;
+    if (!slug || typeof slug !== 'string') {
+      return res.status(400).json({ error: 'Slug parameter is required' });
+    }
+
+    // Lazily ensure any due scheduled posts are published
+    try {
+      publishDueScheduledBlogs();
+    } catch {
+      // Ignore
+    }
+
+    const blog = getBlogBySlug(slug.trim());
+    if (!blog) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    // Only allow public access to Published blogs (unless preview mode query param provided, e.g. preview=true from admin)
+    const isPreview = req.query.preview === 'true';
+    if (blog.status !== 'Published' && !isPreview) {
+      return res.status(404).json({ error: 'Article is not published yet' });
+    }
+
+    // Fetch up to 3 related articles in the same category
+    const relatedResult = getPublicBlogs({ category: blog.category, limit: 4 });
+    const related = relatedResult.items.filter(item => item.id !== blog.id).slice(0, 3);
+
+    return res.json({
+      blog,
+      related
+    });
+  } catch (error) {
+    console.error('[Public Get Blog By Slug Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve article' });
+  }
+});
 
 // Rate limiting for public enquiry submissions: max 10 per 15 minutes per IP
 const enquiryLimiter = rateLimit({

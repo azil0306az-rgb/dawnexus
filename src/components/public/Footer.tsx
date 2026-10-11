@@ -1,4 +1,6 @@
+import React from 'react';
 import { ArrowUp } from 'lucide-react';
+import { navigateTo } from '../../utils/navigation';
 
 export const Footer: React.FC = () => {
   const scrollToTop = () => {
@@ -39,19 +41,19 @@ export const Footer: React.FC = () => {
             </h4>
             <ul className="space-y-2 text-sm text-[#A5A5A5]">
               <li>
-                <a href="#hero" className="hover:text-[#C7FF4D] transition-colors">Home</a>
+                <a href="/" onClick={(e) => { e.preventDefault(); navigateTo('/'); }} className="hover:text-[#C7FF4D] transition-colors">Home</a>
               </li>
               <li>
-                <a href="#services" className="hover:text-[#C7FF4D] transition-colors">Services</a>
+                <a href="/#services" onClick={(e) => { e.preventDefault(); navigateTo('/#services'); }} className="hover:text-[#C7FF4D] transition-colors">Services</a>
               </li>
               <li>
-                <a href="#approach" className="hover:text-[#C7FF4D] transition-colors">Our Approach</a>
+                <a href="/blog" onClick={(e) => { e.preventDefault(); navigateTo('/blog'); }} className="hover:text-[#C7FF4D] transition-colors">Blog & Insights</a>
               </li>
               <li>
-                <a href="#work" className="hover:text-[#C7FF4D] transition-colors">Selected Work</a>
+                <a href="/#work" onClick={(e) => { e.preventDefault(); navigateTo('/#work'); }} className="hover:text-[#C7FF4D] transition-colors">Selected Work</a>
               </li>
               <li>
-                <a href="#contact" className="hover:text-[#C7FF4D] transition-colors">Contact</a>
+                <a href="/#contact" onClick={(e) => { e.preventDefault(); navigateTo('/#contact'); }} className="hover:text-[#C7FF4D] transition-colors">Contact</a>
               </li>
             </ul>
           </div>
@@ -62,11 +64,26 @@ export const Footer: React.FC = () => {
               Capabilities
             </h4>
             <ul className="space-y-2 text-sm text-[#A5A5A5]">
-              <li>Website Design & Development</li>
-              <li>AI Video Creation</li>
-              <li>AI-Integrated Advertising</li>
-              <li>Search Engine Optimization</li>
-              <li>Google Business Profile Optimization</li>
+              <li>
+                <a href="/services/website-design" onClick={(e) => { e.preventDefault(); navigateTo('/services/website-design'); }} className="hover:text-[#C7FF4D] transition-colors">
+                  Website Design & Development
+                </a>
+              </li>
+              <li>
+                <a href="/services/seo-services" onClick={(e) => { e.preventDefault(); navigateTo('/services/seo-services'); }} className="hover:text-[#C7FF4D] transition-colors">
+                  Search Engine Optimization (SEO)
+                </a>
+              </li>
+              <li>
+                <a href="/services/ai-video-creation" onClick={(e) => { e.preventDefault(); navigateTo('/services/ai-video-creation'); }} className="hover:text-[#C7FF4D] transition-colors">
+                  AI Video Creation
+                </a>
+              </li>
+              <li>
+                <a href="/services/digital-marketing" onClick={(e) => { e.preventDefault(); navigateTo('/services/digital-marketing'); }} className="hover:text-[#C7FF4D] transition-colors">
+                  Performance Digital Marketing
+                </a>
+              </li>
             </ul>
           </div>
 

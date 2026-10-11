@@ -22,6 +22,7 @@ test.after(async () => {
   await new Promise<void>((resolve) => {
     testServer.close(() => resolve());
   });
+  process.exit(0);
 });
 
 test('Health endpoint returns ok', async () => {
@@ -220,6 +221,105 @@ test('Admin Enquiries: Can delete enquiry permanently', async () => {
     headers: { Cookie: sessionCookie }
   });
   assert.equal(getRes.status, 404);
+});
+
+test('Blog CMS: Public /api/blogs listing returns published seed articles', async () => {
+  const res = await fetch(`${baseUrl}/api/blogs`);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.ok(Array.isArray(data.items));
+  assert.ok(data.total >= 2);
+  const slugs = data.items.map((i: any) => i.slug);
+  assert.ok(slugs.includes('website-design-cost-coimbatore'));
+});
+
+test('Blog CMS: Public /api/blogs/:slug returns article with related posts', async () => {
+  const res = await fetch(`${baseUrl}/api/blogs/website-design-cost-coimbatore`);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.ok(data.blog);
+  assert.equal(data.blog.slug, 'website-design-cost-coimbatore');
+  assert.ok(data.blog.title.includes('Coimbatore'));
+  assert.ok(Array.isArray(data.related));
+});
+
+test('Blog CMS & Dynamic Sitemap: /sitemap.xml generates valid XML with canonical domain and article URLs', async () => {
+  const res = await fetch(`${baseUrl}/sitemap.xml`);
+  assert.equal(res.status, 200);
+  const text = await res.text();
+  assert.ok(text.includes('<?xml version="1.0" encoding="UTF-8"?>'));
+  assert.ok(text.includes('<loc>https://dawnexus.in/</loc>'));
+  assert.ok(text.includes('<loc>https://dawnexus.in/services/website-design</loc>'));
+  assert.ok(text.includes('<loc>https://dawnexus.in/blog</loc>'));
+  assert.ok(text.includes('<loc>https://dawnexus.in/blog/website-design-cost-coimbatore</loc>'));
+});
+
+let createdBlogId: number;
+
+test('Blog CMS Admin: Can create, schedule, auto-publish, and manage articles', async () => {
+  // 1. Create a draft article
+  const createRes = await fetch(`${baseUrl}/api/admin/blogs`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: sessionCookie
+    },
+    body: JSON.stringify({
+      title: 'Automated Publishing Test Article',
+      slug: 'automated-publishing-test-article',
+      excerpt: 'Testing scheduled publishing pipeline',
+      content: '<h2>Automated Test</h2><p>This is a test article.</p>',
+      category: 'Website Design',
+      primary_keyword: 'automated publishing',
+      status: 'Scheduled',
+      // Scheduled 1 minute ago so it is immediately due
+      scheduled_at: new Date(Date.now() - 60000).toISOString()
+    })
+  });
+
+  assert.equal(createRes.status, 201);
+  const createData = await createRes.json();
+  assert.ok(createData.blog);
+  createdBlogId = createData.blog.id;
+  assert.equal(createData.blog.status, 'Scheduled');
+
+  // 2. Trigger scheduler via /api/cron/publish
+  const cronRes = await fetch(`${baseUrl}/api/cron/publish`);
+  assert.equal(cronRes.status, 200);
+  const cronData = await cronRes.json();
+  assert.ok(cronData.publishedCount >= 1);
+
+  // 3. Verify article is now Published
+  const checkRes = await fetch(`${baseUrl}/api/admin/blogs/${createdBlogId}`, {
+    headers: { Cookie: sessionCookie }
+  });
+  assert.equal(checkRes.status, 200);
+  const checkData = await checkRes.json();
+  assert.equal(checkData.status, 'Published');
+  assert.ok(checkData.published_at);
+
+  // 4. Duplicate article
+  const dupRes = await fetch(`${baseUrl}/api/admin/blogs/${createdBlogId}/duplicate`, {
+    method: 'POST',
+    headers: { Cookie: sessionCookie }
+  });
+  assert.equal(dupRes.status, 201);
+  const dupData = await dupRes.json();
+  assert.equal(dupData.blog.status, 'Draft');
+  const dupId = dupData.blog.id;
+
+  // 5. Delete duplicated and original test articles
+  const delDup = await fetch(`${baseUrl}/api/admin/blogs/${dupId}`, {
+    method: 'DELETE',
+    headers: { Cookie: sessionCookie }
+  });
+  assert.equal(delDup.status, 200);
+
+  const delOrig = await fetch(`${baseUrl}/api/admin/blogs/${createdBlogId}`, {
+    method: 'DELETE',
+    headers: { Cookie: sessionCookie }
+  });
+  assert.equal(delOrig.status, 200);
 });
 
 test('Admin Auth: Logout invalidates session', async () => {

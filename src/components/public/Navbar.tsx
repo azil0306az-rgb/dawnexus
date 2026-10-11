@@ -20,12 +20,17 @@ export const Navbar: React.FC = () => {
     { name: 'Services', href: '#services' },
     { name: 'Our Approach', href: '#approach' },
     { name: 'Work', href: '#work' },
+    { name: 'Blog', href: '/blog' },
     { name: 'Contact', href: '#contact' },
   ];
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
     setMobileMenuOpen(false);
+    if (href.startsWith('/')) {
+      navigateTo(href);
+      return;
+    }
     if (window.location.pathname !== '/') {
       navigateTo('/' + href);
     } else {
