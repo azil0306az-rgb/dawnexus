@@ -38,8 +38,13 @@ export const NotificationSettings: React.FC = () => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/admin/notification-settings');
+      const res = await fetch('/api/admin/notification-settings', {
+        credentials: 'include'
+      });
       if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Your administrative session expired. Please refresh the page and enter your admin password.');
+        }
         throw new Error('Failed to load notification settings.');
       }
       const data: NotificationSettingsData = await res.json();
@@ -83,6 +88,7 @@ export const NotificationSettings: React.FC = () => {
     try {
       const res = await fetch('/api/admin/notification-settings/request-otp', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailToVerify })
       });
@@ -132,6 +138,7 @@ export const NotificationSettings: React.FC = () => {
     try {
       const res = await fetch('/api/admin/notification-settings/verify-otp', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailToVerify, otp })
       });
@@ -163,7 +170,8 @@ export const NotificationSettings: React.FC = () => {
     setStatusMessage(null);
     try {
       const res = await fetch('/api/admin/notification-settings/deactivate', {
-        method: 'POST'
+        method: 'POST',
+        credentials: 'include'
       });
       const data = await res.json();
       if (!res.ok) {

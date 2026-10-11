@@ -79,10 +79,11 @@ export function handleAdminLogin(req: Request, res: Response) {
   // Generate high-entropy session ID
   const sessionId = crypto.randomBytes(32).toString('hex');
   createSession(sessionId, SESSION_MAX_AGE_HOURS);
+  const signedSession = signStatelessSession(sessionId);
 
   // Set HTTP-only session cookie
   const isProduction = process.env.NODE_ENV === 'production';
-  res.cookie(COOKIE_NAME, sessionId, {
+  res.cookie(COOKIE_NAME, signedSession, {
     httpOnly: true,
     secure: isProduction,
     sameSite: 'lax',
@@ -98,13 +99,26 @@ export function handleAdminLogin(req: Request, res: Response) {
 
 export function handleAdminSession(req: Request, res: Response) {
   const sessionId = req.cookies?.[COOKIE_NAME];
-  const isValid = validateSession(sessionId);
-
-  if (!isValid) {
+  if (!sessionId) {
     return res.status(401).json({ authenticated: false });
   }
 
-  return res.json({ authenticated: true });
+  const isValidDb = validateSession(sessionId);
+  if (isValidDb) {
+    return res.json({ authenticated: true });
+  }
+
+  const isValidStateless = verifyStatelessSession(sessionId);
+  if (isValidStateless) {
+    try {
+      createSession(sessionId.split('.')[0] || sessionId, SESSION_MAX_AGE_HOURS);
+    } catch {
+      // Non-fatal
+    }
+    return res.json({ authenticated: true });
+  }
+
+  return res.status(401).json({ authenticated: false });
 }
 
 export function handleAdminLogout(req: Request, res: Response) {
@@ -121,16 +135,58 @@ export function handleAdminLogout(req: Request, res: Response) {
   return res.json({ success: true, message: 'Logged out successfully' });
 }
 
+// Fallback stateless signature verification for serverless container recycling
+function getSessionSigningSecret(): string {
+  return process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'dawnexus-secret-session-salt-fallback';
+}
+
+export function signStatelessSession(sessionId: string): string {
+  const secret = getSessionSigningSecret();
+  const signature = crypto.createHmac('sha256', secret).update(sessionId).digest('hex');
+  return `${sessionId}.${signature}`;
+}
+
+export function verifyStatelessSession(token: string): boolean {
+  if (!token || !token.includes('.')) return false;
+  const [sessionId, signature] = token.split('.');
+  if (!sessionId || !signature) return false;
+  const secret = getSessionSigningSecret();
+  const expectedSig = crypto.createHmac('sha256', secret).update(sessionId).digest('hex');
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+  return sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+}
+
 // Middleware to guard protected admin endpoints
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const sessionId = req.cookies?.[COOKIE_NAME];
 
-  if (!sessionId || !validateSession(sessionId)) {
+  if (!sessionId) {
     return res.status(401).json({
       error: 'Authentication required. Access to this administrative endpoint is denied.'
     });
   }
 
-  next();
+  // First verify against SQLite database session table
+  const isValidDb = validateSession(sessionId);
+  if (isValidDb) {
+    return next();
+  }
+
+  // Fallback verify stateless signature (in case serverless container spawned fresh /tmp SQLite)
+  const isValidStateless = verifyStatelessSession(sessionId);
+  if (isValidStateless) {
+    // Re-seed session into this container's SQLite
+    try {
+      createSession(sessionId.split('.')[0] || sessionId, SESSION_MAX_AGE_HOURS);
+    } catch {
+      // Non-fatal
+    }
+    return next();
+  }
+
+  return res.status(401).json({
+    error: 'Authentication required. Access to this administrative endpoint is denied.'
+  });
 }
 
