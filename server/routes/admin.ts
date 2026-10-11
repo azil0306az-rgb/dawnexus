@@ -32,6 +32,7 @@ import {
   sendOtpVerificationEmail,
   getEmailProviderStatus
 } from '../email.js';
+import { seoResearchRouter } from './seoResearch.js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -591,5 +592,9 @@ adminRouter.post('/notification-settings/deactivate', (req, res) => {
     return res.status(500).json({ error: 'Failed to deactivate notification recipient' });
   }
 });
+
+// VERSION 3.0: SEO Research & Blog Ideas Router
+adminRouter.use('/seo-research', seoResearchRouter);
+
 
 

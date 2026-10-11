@@ -17,6 +17,14 @@ if (!fs.existsSync(resolvedDbDir)) {
 // Initialize SQLite database
 const db = new DatabaseSync(path.resolve(dbPath));
 
+// Enable WAL mode and busy timeout for concurrent safety
+try {
+  db.exec('PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA busy_timeout = 5000;');
+} catch {
+  // Pragma failure is non-fatal
+}
+
 // Initialize schema
 export function initDatabase() {
   // Table for customer enquiries
@@ -103,6 +111,17 @@ export function initDatabase() {
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
       used_at TEXT DEFAULT NULL
+    );
+  `);
+
+  // Table for isolated Version 3.0 SEO Research Google OAuth & property connections
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS seo_research_connections (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      google_email TEXT DEFAULT NULL,
+      encrypted_tokens TEXT DEFAULT NULL,
+      selected_property TEXT DEFAULT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 
@@ -1033,6 +1052,56 @@ export function deactivateNotificationSettings(): NotificationSettingsRecord {
   `).run(now);
 
   return getNotificationSettings();
+}
+
+// ----------------------------------------------------
+// VERSION 3.0: SEO RESEARCH GOOGLE CONNECTION HELPERS
+// ----------------------------------------------------
+
+export interface SeoConnectionRecord {
+  id: number;
+  google_email: string | null;
+  encrypted_tokens: string | null;
+  selected_property: string | null;
+  updated_at: string;
+}
+
+export function getSeoConnection(): SeoConnectionRecord | null {
+  const stmt = db.prepare('SELECT * FROM seo_research_connections WHERE id = 1');
+  const res = stmt.get();
+  return (res as unknown as SeoConnectionRecord) || null;
+}
+
+export function saveSeoConnection(googleEmail: string, encryptedTokens: string, defaultProperty?: string): SeoConnectionRecord {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO seo_research_connections (id, google_email, encrypted_tokens, selected_property, updated_at)
+    VALUES (1, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      google_email = excluded.google_email,
+      encrypted_tokens = excluded.encrypted_tokens,
+      selected_property = COALESCE(excluded.selected_property, seo_research_connections.selected_property),
+      updated_at = excluded.updated_at
+  `).run(googleEmail, encryptedTokens, defaultProperty || null, now);
+
+  return getSeoConnection()!;
+}
+
+export function updateSeoSelectedProperty(propertyUrl: string): SeoConnectionRecord {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO seo_research_connections (id, google_email, encrypted_tokens, selected_property, updated_at)
+    VALUES (1, NULL, NULL, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      selected_property = excluded.selected_property,
+      updated_at = excluded.updated_at
+  `).run(propertyUrl, now);
+
+  return getSeoConnection()!;
+}
+
+export function clearSeoConnection(): void {
+  db.prepare('DELETE FROM seo_research_connections WHERE id = 1').run();
 }
 
 // Call initialization

@@ -10,7 +10,7 @@
     "dev:client": "vite --port 3000 --host",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "test": "node --test"
+    "test": "tsx --test server/test/api.test.ts server/test/v29.test.ts server/test/v30.test.ts"
   },
   "keywords": [
     "dawnexus",
