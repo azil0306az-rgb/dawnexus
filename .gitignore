@@ -8,3 +8,6 @@ server/data/*.sqlite-shm
 .DS_Store
 *.log
 .vercel/
+
+.vercel
+.env*
