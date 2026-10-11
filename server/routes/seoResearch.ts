@@ -494,9 +494,32 @@ export async function handleGoogleOAuthCallback(req: any, res: any) {
       // Non-fatal
     }
 
+    // Query available verified sites to auto-select the best matching property for Dawnexus
+    let initialProperty = 'https://dawnexus.in/';
+    try {
+      const sitesCheckRes = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      });
+      if (sitesCheckRes.ok) {
+        const sitesCheckData = await sitesCheckRes.json();
+        const entries = (sitesCheckData.siteEntry || []) as Array<{ siteUrl: string; permissionLevel: string }>;
+        if (entries.length > 0) {
+          // Check for domain property (sc-domain:dawnexus.in) or exact URL match
+          const domainProp = entries.find(e => e.siteUrl.includes('dawnexus.in'));
+          if (domainProp) {
+            initialProperty = domainProp.siteUrl;
+          } else {
+            initialProperty = entries[0].siteUrl;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[SEO Research] Auto property discovery fallback:', e);
+    }
+
     // Encrypt tokens before saving to database
     const encrypted = encryptPayload(JSON.stringify(tokenData));
-    saveSeoConnection(userEmail, encrypted, 'https://dawnexus.in/');
+    saveSeoConnection(userEmail, encrypted, initialProperty);
 
     return res.redirect('/admin?seo_connected=1');
   } catch (err) {

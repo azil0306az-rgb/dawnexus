@@ -63,6 +63,8 @@ export const SeoResearchDashboard: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('All');
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [availableProperties, setAvailableProperties] = useState<Array<{ siteUrl: string; permissionLevel: string }>>([]);
+  const [isSwitchingProperty, setIsSwitchingProperty] = useState(false);
 
   // Prompt Generator State
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -85,6 +87,23 @@ export const SeoResearchDashboard: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to fetch SEO status:', err);
+    }
+  }, []);
+
+  // Fetch list of verified properties in GSC
+  const fetchProperties = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/seo-research/properties', {
+        credentials: 'include'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.properties)) {
+          setAvailableProperties(data.properties);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch properties:', err);
     }
   }, []);
 
@@ -127,8 +146,34 @@ export const SeoResearchDashboard: React.FC = () => {
   useEffect(() => {
     if (status?.isConnected) {
       fetchOpportunities();
+      fetchProperties();
     }
-  }, [status?.isConnected, fetchOpportunities]);
+  }, [status?.isConnected, fetchOpportunities, fetchProperties]);
+
+  const handlePropertyChange = async (newProp: string) => {
+    if (!newProp || newProp === status?.selectedProperty) return;
+    setIsSwitchingProperty(true);
+    setApiError(null);
+    try {
+      const res = await fetch('/api/admin/seo-research/select-property', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyUrl: newProp })
+      });
+      if (res.ok) {
+        await fetchStatus();
+        await fetchOpportunities();
+      } else {
+        const d = await res.json();
+        setApiError(d.error || 'Failed to switch property.');
+      }
+    } catch (e: any) {
+      setApiError(e.message || 'Error updating selected property.');
+    } finally {
+      setIsSwitchingProperty(false);
+    }
+  };
 
   // Open prompt modal for an opportunity
   const handleOpenPromptGenerator = (opp: Opportunity) => {
@@ -258,9 +303,35 @@ export const SeoResearchDashboard: React.FC = () => {
               </div>
               <p className="text-xs text-[#A5A5A5] mt-1">
                 {status?.isConnected
-                  ? `Authenticated as ${status.googleEmail || 'Authorized Google Account'}. Querying property: ${status.selectedProperty}`
+                  ? `Authenticated as ${status.googleEmail || 'Authorized Google Account'}.`
                   : 'Connect your verified Google account to load actual search queries and rankings from Google Search Console.'}
               </p>
+              {status?.isConnected && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-white/60">Property:</span>
+                  <select
+                    value={status.selectedProperty || ''}
+                    disabled={isSwitchingProperty}
+                    onChange={(e) => handlePropertyChange(e.target.value)}
+                    className="bg-[#141414] text-xs text-white border border-[#333] rounded-lg px-2.5 py-1 focus:border-[#C7FF4D] focus:outline-none"
+                  >
+                    {availableProperties.length > 0 ? (
+                      availableProperties.map(p => (
+                        <option key={p.siteUrl} value={p.siteUrl}>
+                          {p.siteUrl} ({p.permissionLevel})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="https://dawnexus.in/">https://dawnexus.in/</option>
+                        <option value="https://www.dawnexus.in/">https://www.dawnexus.in/</option>
+                        <option value="sc-domain:dawnexus.in">sc-domain:dawnexus.in</option>
+                      </>
+                    )}
+                  </select>
+                  {isSwitchingProperty && <RefreshCw className="w-3 h-3 text-[#C7FF4D] animate-spin" />}
+                </div>
+              )}
             </div>
           </div>
 
