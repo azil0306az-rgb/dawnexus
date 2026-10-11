@@ -61,7 +61,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // Fetch stats from DB
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/stats');
+      const res = await fetch('/api/admin/stats', {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -78,18 +82,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: '15',
-        sortBy
+        sortBy,
+        _t: Date.now().toString()
       });
 
       if (search.trim()) queryParams.set('search', search.trim());
       if (statusFilter !== 'All') queryParams.set('status', statusFilter);
       if (serviceFilter !== 'All') queryParams.set('service', serviceFilter);
 
-      const res = await fetch(`/api/admin/enquiries?${queryParams.toString()}`);
+      const res = await fetch(`/api/admin/enquiries?${queryParams.toString()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
-        setEnquiries(data.items);
-        setTotalItems(data.total);
+        setEnquiries(data.items || []);
+        setTotalItems(data.total || 0);
         setTotalPages(data.totalPages || 1);
       }
     } catch (err) {
@@ -104,11 +113,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     fetchEnquiries();
   }, [fetchStats, fetchEnquiries]);
 
+  // Automatic periodic polling every 15s to keep leads and stats up to date
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchStats();
+      fetchEnquiries();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [fetchStats, fetchEnquiries]);
+
   // Handle single enquiry update
   const handleUpdateEnquiry = async (id: number, updates: { status?: string; admin_notes?: string }) => {
     try {
       const res = await fetch(`/api/admin/enquiries/${id}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
@@ -132,7 +151,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/admin/enquiries/${deleteTarget.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       });
       if (res.ok) {
         setEnquiries(prev => prev.filter(item => item.id !== deleteTarget.id));
@@ -159,7 +179,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const handleExportCsv = async () => {
     setIsExporting(true);
     try {
-      const res = await fetch('/api/admin/export');
+      const res = await fetch('/api/admin/export', {
+        credentials: 'include',
+        cache: 'no-store'
+      });
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);

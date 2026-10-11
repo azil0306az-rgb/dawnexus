@@ -263,10 +263,12 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
       project_details: project_details.trim()
     });
 
-    // Send async email notification (safe failure handling)
-    sendEnquiryNotification(newRecord).catch(err => {
+    // Send email notification safely before ending serverless function cycle
+    try {
+      await sendEnquiryNotification(newRecord);
+    } catch (err) {
       console.error('[Email Notification Error]:', err);
-    });
+    }
 
     return res.status(201).json({
       success: true,

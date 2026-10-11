@@ -49,6 +49,14 @@ adminRouter.post('/logout', handleAdminLogout);
 // All routes below require valid session authentication
 adminRouter.use(requireAuth);
 
+// Ensure admin queries are never cached by intermediate proxies or browser cache
+adminRouter.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // GET /api/admin/stats
 adminRouter.get('/stats', (req, res) => {
   try {
