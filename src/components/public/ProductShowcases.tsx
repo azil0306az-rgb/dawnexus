@@ -105,13 +105,21 @@ export const ProductShowcases: React.FC = () => {
             >
               <div>
                 {/* Visual Thumbnail */}
-                <div className="relative aspect-[16/10] bg-[#121212] overflow-hidden border-b border-[#252525]">
+                <div className="relative aspect-video bg-[#121212] overflow-hidden border-b border-[#252525]">
                   <img
                     src={item.thumbnailUrl}
                     alt={`${item.name} concept showcase`}
                     loading="lazy"
-                    width="800"
-                    height="500"
+                    decoding="async"
+                    width="1376"
+                    height="768"
+                    onError={(e) => {
+                      // Graceful fallback to dark branded placeholder if load fails
+                      const target = e.currentTarget;
+                      target.onerror = null;
+                      target.src = '/brand/dawnexus-logo-original.webp';
+                      target.className = 'w-full h-full object-contain p-8 opacity-40 bg-[#121212]';
+                    }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   
@@ -192,3 +200,4 @@ export const ProductShowcases: React.FC = () => {
     </section>
   );
 };
+

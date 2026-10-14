@@ -16,7 +16,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Interactive website configuration, budget estimation, and professional quotation generation.',
     category: 'Commercial Tools',
     status: 'Demo Available',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/website-quotation-builder.webp',
     demoUrl: '/website-cost-calculator',
     inquiryService: 'Website Design & Development'
   },
@@ -26,7 +26,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Scheduled festival themes, campaign visuals, and interactive website effects.',
     category: 'Creative Marketing',
     status: 'In Development',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/festival-theme-system.webp',
     inquiryService: 'AI-Integrated Advertising'
   },
   {
@@ -35,7 +35,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'SEO analysis, recommendations, and content preparation for approval.',
     category: 'Search Optimization',
     status: 'In Development',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1571786256017-aee7a0c009b6?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/ai-seo-management.webp',
     inquiryService: 'Search Engine Optimization'
   },
   {
@@ -44,7 +44,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Property and plot exploration, enquiries, and site-visit requests.',
     category: 'Immersive Experiences',
     status: 'Coming Soon',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/3d-real-estate-showcase.webp',
     inquiryService: 'Website Design & Development'
   },
   {
@@ -53,7 +53,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Product registration, warranty information, manuals, and service requests.',
     category: 'Customer Operations',
     status: 'Coming Soon',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/digital-warranty-service.webp',
     inquiryService: 'Website Design & Development'
   },
   {
@@ -62,7 +62,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Appointment requests, scheduling, and manual confirmation.',
     category: 'Automation & Operations',
     status: 'In Development',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/appointment-booking.webp',
     inquiryService: 'Website Design & Development'
   },
   {
@@ -71,7 +71,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Interactive product exploration and customization.',
     category: 'Immersive Experiences',
     status: 'Coming Soon',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/3d-product-configurator.webp',
     inquiryService: 'Website Design & Development'
   },
   {
@@ -80,7 +80,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Virtual product exploration and quotation requests.',
     category: 'Virtual Commerce',
     status: 'Coming Soon',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/digital-3d-showroom.webp',
     inquiryService: 'Website Design & Development'
   },
   {
@@ -89,7 +89,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Visitor journeys, engagement, and enquiry conversion tracking.',
     category: 'Analytics & Insights',
     status: 'In Development',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/website-visitor-analytics.webp',
     inquiryService: 'AI-Integrated Advertising'
   },
   {
@@ -98,7 +98,7 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Feedback collection, review requests, moderation, and satisfaction tracking.',
     category: 'Reputation & Growth',
     status: 'Coming Soon',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/customer-review-management.webp',
     inquiryService: 'Google Business Profile Optimization'
   },
   {
@@ -107,7 +107,8 @@ export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
     shortDescription: 'Contacts, enquiries, sales pipelines, tasks, and follow-ups.',
     category: 'Business Systems',
     status: 'In Development',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=800&q=80',
+    thumbnailUrl: '/showcases/business-crm.webp',
     inquiryService: 'Website Design & Development'
   }
 ];
+
