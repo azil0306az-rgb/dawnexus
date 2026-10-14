@@ -313,13 +313,20 @@ test('Sitemap: /sitemap.xml dynamically returns HTTP 200 with all published blog
   assert.ok(xml.includes('<loc>https://dawnexus.in/services/digital-marketing</loc>'));
   assert.ok(xml.includes('<loc>https://dawnexus.in/blog</loc>'));
 
-  // Confirmed Local SEO Playbook article (Seed 3) MUST be present
+  // Confirmed published blog article MUST be present in dynamic sitemap
+  createBlog({
+    title: 'Local SEO Playbook for Businesses',
+    slug: 'local-seo-google-maps-playbook',
+    status: 'Published',
+    published_at: new Date().toISOString()
+  });
+
+  const resWithBlog = await fetch(`${baseUrl}/sitemap.xml`);
+  const xmlWithBlog = await resWithBlog.text();
   assert.ok(
-    xml.includes('<loc>https://dawnexus.in/blog/local-seo-google-maps-playbook</loc>'),
-    'Local SEO Playbook canonical URL must be present in dynamic sitemap'
+    xmlWithBlog.includes('<loc>https://dawnexus.in/blog/local-seo-google-maps-playbook</loc>'),
+    'Published blog canonical URL must be present in dynamic sitemap'
   );
-  assert.ok(xml.includes('<loc>https://dawnexus.in/blog/ai-video-production-for-businesses</loc>'));
-  assert.ok(xml.includes('<loc>https://dawnexus.in/blog/website-design-cost-coimbatore</loc>'));
 
   // Ensure no draft or scheduled post appears
   createBlog({
@@ -339,4 +346,10 @@ test('Sitemap: /sitemap.xml dynamically returns HTTP 200 with all published blog
 
   assert.equal(refreshedXml.includes('secret-draft-article'), false, 'Drafts must NOT appear in sitemap');
   assert.equal(refreshedXml.includes('future-scheduled-article'), false, 'Future scheduled posts must NOT appear in sitemap');
+});
+
+test.after(async () => {
+  if (server) {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

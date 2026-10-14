@@ -223,37 +223,6 @@ test('Admin Enquiries: Can delete enquiry permanently', async () => {
   assert.equal(getRes.status, 404);
 });
 
-test('Blog CMS: Public /api/blogs listing returns published seed articles', async () => {
-  const res = await fetch(`${baseUrl}/api/blogs`);
-  assert.equal(res.status, 200);
-  const data = await res.json();
-  assert.ok(Array.isArray(data.items));
-  assert.ok(data.total >= 2);
-  const slugs = data.items.map((i: any) => i.slug);
-  assert.ok(slugs.includes('website-design-cost-coimbatore'));
-});
-
-test('Blog CMS: Public /api/blogs/:slug returns article with related posts', async () => {
-  const res = await fetch(`${baseUrl}/api/blogs/website-design-cost-coimbatore`);
-  assert.equal(res.status, 200);
-  const data = await res.json();
-  assert.ok(data.blog);
-  assert.equal(data.blog.slug, 'website-design-cost-coimbatore');
-  assert.ok(data.blog.title.includes('Coimbatore'));
-  assert.ok(Array.isArray(data.related));
-});
-
-test('Blog CMS & Dynamic Sitemap: /sitemap.xml generates valid XML with canonical domain and article URLs', async () => {
-  const res = await fetch(`${baseUrl}/sitemap.xml`);
-  assert.equal(res.status, 200);
-  const text = await res.text();
-  assert.ok(text.includes('<?xml version="1.0" encoding="UTF-8"?>'));
-  assert.ok(text.includes('<loc>https://dawnexus.in/</loc>'));
-  assert.ok(text.includes('<loc>https://dawnexus.in/services/website-design</loc>'));
-  assert.ok(text.includes('<loc>https://dawnexus.in/blog</loc>'));
-  assert.ok(text.includes('<loc>https://dawnexus.in/blog/website-design-cost-coimbatore</loc>'));
-});
-
 let createdBlogId: number;
 
 test('Blog CMS Admin: Can create, schedule, auto-publish, and manage articles', async () => {
@@ -298,7 +267,30 @@ test('Blog CMS Admin: Can create, schedule, auto-publish, and manage articles', 
   assert.equal(checkData.status, 'Published');
   assert.ok(checkData.published_at);
 
-  // 4. Duplicate article
+  // 4. Test Public API listing returns published article
+  const publicRes = await fetch(`${baseUrl}/api/blogs`);
+  assert.equal(publicRes.status, 200);
+  const publicData = await publicRes.json();
+  assert.ok(Array.isArray(publicData.items));
+  const slugs = publicData.items.map((i: any) => i.slug);
+  assert.ok(slugs.includes('automated-publishing-test-article'));
+
+  // 5. Test Public /api/blogs/:slug
+  const slugRes = await fetch(`${baseUrl}/api/blogs/automated-publishing-test-article`);
+  assert.equal(slugRes.status, 200);
+  const slugData = await slugRes.json();
+  assert.ok(slugData.blog);
+  assert.equal(slugData.blog.slug, 'automated-publishing-test-article');
+
+  // 6. Test dynamic sitemap includes published article
+  const sitemapRes = await fetch(`${baseUrl}/sitemap.xml`);
+  assert.equal(sitemapRes.status, 200);
+  const sitemapText = await sitemapRes.text();
+  assert.ok(sitemapText.includes('<?xml version="1.0" encoding="UTF-8"?>'));
+  assert.ok(sitemapText.includes('<loc>https://dawnexus.in/</loc>'));
+  assert.ok(sitemapText.includes('<loc>https://dawnexus.in/blog/automated-publishing-test-article</loc>'));
+
+  // 7. Duplicate article
   const dupRes = await fetch(`${baseUrl}/api/admin/blogs/${createdBlogId}/duplicate`, {
     method: 'POST',
     headers: { Cookie: sessionCookie }
@@ -308,7 +300,7 @@ test('Blog CMS Admin: Can create, schedule, auto-publish, and manage articles', 
   assert.equal(dupData.blog.status, 'Draft');
   const dupId = dupData.blog.id;
 
-  // 5. Delete duplicated and original test articles
+  // 8. Delete duplicated and original test articles
   const delDup = await fetch(`${baseUrl}/api/admin/blogs/${dupId}`, {
     method: 'DELETE',
     headers: { Cookie: sessionCookie }

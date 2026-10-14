@@ -13,6 +13,7 @@ import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogs, getPubl
 import { publicRouter } from './routes/api.js';
 import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
+import { performDatabaseHealthCheck } from './dbHealth.js';
 
 // Initialize DB schema & tables
 initDatabase();
@@ -212,6 +213,19 @@ if (!process.env.VERCEL) {
     console.log(`=======================================================`);
   });
 }
+
+// Perform initial database health check on startup and schedule every 4 hours
+performDatabaseHealthCheck('startup').catch(err => {
+  console.warn('[DB Health Startup Check Notice]:', err?.message || err);
+});
+
+const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+const healthTimer = setInterval(() => {
+  performDatabaseHealthCheck('scheduled').catch(err => {
+    console.warn('[DB Health Scheduled Check Notice]:', err?.message || err);
+  });
+}, FOUR_HOURS_MS);
+healthTimer.unref();
 
 export default app;
 

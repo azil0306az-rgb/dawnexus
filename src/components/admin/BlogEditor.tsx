@@ -23,7 +23,10 @@ import {
   Trash2,
   Layers,
   Search,
-  ExternalLink
+  ExternalLink,
+  Upload,
+  X,
+  Loader2
 } from 'lucide-react';
 import { BlogRecord, BlogInput, BlogStatus } from '../../types';
 import { SeoWritingAssistant } from './SeoWritingAssistant';
@@ -115,7 +118,121 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Image Upload & Insertion state
+  const [isUploadingFeatured, setIsUploadingFeatured] = useState(false);
+  const [isUploadingBody, setIsUploadingBody] = useState(false);
+  const [showBodyImageModal, setShowBodyImageModal] = useState(false);
+  const [bodyImageUrl, setBodyImageUrl] = useState('');
+  const [bodyImageAlt, setBodyImageAlt] = useState('');
+  const [bodyImageCaption, setBodyImageCaption] = useState('');
+  const featuredFileInputRef = useRef<HTMLInputElement>(null);
+  const bodyFileInputRef = useRef<HTMLInputElement>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Helper to compress & scale image locally
+  const processImageUpload = (file: File, maxDim: number, quality: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('Invalid image file'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const uploadImageToServer = async (file: File): Promise<string> => {
+    const dataUrl = await processImageUpload(file, 1600, 0.85);
+    const res = await fetch('/api/admin/blogs/upload-image', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataUrl })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to upload image');
+    }
+    const data = await res.json();
+    return data.url;
+  };
+
+  const handleFeaturedFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingFeatured(true);
+    try {
+      const url = await uploadImageToServer(file);
+      setFeaturedImage(url);
+    } catch (err: any) {
+      alert('Failed to upload featured image: ' + (err.message || 'Error'));
+    } finally {
+      setIsUploadingFeatured(false);
+      if (featuredFileInputRef.current) {
+        featuredFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleBodyFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingBody(true);
+    try {
+      const url = await uploadImageToServer(file);
+      setBodyImageUrl(url);
+    } catch (err: any) {
+      alert('Failed to upload image: ' + (err.message || 'Error'));
+    } finally {
+      setIsUploadingBody(false);
+      if (bodyFileInputRef.current) {
+        bodyFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleInsertBodyImage = () => {
+    if (!bodyImageUrl.trim()) {
+      alert('Please provide an image URL or upload an image first.');
+      return;
+    }
+    const safeAlt = bodyImageAlt.trim() || title.trim() || 'Article illustration';
+    const captionHtml = bodyImageCaption.trim()
+      ? `  <figcaption class="text-xs text-center text-neutral-400 mt-2">${bodyImageCaption.trim()}</figcaption>\n`
+      : '';
+    const figureHtml = `\n<figure class="my-6">\n  <img src="${bodyImageUrl.trim()}" alt="${safeAlt}" class="w-full rounded-xl object-cover shadow-lg" />\n${captionHtml}</figure>\n`;
+
+    insertFormatting(figureHtml, '');
+    setShowBodyImageModal(false);
+    setBodyImageUrl('');
+    setBodyImageAlt('');
+    setBodyImageCaption('');
+  };
 
   // Auto-generate slug from title if not manually edited
   const handleTitleChange = (val: string) => {
@@ -588,6 +705,15 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                   >
                     <Link className="w-4 h-4" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBodyImageModal(true)}
+                    className="p-1.5 rounded hover:bg-[#202020] text-neutral-300 hover:text-[#C7FF4D] transition flex items-center space-x-1.5 px-2"
+                    title="Insert Image with Caption"
+                  >
+                    <ImageIcon className="w-4 h-4 text-[#C7FF4D]" />
+                    <span className="text-xs font-sans text-neutral-300">Insert Image</span>
+                  </button>
                 </div>
 
                 {/* Content Textarea */}
@@ -603,31 +729,119 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
 
               {/* Media & Author Section */}
               <div className="bg-[#0D0D0D] border border-[#202020] rounded-xl p-5 space-y-4">
-                <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-                  Featured Media & Author
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-neutral-400 mb-1">Featured Image URL</label>
-                    <input
-                      type="text"
-                      value={featuredImage}
-                      onChange={e => setFeaturedImage(e.target.value)}
-                      placeholder="https://images.unsplash.com/... or /images/..."
-                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-neutral-400 mb-1">Image Alt Text (SEO)</label>
-                    <input
-                      type="text"
-                      value={imageAlt}
-                      onChange={e => setImageAlt(e.target.value)}
-                      placeholder="Descriptive explanation for screen readers & search engines"
-                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
-                    />
-                  </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                    Featured Media & Author
+                  </h4>
+                  <span className="text-[11px] text-neutral-500">
+                    Uploaded directly to Supabase Storage
+                  </span>
                 </div>
+
+                <input
+                  ref={featuredFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleFeaturedFileChange}
+                />
+
+                {featuredImage ? (
+                  <div className="rounded-xl border border-[#262626] bg-[#141414] overflow-hidden p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
+                    <div className="w-full md:w-56 h-36 rounded-lg overflow-hidden bg-black flex-shrink-0 border border-[#222] relative group">
+                      <img
+                        src={featuredImage}
+                        alt={imageAlt || 'Featured preview'}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-3 w-full">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          disabled={isUploadingFeatured}
+                          onClick={() => featuredFileInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-[#202020] hover:bg-[#2a2a2a] text-white text-xs font-medium rounded-lg border border-[#333] transition flex items-center space-x-1.5"
+                        >
+                          {isUploadingFeatured ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C7FF4D]" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5 text-[#C7FF4D]" />
+                          )}
+                          <span>Replace Image</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFeaturedImage('')}
+                          className="px-3 py-1.5 bg-red-950/30 hover:bg-red-950/50 text-red-400 text-xs font-medium rounded-lg border border-red-900/40 transition flex items-center space-x-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-neutral-500 truncate max-w-lg">
+                        URL: <span className="text-neutral-400 select-all font-mono">{featuredImage}</span>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-neutral-400 mb-1 font-medium">
+                          Image Alt Text (SEO & Accessibility)
+                        </label>
+                        <input
+                          type="text"
+                          value={imageAlt}
+                          onChange={e => setImageAlt(e.target.value)}
+                          placeholder="Descriptive explanation for screen readers and search engines..."
+                          className="w-full px-3 py-2 bg-[#0e0e0e] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div
+                      onClick={() => !isUploadingFeatured && featuredFileInputRef.current?.click()}
+                      className={`border-2 border-dashed border-[#282828] hover:border-[#C7FF4D]/60 rounded-xl p-6 text-center cursor-pointer transition bg-[#141414]/50 flex flex-col items-center justify-center min-h-[140px] group ${
+                        isUploadingFeatured ? 'opacity-60 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {isUploadingFeatured ? (
+                        <>
+                          <Loader2 className="w-8 h-8 text-[#C7FF4D] animate-spin mb-2" />
+                          <p className="text-xs text-neutral-300">Uploading to Supabase Storage...</p>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 text-neutral-500 mb-2 group-hover:text-[#C7FF4D] transition" />
+                          <p className="text-xs font-medium text-white mb-0.5">Click to upload featured image</p>
+                          <p className="text-[11px] text-neutral-500">PNG, JPG, WebP up to 5MB</p>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 flex flex-col justify-center">
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1">Or paste Image URL</label>
+                        <input
+                          type="text"
+                          value={featuredImage}
+                          onChange={e => setFeaturedImage(e.target.value)}
+                          placeholder="https://images.unsplash.com/... or Supabase URL"
+                          className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1">Image Alt Text (SEO)</label>
+                        <input
+                          type="text"
+                          value={imageAlt}
+                          onChange={e => setImageAlt(e.target.value)}
+                          placeholder="Descriptive text for SEO"
+                          className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                   <div>
@@ -941,6 +1155,126 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
           </div>
         )}
       </div>
+
+      {/* Body Image Insert Modal */}
+      {showBodyImageModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#121212] border border-[#282828] rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-[#222]">
+              <div className="flex items-center space-x-2">
+                <ImageIcon className="w-5 h-5 text-[#C7FF4D]" />
+                <h3 className="text-base font-bold text-white">Insert Image into Article</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBodyImageModal(false)}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-[#202020] transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <input
+              ref={bodyFileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={handleBodyFileChange}
+            />
+
+            {/* Upload Area */}
+            <div>
+              <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-2">
+                Upload Image to Supabase
+              </label>
+              <div
+                onClick={() => !isUploadingBody && bodyFileInputRef.current?.click()}
+                className={`border-2 border-dashed border-[#282828] hover:border-[#C7FF4D]/60 rounded-xl p-5 text-center cursor-pointer transition bg-[#161616] flex flex-col items-center justify-center ${
+                  isUploadingBody ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+              >
+                {isUploadingBody ? (
+                  <>
+                    <Loader2 className="w-7 h-7 text-[#C7FF4D] animate-spin mb-2" />
+                    <p className="text-xs text-neutral-300">Uploading to Supabase Storage...</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-6 h-6 text-neutral-400 mb-2" />
+                    <p className="text-xs font-medium text-white mb-0.5">Click to browse or upload file</p>
+                    <p className="text-[11px] text-neutral-500">PNG, JPG, WebP up to 5MB</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1">Or direct Image URL</label>
+              <input
+                type="text"
+                value={bodyImageUrl}
+                onChange={e => setBodyImageUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+              />
+            </div>
+
+            {bodyImageUrl && (
+              <div className="rounded-xl border border-[#252525] bg-black p-2 flex items-center space-x-3">
+                <img
+                  src={bodyImageUrl}
+                  alt="Preview"
+                  className="w-20 h-14 object-cover rounded-lg border border-[#333]"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-neutral-300 truncate">{bodyImageUrl}</p>
+                  <p className="text-[11px] text-[#C7FF4D]">Image ready to insert</p>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1">Alt Text (Accessibility & SEO)</label>
+              <input
+                type="text"
+                value={bodyImageAlt}
+                onChange={e => setBodyImageAlt(e.target.value)}
+                placeholder="Describe what is shown in this image..."
+                className="w-full px-3 py-2 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1">Caption (Optional)</label>
+              <input
+                type="text"
+                value={bodyImageCaption}
+                onChange={e => setBodyImageCaption(e.target.value)}
+                placeholder="Figure caption displayed beneath image..."
+                className="w-full px-3 py-2 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+              />
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-[#222]">
+              <button
+                type="button"
+                onClick={() => setShowBodyImageModal(false)}
+                className="px-4 py-2 bg-[#1f1f1f] hover:bg-[#282828] text-neutral-300 text-xs font-semibold rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!bodyImageUrl || isUploadingBody}
+                onClick={handleInsertBodyImage}
+                className="px-4 py-2 bg-[#C7FF4D] hover:bg-[#b8f53a] text-black text-xs font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Insert into Article
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

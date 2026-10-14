@@ -2,6 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { createEnquiry, getPublicBlogs, getBlogBySlug, publishDueScheduledBlogs, getPublicClients } from '../db.js';
 import { sendEnquiryNotification } from '../email.js';
+import { performDatabaseHealthCheck } from '../dbHealth.js';
 
 export const publicRouter = Router();
 
@@ -24,6 +25,32 @@ const handleCronPublish = (req: any, res: any) => {
 
 publicRouter.get('/cron/publish', handleCronPublish);
 publicRouter.post('/cron/publish', handleCronPublish);
+
+// ==========================================
+// CRON / AUTOMATED 4-HOUR DATABASE HEALTH CHECK
+// ==========================================
+const handleCronDbHealth = async (req: any, res: any) => {
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = req.headers.authorization;
+    if (cronSecret && authHeader !== `Bearer ${cronSecret}` && req.headers['x-vercel-cron'] !== '1') {
+      return res.status(401).json({ error: 'Unauthorized cron invocation' });
+    }
+
+    const result = await performDatabaseHealthCheck('scheduled');
+    return res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      result
+    });
+  } catch (error) {
+    console.error('[Cron DB Health Error]:', error);
+    return res.status(500).json({ error: 'Failed to execute database health check' });
+  }
+};
+
+publicRouter.get('/cron/db-health', handleCronDbHealth);
+publicRouter.post('/cron/db-health', handleCronDbHealth);
 
 // ==========================================
 // PUBLIC BLOG ENDPOINTS

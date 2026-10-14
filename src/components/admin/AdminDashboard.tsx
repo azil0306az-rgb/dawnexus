@@ -20,22 +20,23 @@ import {
   FileText,
   Bell,
   Sparkles,
-  Briefcase
+  Briefcase,
+  Activity
 } from 'lucide-react';
 import type { EnquiryRecord, EnquiryStats } from '../../types';
 import { EnquiryDetailModal } from './EnquiryDetailModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BlogManager } from './BlogManager';
 import { NotificationSettings } from './NotificationSettings';
-import { SeoResearchDashboard } from './SeoResearchDashboard';
 import { ClientShowcaseManager } from './ClientShowcaseManager';
+import { DatabaseHealthDashboard } from './DatabaseHealthDashboard';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'notifications' | 'seo'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'notifications' | 'db-health'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -330,19 +331,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('seo')}
+              onClick={() => setActiveTab('db-health')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                activeTab === 'seo'
+                activeTab === 'db-health'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
                   : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Sparkles className="w-4 h-4" />
-                <span>SEO & Blog Ideas</span>
+                <Activity className="w-4 h-4" />
+                <span>Database Health</span>
               </div>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
-                v3.0
+                4h
               </span>
             </button>
           </nav>
@@ -379,8 +380,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <BlogManager />
         ) : activeTab === 'notifications' ? (
           <NotificationSettings />
-        ) : activeTab === 'seo' ? (
-          <SeoResearchDashboard />
+        ) : activeTab === 'db-health' ? (
+          <DatabaseHealthDashboard />
         ) : (
           <>
             {/* Top Header Bar */}

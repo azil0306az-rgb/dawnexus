@@ -174,18 +174,8 @@ export function initDatabase() {
     VALUES (1, NULL, 0, NULL, NULL, datetime('now'));
   `);
 
-  seedBlogsIfEmpty();
+  // Singleton notification settings initialized
 
-  // Migration: Ensure Local SEO Playbook article (Seed 3) is Published so it is immediately eligible for dynamic sitemap
-  try {
-    db.exec(`
-      UPDATE blogs 
-      SET status = 'Published', published_at = '2026-10-11T09:00:00.000Z'
-      WHERE slug = 'local-seo-google-maps-playbook' AND (status != 'Published' OR published_at IS NULL);
-    `);
-  } catch {
-    // Non-fatal if table not yet populated
-  }
 
   console.log(`[Database] SQLite initialized successfully at: ${path.resolve(dbPath)}`);
 

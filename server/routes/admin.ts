@@ -38,6 +38,8 @@ import {
   getEmailProviderStatus
 } from '../email.js';
 import { seoResearchRouter } from './seoResearch.js';
+import { getDatabaseHealthStats, performDatabaseHealthCheck } from '../dbHealth.js';
+import { createClient } from '@supabase/supabase-js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -853,6 +855,180 @@ adminRouter.post('/clients/auto-preview', async (req, res) => {
       success: false,
       error: 'Automatic screenshot capture timed out or failed. Please upload a screenshot manually.'
     });
+  }
+});
+
+// ======================================================================
+// BLOG IMAGE UPLOAD (SUPABASE STORAGE BUCKET: blog-images)
+// ======================================================================
+adminRouter.post('/blogs/upload-image', async (req, res) => {
+  try {
+    const { image, filename: requestedName } = req.body;
+    if (!image || typeof image !== 'string') {
+      return res.status(400).json({ error: 'Image data URL is required.' });
+    }
+
+    const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      // If it's already a hosted URL, just return it
+      if (image.startsWith('http://') || image.startsWith('https://')) {
+        return res.json({ success: true, url: image });
+      }
+      return res.status(400).json({ error: 'Invalid image format.' });
+    }
+
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    if (buffer.length > 5 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Image file size exceeds 5MB limit.' });
+    }
+
+    const extension = mimeType.split('/')[1] || 'png';
+    const cleanExt = extension.replace('jpeg', 'jpg');
+    const safeName = `blog-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createClient(supabaseUrl, supabaseKey, {
+        auth: { persistSession: false }
+      });
+
+      const { data, error } = await supabase.storage
+        .from('blog-images')
+        .upload(safeName, buffer, {
+          contentType: mimeType,
+          upsert: true
+        });
+
+      if (!error && data) {
+        const { data: pubData } = supabase.storage
+          .from('blog-images')
+          .getPublicUrl(safeName);
+
+        return res.json({
+          success: true,
+          url: pubData.publicUrl,
+          filename: safeName
+        });
+      }
+    }
+
+    // Fallback: return data URL safely if storage bucket is unreachable
+    return res.json({
+      success: true,
+      url: image,
+      filename: safeName
+    });
+  } catch (err: any) {
+    console.error('[Blog Image Upload Error]:', err);
+    return res.status(500).json({ error: 'Failed to process blog image upload.' });
+  }
+});
+
+// ======================================================================
+// CLIENT SHOWCASE IMAGE UPLOAD (SUPABASE STORAGE BUCKET: client-showcase)
+// ======================================================================
+adminRouter.post('/clients/upload-image', async (req, res) => {
+  try {
+    const { image, type = 'screenshot' } = req.body;
+    if (!image || typeof image !== 'string') {
+      return res.status(400).json({ error: 'Image data URL is required.' });
+    }
+
+    const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      if (image.startsWith('http://') || image.startsWith('https://')) {
+        return res.json({ success: true, url: image });
+      }
+      return res.status(400).json({ error: 'Invalid image format.' });
+    }
+
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    if (buffer.length > 5 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Image file size exceeds 5MB limit.' });
+    }
+
+    const extension = mimeType.split('/')[1] || 'png';
+    const cleanExt = extension.replace('jpeg', 'jpg');
+    const safeName = `client-${type}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createClient(supabaseUrl, supabaseKey, {
+        auth: { persistSession: false }
+      });
+
+      const { data, error } = await supabase.storage
+        .from('client-showcase')
+        .upload(safeName, buffer, {
+          contentType: mimeType,
+          upsert: true
+        });
+
+      if (!error && data) {
+        const { data: pubData } = supabase.storage
+          .from('client-showcase')
+          .getPublicUrl(safeName);
+
+        return res.json({
+          success: true,
+          url: pubData.publicUrl,
+          filename: safeName
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      url: image,
+      filename: safeName
+    });
+  } catch (err: any) {
+    console.error('[Client Image Upload Error]:', err);
+    return res.status(500).json({ error: 'Failed to process client image upload.' });
+  }
+});
+
+// ======================================================================
+// DATABASE HEALTH CHECK MONITORING ENDPOINTS
+// ======================================================================
+
+// GET /api/admin/db-health - View health statistics and recent check history
+adminRouter.get('/db-health', async (req, res) => {
+  try {
+    const stats = await getDatabaseHealthStats();
+    return res.json({
+      success: true,
+      stats
+    });
+  } catch (err: any) {
+    console.error('[Admin DB Health Error]:', err);
+    return res.status(500).json({ error: 'Failed to fetch database health statistics.' });
+  }
+});
+
+// POST /api/admin/db-health/check - Trigger manual on-demand health check
+adminRouter.post('/db-health/check', async (req, res) => {
+  try {
+    const checkResult = await performDatabaseHealthCheck('manual');
+    const stats = await getDatabaseHealthStats();
+    return res.json({
+      success: true,
+      result: checkResult,
+      stats
+    });
+  } catch (err: any) {
+    console.error('[Admin DB Health Check Error]:', err);
+    return res.status(500).json({ error: 'Failed to execute manual database health check.' });
   }
 });
 

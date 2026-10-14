@@ -146,21 +146,42 @@ export const BlogListingPage: React.FC = () => {
             <p className="text-sm text-neutral-400">Loading published insights...</p>
           </div>
         ) : blogs.length === 0 ? (
-          <div className="py-24 text-center bg-[#0B0B0B] border border-[#252525] rounded-2xl p-8 space-y-4">
-            <FileText className="w-10 h-10 text-neutral-600 mx-auto" />
-            <h3 className="text-lg font-bold text-white">No Articles Found</h3>
-            <p className="text-sm text-neutral-400 max-w-md mx-auto">
-              No articles matched your criteria. Try adjusting your search term or selecting another category.
+          <div className="py-24 text-center bg-[#0B0B0B] border border-[#252525] rounded-3xl p-10 space-y-4 max-w-2xl mx-auto my-6">
+            <div className="w-16 h-16 rounded-2xl bg-[#141414] border border-[#222] flex items-center justify-center mx-auto text-[#C7FF4D]">
+              <FileText className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-white tracking-tight">
+              {!search && selectedCategory === 'All'
+                ? 'Fresh Insights Coming Soon'
+                : 'No Articles Found'}
+            </h3>
+            <p className="text-sm text-neutral-400 max-w-md mx-auto leading-relaxed">
+              {!search && selectedCategory === 'All'
+                ? 'We are preparing brand new articles and digital playbooks. Check back soon for fresh tactical insights.'
+                : 'No articles matched your criteria. Try adjusting your search term or selecting another category.'}
             </p>
-            <button
-              onClick={() => {
-                setSearch('');
-                setSelectedCategory('All');
-              }}
-              className="px-4 py-2 bg-[#141414] hover:bg-[#202020] text-[#C7FF4D] border border-[#282828] rounded-xl text-xs font-semibold transition"
-            >
-              Reset Filters
-            </button>
+            {!search && selectedCategory === 'All' ? (
+              <a
+                href="/#contact"
+                onClick={e => {
+                  e.preventDefault();
+                  navigateTo('/#contact');
+                }}
+                className="inline-block px-5 py-2.5 bg-[#C7FF4D] hover:bg-[#b8f53a] text-black rounded-xl text-xs font-bold transition"
+              >
+                Start an Inquiry
+              </a>
+            ) : (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setSelectedCategory('All');
+                }}
+                className="px-4 py-2 bg-[#141414] hover:bg-[#202020] text-[#C7FF4D] border border-[#282828] rounded-xl text-xs font-semibold transition"
+              >
+                Reset Filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-12">
