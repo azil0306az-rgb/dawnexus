@@ -1,6 +1,18 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  syncFromSupabase,
+  pushEnquiryToSupabase,
+  updateEnquiryInSupabase,
+  deleteEnquiryFromSupabase,
+  pushBlogToSupabase,
+  deleteBlogFromSupabase,
+  pushClientToSupabase,
+  deleteClientFromSupabase,
+  pushNotificationSettingsToSupabase,
+  pushSeoConnectionToSupabase
+} from './supabase.js';
 
 // Define the DB path
 const defaultDbPath = process.env.VERCEL
@@ -176,6 +188,11 @@ export function initDatabase() {
   }
 
   console.log(`[Database] SQLite initialized successfully at: ${path.resolve(dbPath)}`);
+
+  // Asynchronously synchronize with Supabase PostgreSQL cloud store
+  syncFromSupabase(db).catch(err => {
+    console.warn('[Supabase Sync Notice]:', err?.message || err);
+  });
 }
 
 export interface EnquiryRecord {
@@ -229,7 +246,9 @@ export function createEnquiry(input: CreateEnquiryInput): EnquiryRecord {
 
   const lastId = Number(info.lastInsertRowid);
   const getStmt = db.prepare('SELECT * FROM enquiries WHERE id = ?');
-  return getStmt.get(lastId) as unknown as EnquiryRecord;
+  const record = getStmt.get(lastId) as unknown as EnquiryRecord;
+  pushEnquiryToSupabase(record).catch(() => {});
+  return record;
 }
 
 export function getEnquiryById(id: number): EnquiryRecord | null {
@@ -310,14 +329,21 @@ export function updateEnquiry(
     WHERE id = ?
   `);
   stmt.run(newStatus, newNotes, now, id);
-
-  return getEnquiryById(id);
+  const updated = getEnquiryById(id);
+  if (updated) {
+    updateEnquiryInSupabase(id, { status: newStatus, admin_notes: newNotes }).catch(() => {});
+  }
+  return updated;
 }
 
 export function deleteEnquiry(id: number): boolean {
   const stmt = db.prepare('DELETE FROM enquiries WHERE id = ?');
   const result = stmt.run(id);
-  return Number(result.changes) > 0;
+  const ok = Number(result.changes) > 0;
+  if (ok) {
+    deleteEnquiryFromSupabase(id).catch(() => {});
+  }
+  return ok;
 }
 
 export function getStats() {
@@ -515,7 +541,9 @@ export function createBlog(input: CreateBlogInput): BlogRecord {
     now
   );
 
-  return getBlogById(Number(info.lastInsertRowid))!;
+  const created = getBlogById(Number(info.lastInsertRowid))!;
+  pushBlogToSupabase(created).catch(() => {});
+  return created;
 }
 
 export function getBlogById(id: number): BlogRecord | null {
@@ -700,13 +728,21 @@ export function updateBlog(id: number, updates: Partial<CreateBlogInput>): BlogR
     id
   );
 
-  return getBlogById(id);
+  const updated = getBlogById(id);
+  if (updated) {
+    pushBlogToSupabase(updated).catch(() => {});
+  }
+  return updated;
 }
 
 export function deleteBlog(id: number): boolean {
   const stmt = db.prepare('DELETE FROM blogs WHERE id = ?');
   const res = stmt.run(id);
-  return Number(res.changes) > 0;
+  const ok = Number(res.changes) > 0;
+  if (ok) {
+    deleteBlogFromSupabase(id).catch(() => {});
+  }
+  return ok;
 }
 
 export function duplicateBlog(id: number): BlogRecord | null {
@@ -1055,7 +1091,9 @@ export function completeOtpVerification(challengeId: number, email: string): Not
     WHERE id = 1
   `).run(email, now, now);
 
-  return getNotificationSettings();
+  const res = getNotificationSettings();
+  pushNotificationSettingsToSupabase(res).catch(() => {});
+  return res;
 }
 
 export function deactivateNotificationSettings(): NotificationSettingsRecord {
@@ -1075,7 +1113,9 @@ export function deactivateNotificationSettings(): NotificationSettingsRecord {
     WHERE id = 1
   `).run(now);
 
-  return getNotificationSettings();
+  const res = getNotificationSettings();
+  pushNotificationSettingsToSupabase(res).catch(() => {});
+  return res;
 }
 
 // ----------------------------------------------------
@@ -1098,6 +1138,7 @@ export function getSeoConnection(): SeoConnectionRecord | null {
 
 export function saveSeoConnection(googleEmail: string, encryptedTokens: string, defaultProperty?: string): SeoConnectionRecord {
   const now = new Date().toISOString();
+
   db.prepare(`
     INSERT INTO seo_research_connections (id, google_email, encrypted_tokens, selected_property, updated_at)
     VALUES (1, ?, ?, ?, ?)
@@ -1108,7 +1149,9 @@ export function saveSeoConnection(googleEmail: string, encryptedTokens: string, 
       updated_at = excluded.updated_at
   `).run(googleEmail, encryptedTokens, defaultProperty || null, now);
 
-  return getSeoConnection()!;
+  const conn = getSeoConnection()!;
+  pushSeoConnectionToSupabase(conn).catch(() => {});
+  return conn;
 }
 
 export function updateSeoSelectedProperty(propertyUrl: string): SeoConnectionRecord {
@@ -1121,11 +1164,14 @@ export function updateSeoSelectedProperty(propertyUrl: string): SeoConnectionRec
       updated_at = excluded.updated_at
   `).run(propertyUrl, now);
 
-  return getSeoConnection()!;
+  const conn = getSeoConnection()!;
+  pushSeoConnectionToSupabase(conn).catch(() => {});
+  return conn;
 }
 
 export function clearSeoConnection(): void {
   db.prepare('DELETE FROM seo_research_connections WHERE id = 1').run();
+  pushSeoConnectionToSupabase(null).catch(() => {});
 }
 
 // ----------------------------------------------------
@@ -1216,7 +1262,9 @@ export function createClient(input: CreateClientInput): ClientRecord {
   );
 
   const lastId = Number(info.lastInsertRowid);
-  return getClientById(lastId)!;
+  const created = getClientById(lastId)!;
+  pushClientToSupabase(created).catch(() => {});
+  return created;
 }
 
 export function updateClient(id: number, input: UpdateClientInput): ClientRecord | null {
@@ -1258,12 +1306,20 @@ export function updateClient(id: number, input: UpdateClientInput): ClientRecord
     id
   );
 
-  return getClientById(id);
+  const updated = getClientById(id);
+  if (updated) {
+    pushClientToSupabase(updated).catch(() => {});
+  }
+  return updated;
 }
 
 export function deleteClient(id: number): boolean {
   const res = db.prepare('DELETE FROM clients WHERE id = ?').run(id);
-  return res.changes > 0;
+  const ok = res.changes > 0;
+  if (ok) {
+    deleteClientFromSupabase(id).catch(() => {});
+  }
+  return ok;
 }
 
 export function reorderClients(orderedIds: number[]): boolean {
@@ -1272,6 +1328,10 @@ export function reorderClients(orderedIds: number[]): boolean {
   
   for (let i = 0; i < orderedIds.length; i++) {
     updateStmt.run(i, now, orderedIds[i]);
+    const c = getClientById(orderedIds[i]);
+    if (c) {
+      pushClientToSupabase(c).catch(() => {});
+    }
   }
   return true;
 }
