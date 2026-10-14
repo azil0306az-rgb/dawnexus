@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { createEnquiry, getPublicBlogs, getBlogBySlug, publishDueScheduledBlogs } from '../db.js';
+import { createEnquiry, getPublicBlogs, getBlogBySlug, publishDueScheduledBlogs, getPublicClients } from '../db.js';
 import { sendEnquiryNotification } from '../email.js';
 
 export const publicRouter = Router();
@@ -280,6 +280,26 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
     return res.status(500).json({
       error: 'An unexpected server error occurred while processing your enquiry. Please try again.'
     });
+  }
+});
+
+// ==========================================
+// PUBLIC CLIENT SHOWCASE / OUR WORK ENDPOINTS
+// ==========================================
+
+// GET /api/clients
+// Returns list of published clients for public showcase
+publicRouter.get('/clients', (req, res) => {
+  try {
+    const clients = getPublicClients();
+    return res.json({
+      success: true,
+      items: clients,
+      total: clients.length
+    });
+  } catch (error) {
+    console.error('[Public Get Clients Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve client showcase' });
   }
 });
 

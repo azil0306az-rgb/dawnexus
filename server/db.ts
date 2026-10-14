@@ -125,6 +125,23 @@ export function initDatabase() {
     );
   `);
 
+  // Table for Version 3.5.297: Our Work / Client Showcase
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_name TEXT NOT NULL,
+      website_url TEXT NOT NULL,
+      logo_url TEXT NOT NULL DEFAULT '',
+      hero_preview_url TEXT NOT NULL DEFAULT '',
+      service_category TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      display_order INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'Draft',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // Create indexes for fast lookup and filtering
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_enquiries_status ON enquiries(status);
@@ -135,6 +152,8 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_blogs_scheduled_at ON blogs(scheduled_at);
     CREATE INDEX IF NOT EXISTS idx_blogs_published_at ON blogs(published_at);
     CREATE INDEX IF NOT EXISTS idx_otp_challenges_email ON notification_otp_challenges(email);
+    CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
+    CREATE INDEX IF NOT EXISTS idx_clients_order ON clients(display_order);
   `);
 
   // Ensure singleton row exists in notification_settings
@@ -1107,6 +1126,154 @@ export function updateSeoSelectedProperty(propertyUrl: string): SeoConnectionRec
 
 export function clearSeoConnection(): void {
   db.prepare('DELETE FROM seo_research_connections WHERE id = 1').run();
+}
+
+// ----------------------------------------------------
+// VERSION 3.5.297: CLIENT SHOWCASE / OUR WORK HELPERS
+// ----------------------------------------------------
+
+export interface ClientRecord {
+  id: number;
+  client_name: string;
+  website_url: string;
+  logo_url: string;
+  hero_preview_url: string;
+  service_category: string;
+  description: string;
+  display_order: number;
+  status: 'Draft' | 'Published';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateClientInput {
+  client_name: string;
+  website_url: string;
+  logo_url?: string;
+  hero_preview_url?: string;
+  service_category?: string;
+  description?: string;
+  display_order?: number;
+  status?: 'Draft' | 'Published';
+}
+
+export interface UpdateClientInput {
+  client_name?: string;
+  website_url?: string;
+  logo_url?: string;
+  hero_preview_url?: string;
+  service_category?: string;
+  description?: string;
+  display_order?: number;
+  status?: 'Draft' | 'Published';
+}
+
+export function getAllClients(): ClientRecord[] {
+  const stmt = db.prepare('SELECT * FROM clients ORDER BY display_order ASC, created_at DESC');
+  return stmt.all() as unknown as ClientRecord[];
+}
+
+export function getPublicClients(): ClientRecord[] {
+  const stmt = db.prepare("SELECT id, client_name, website_url, logo_url, hero_preview_url, service_category, description, display_order FROM clients WHERE status = 'Published' ORDER BY display_order ASC, created_at DESC");
+  return stmt.all() as unknown as ClientRecord[];
+}
+
+export function getClientById(id: number): ClientRecord | null {
+  const stmt = db.prepare('SELECT * FROM clients WHERE id = ?');
+  const res = stmt.get(id);
+  return (res as unknown as ClientRecord) || null;
+}
+
+export function createClient(input: CreateClientInput): ClientRecord {
+  const now = new Date().toISOString();
+  
+  // Auto-assign display order to be at the end if not provided
+  let order = input.display_order;
+  if (order === undefined || isNaN(order)) {
+    const maxOrderRow = db.prepare('SELECT MAX(display_order) as maxOrder FROM clients').get() as { maxOrder: number | null };
+    order = (maxOrderRow?.maxOrder ?? -1) + 1;
+  }
+
+  const stmt = db.prepare(`
+    INSERT INTO clients (
+      client_name, website_url, logo_url, hero_preview_url,
+      service_category, description, display_order, status,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const info = stmt.run(
+    input.client_name.trim(),
+    input.website_url.trim(),
+    (input.logo_url || '').trim(),
+    (input.hero_preview_url || '').trim(),
+    (input.service_category || '').trim(),
+    (input.description || '').trim(),
+    order,
+    input.status === 'Published' ? 'Published' : 'Draft',
+    now,
+    now
+  );
+
+  const lastId = Number(info.lastInsertRowid);
+  return getClientById(lastId)!;
+}
+
+export function updateClient(id: number, input: UpdateClientInput): ClientRecord | null {
+  const existing = getClientById(id);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const updatedName = input.client_name !== undefined ? input.client_name.trim() : existing.client_name;
+  const updatedUrl = input.website_url !== undefined ? input.website_url.trim() : existing.website_url;
+  const updatedLogo = input.logo_url !== undefined ? input.logo_url.trim() : existing.logo_url;
+  const updatedHero = input.hero_preview_url !== undefined ? input.hero_preview_url.trim() : existing.hero_preview_url;
+  const updatedCategory = input.service_category !== undefined ? input.service_category.trim() : existing.service_category;
+  const updatedDesc = input.description !== undefined ? input.description.trim() : existing.description;
+  const updatedOrder = input.display_order !== undefined && !isNaN(input.display_order) ? input.display_order : existing.display_order;
+  const updatedStatus = input.status !== undefined ? (input.status === 'Published' ? 'Published' : 'Draft') : existing.status;
+
+  db.prepare(`
+    UPDATE clients SET
+      client_name = ?,
+      website_url = ?,
+      logo_url = ?,
+      hero_preview_url = ?,
+      service_category = ?,
+      description = ?,
+      display_order = ?,
+      status = ?,
+      updated_at = ?
+    WHERE id = ?
+  `).run(
+    updatedName,
+    updatedUrl,
+    updatedLogo,
+    updatedHero,
+    updatedCategory,
+    updatedDesc,
+    updatedOrder,
+    updatedStatus,
+    now,
+    id
+  );
+
+  return getClientById(id);
+}
+
+export function deleteClient(id: number): boolean {
+  const res = db.prepare('DELETE FROM clients WHERE id = ?').run(id);
+  return res.changes > 0;
+}
+
+export function reorderClients(orderedIds: number[]): boolean {
+  const updateStmt = db.prepare('UPDATE clients SET display_order = ?, updated_at = ? WHERE id = ?');
+  const now = new Date().toISOString();
+  
+  for (let i = 0; i < orderedIds.length; i++) {
+    updateStmt.run(i, now, orderedIds[i]);
+  }
+  return true;
 }
 
 // Call initialization

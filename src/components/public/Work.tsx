@@ -59,8 +59,37 @@ export const conceptProjects: PortfolioItem[] = [
   }
 ];
 
+export interface ClientShowcaseItem {
+  id: number;
+  client_name: string;
+  website_url: string;
+  logo_url: string;
+  hero_preview_url: string;
+  service_category?: string;
+  description?: string;
+  display_order: number;
+}
+
 export const Work: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
+  const [clients, setClients] = useState<ClientShowcaseItem[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState<boolean>(true);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    fetch('/api/clients')
+      .then(res => res.json())
+      .then(data => {
+        if (isMounted && data?.items && Array.isArray(data.items)) {
+          setClients(data.items);
+        }
+      })
+      .catch(err => console.warn('Failed to load published clients:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingClients(false);
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   const filterOptions = [
     'All',
@@ -74,15 +103,145 @@ export const Work: React.FC = () => {
     ? conceptProjects
     : conceptProjects.filter(p => p.services.includes(selectedFilter));
 
+  const filteredClients = selectedFilter === 'All'
+    ? clients
+    : clients.filter(c => !c.service_category || c.service_category === selectedFilter || c.service_category.includes(selectedFilter));
+
   return (
     <section id="work" className="py-24 bg-[#0B0B0B] border-t border-[#252525]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Section Header */}
+        {/* ============================================================== */}
+        {/* 1. FEATURED CLIENT SHOWCASE (REAL CLIENTS FROM CMS)           */}
+        {/* ============================================================== */}
+        {clients.length > 0 && (
+          <div className="mb-24">
+            <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+              <div className="max-w-2xl">
+                <div className="text-[#C7FF4D] text-xs font-mono font-semibold tracking-widest uppercase mb-3">
+                  // OUR WORK &bull; CLIENT SHOWCASE
+                </div>
+                <h2 className="text-3xl sm:text-5xl font-extrabold text-[#FFFFFF] tracking-tight leading-tight">
+                  Building digital experiences for ambitious businesses.
+                </h2>
+                <p className="mt-4 text-[#A5A5A5] text-lg leading-relaxed">
+                  Real client websites and custom digital infrastructure designed, engineered, and scaled by Dawnexus.
+                </p>
+              </div>
+
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#050505] border border-[#252525] text-xs text-[#C7FF4D] font-mono shrink-0">
+                <span className="w-2 h-2 rounded-full bg-[#C7FF4D] animate-pulse" />
+                <span>Verified Client Deployments</span>
+              </div>
+            </div>
+
+            {/* Client Showcase Grid */}
+            {filteredClients.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {filteredClients.map((client) => (
+                <div
+                  key={client.id}
+                  className="bg-[#050505] border border-[#252525] rounded-2xl overflow-hidden flex flex-col justify-between hover:border-[#C7FF4D]/40 transition-all duration-300 group shadow-lg"
+                >
+                  <div>
+                    {/* Website Hero Preview Frame */}
+                    <div className="relative aspect-[16/10] bg-[#121212] overflow-hidden border-b border-[#252525]">
+                      {client.hero_preview_url ? (
+                        <img
+                          src={client.hero_preview_url}
+                          alt={`${client.client_name} website preview`}
+                          loading="lazy"
+                          className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-[#737373]">
+                          <span className="text-xs font-mono">Website Preview</span>
+                          <span className="text-sm font-semibold text-white mt-1">{client.client_name}</span>
+                        </div>
+                      )}
+                      
+                      {/* Service Category Badge */}
+                      {client.service_category && (
+                        <div className="absolute top-3 right-3 bg-[#050505]/85 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-mono text-[#C7FF4D] border border-[#252525]">
+                          {client.service_category}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Client Identity & Description */}
+                    <div className="p-6">
+                      <div className="flex items-center gap-3.5 mb-3.5">
+                        {client.logo_url ? (
+                          <div className="w-10 h-10 rounded-xl bg-[#0B0B0B] border border-[#252525] p-1.5 flex items-center justify-center overflow-hidden shrink-0">
+                            <img
+                              src={client.logo_url}
+                              alt={`${client.client_name} logo`}
+                              loading="lazy"
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-[#0B0B0B] border border-[#252525] flex items-center justify-center font-bold text-white text-sm shrink-0">
+                            {client.client_name.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="text-lg font-bold text-white group-hover:text-[#C7FF4D] transition-colors">
+                            {client.client_name}
+                          </h3>
+                          <div className="text-xs font-mono text-[#A5A5A5] truncate max-w-[200px]">
+                            {client.website_url.replace(/^https?:\/\/(www\.)?/, '')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {client.description && (
+                        <p className="text-xs text-[#A5A5A5] leading-relaxed line-clamp-2 mt-2">
+                          {client.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Visit Website Link */}
+                  <div className="px-6 py-3.5 bg-[#0B0B0B] border-t border-[#252525] flex items-center justify-between text-xs">
+                    <span className="text-[#A5A5A5] font-mono">Client Deployment</span>
+                    <a
+                      href={client.website_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#FFFFFF] group-hover:text-[#C7FF4D] flex items-center gap-1.5 font-medium transition-colors"
+                    >
+                      <span>Visit Website</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+            ) : (
+              <div className="py-12 px-6 rounded-2xl bg-[#050505] border border-[#252525] text-center">
+                <p className="text-sm text-[#A5A5A5]">
+                  No client showcase projects matching &ldquo;<span className="text-white font-medium">{selectedFilter}</span>&rdquo; yet.
+                </p>
+                <button
+                  onClick={() => setSelectedFilter('All')}
+                  className="mt-3 text-xs text-[#C7FF4D] hover:underline font-mono"
+                >
+                  View all showcase clients &rarr;
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* 2. CASE STUDIES & CONCEPT WORK SECTION                         */}
+        {/* ============================================================== */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
           <div className="max-w-2xl">
             <div className="text-[#C7FF4D] text-xs font-mono font-semibold tracking-widest uppercase mb-3">
-              // CASE STUDIES & CONCEPT WORK
+              // CASE STUDIES & CONCEPT ARCHITECTURE
             </div>
             <h2 className="text-3xl sm:text-5xl font-extrabold text-[#FFFFFF] tracking-tight leading-tight">
               Crafted with precision. Built for impact.
@@ -115,7 +274,7 @@ export const Work: React.FC = () => {
           ))}
         </div>
 
-        {/* Portfolio Cards */}
+        {/* Concept Portfolio Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {filteredProjects.map((project) => (
             <div

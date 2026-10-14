@@ -55,9 +55,9 @@ app.use(
   })
 );
 
-// Parse incoming request payloads
-app.use(express.json({ limit: '200kb' }));
-app.use(express.urlencoded({ extended: true, limit: '200kb' }));
+// Parse incoming request payloads (10mb to accommodate image uploads & screenshot data)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // Helper to escape XML special characters

@@ -26,7 +26,12 @@ import {
   getLatestOtpChallenge,
   recordOtpFailedAttempt,
   completeOtpVerification,
-  deactivateNotificationSettings
+  deactivateNotificationSettings,
+  getAllClients,
+  createClient,
+  updateClient,
+  deleteClient,
+  reorderClients
 } from '../db.js';
 import {
   sendOtpVerificationEmail,
@@ -609,6 +614,247 @@ adminRouter.post('/notification-settings/deactivate', (req, res) => {
 
 // VERSION 3.0: SEO Research & Blog Ideas Router
 adminRouter.use('/seo-research', seoResearchRouter);
+
+// ==========================================
+// VERSION 3.5.297: CLIENT SHOWCASE / OUR WORK ENDPOINTS
+// ==========================================
+
+// Helper for validating public website URLs and blocking private/internal network ranges (SSRF defense)
+function isValidPublicWebUrl(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    // Block loopback, localhost, and private IPv4/IPv6
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname === '::1' ||
+      /^10\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^169\.254\./.test(hostname)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// GET /api/admin/clients
+adminRouter.get('/clients', (req, res) => {
+  try {
+    const clients = getAllClients();
+    return res.json({ success: true, items: clients });
+  } catch (error) {
+    console.error('[Admin Get Clients Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve clients' });
+  }
+});
+
+// POST /api/admin/clients
+adminRouter.post('/clients', (req, res) => {
+  try {
+    const {
+      client_name,
+      website_url,
+      logo_url,
+      hero_preview_url,
+      service_category,
+      description,
+      display_order,
+      status
+    } = req.body;
+
+    if (!client_name || typeof client_name !== 'string' || !client_name.trim()) {
+      return res.status(400).json({ error: 'Client company name is required.' });
+    }
+
+    if (!website_url || typeof website_url !== 'string' || !isValidPublicWebUrl(website_url.trim())) {
+      return res.status(400).json({ error: 'A valid public website URL is required (e.g. https://example.com).' });
+    }
+
+    if (status === 'Published') {
+      if (!logo_url || typeof logo_url !== 'string' || !logo_url.trim()) {
+        return res.status(400).json({ error: 'Client logo is required before publishing.' });
+      }
+      if (!hero_preview_url || typeof hero_preview_url !== 'string' || !hero_preview_url.trim()) {
+        return res.status(400).json({ error: 'Website hero preview is required before publishing.' });
+      }
+    }
+
+    const created = createClient({
+      client_name: client_name.trim(),
+      website_url: website_url.trim(),
+      logo_url: typeof logo_url === 'string' ? logo_url.trim() : '',
+      hero_preview_url: typeof hero_preview_url === 'string' ? hero_preview_url.trim() : '',
+      service_category: typeof service_category === 'string' ? service_category.trim() : '',
+      description: typeof description === 'string' ? description.trim() : '',
+      display_order: typeof display_order === 'number' ? display_order : undefined,
+      status: status === 'Published' ? 'Published' : 'Draft'
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Client portfolio entry created successfully',
+      client: created
+    });
+  } catch (error) {
+    console.error('[Admin Create Client Error]:', error);
+    return res.status(500).json({ error: 'Failed to create client portfolio entry' });
+  }
+});
+
+// PATCH /api/admin/clients/:id
+adminRouter.patch('/clients/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid client ID' });
+    }
+
+    const {
+      client_name,
+      website_url,
+      logo_url,
+      hero_preview_url,
+      service_category,
+      description,
+      display_order,
+      status
+    } = req.body;
+
+    if (client_name !== undefined && (!client_name || !client_name.trim())) {
+      return res.status(400).json({ error: 'Client company name cannot be empty.' });
+    }
+
+    if (website_url !== undefined && (!website_url || !isValidPublicWebUrl(website_url.trim()))) {
+      return res.status(400).json({ error: 'A valid public website URL is required.' });
+    }
+
+    if (status === 'Published') {
+      const targetLogo = logo_url !== undefined ? logo_url : (req.body._existingLogo || '');
+      const targetHero = hero_preview_url !== undefined ? hero_preview_url : (req.body._existingHero || '');
+      if (!targetLogo || !targetLogo.trim()) {
+        return res.status(400).json({ error: 'Client logo is required before publishing.' });
+      }
+      if (!targetHero || !targetHero.trim()) {
+        return res.status(400).json({ error: 'Website hero preview is required before publishing.' });
+      }
+    }
+
+    const updated = updateClient(id, {
+      client_name,
+      website_url,
+      logo_url,
+      hero_preview_url,
+      service_category,
+      description,
+      display_order,
+      status
+    });
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Client portfolio entry updated successfully',
+      client: updated
+    });
+  } catch (error) {
+    console.error('[Admin Update Client Error]:', error);
+    return res.status(500).json({ error: 'Failed to update client portfolio entry' });
+  }
+});
+
+// DELETE /api/admin/clients/:id
+adminRouter.delete('/clients/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid client ID' });
+    }
+
+    const deleted = deleteClient(id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Client not found or already deleted' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Client portfolio entry deleted successfully'
+    });
+  } catch (error) {
+    console.error('[Admin Delete Client Error]:', error);
+    return res.status(500).json({ error: 'Failed to delete client portfolio entry' });
+  }
+});
+
+// POST /api/admin/clients/reorder
+adminRouter.post('/clients/reorder', (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return res.status(400).json({ error: 'Array of ordered client IDs is required.' });
+    }
+
+    reorderClients(orderedIds.map(Number));
+    return res.json({ success: true, message: 'Display order updated successfully' });
+  } catch (error) {
+    console.error('[Admin Reorder Clients Error]:', error);
+    return res.status(500).json({ error: 'Failed to update display order' });
+  }
+});
+
+// POST /api/admin/clients/auto-preview
+// Attempts to capture or fetch a high-res website hero preview
+adminRouter.post('/clients/auto-preview', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== 'string' || !isValidPublicWebUrl(url.trim())) {
+      return res.status(400).json({ error: 'Valid public website URL is required.' });
+    }
+
+    const targetUrl = url.trim();
+    // Microlink API gives reliable browser screenshots for hero sections
+    const endpoint = `https://api.microlink.io?url=${encodeURIComponent(targetUrl)}&screenshot=true&meta=false&viewport[width]=1440&viewport[height]=900`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const mRes = await fetch(endpoint, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (mRes.ok) {
+      const data = await mRes.json();
+      const screenshotUrl = data?.data?.screenshot?.url;
+      if (screenshotUrl) {
+        return res.json({
+          success: true,
+          previewUrl: screenshotUrl,
+          message: 'Website preview generated successfully.'
+        });
+      }
+    }
+
+    return res.status(422).json({
+      success: false,
+      error: 'Automatic capture was unable to render this website. Please upload a screenshot manually.'
+    });
+  } catch (err: any) {
+    return res.status(422).json({
+      success: false,
+      error: 'Automatic screenshot capture timed out or failed. Please upload a screenshot manually.'
+    });
+  }
+});
 
 
 
