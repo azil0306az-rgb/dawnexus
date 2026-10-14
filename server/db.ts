@@ -1297,7 +1297,7 @@ export async function getPublicClientsAsync(): Promise<ClientRecord[]> {
 
   // If local SQLite is empty (e.g. serverless cold start in Vercel /tmp or unhydrated instance), query Supabase directly
   const supabaseUrl = process.env.SUPABASE_URL || 'https://susdqywigvzcijsvlksb.supabase.co';
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1c2RxeXdpZ3Z6Y2lqc3Zsa3NiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk4NTYxOCwiZXhwIjoyMTA3NTYxNjE4fQ.4Akv8u7-Gz87E9DJJPs5iuRhNwPcFWVVfZhRIlbNLZw';
 
   if (supabaseUrl && supabaseKey) {
     try {

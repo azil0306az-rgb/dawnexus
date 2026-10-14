@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // Resolve environment variables
 const supabaseUrl = process.env.SUPABASE_URL || 'https://susdqywigvzcijsvlksb.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1c2RxeXdpZ3Z6Y2lqc3Zsa3NiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk4NTYxOCwiZXhwIjoyMTA3NTYxNjE4fQ.4Akv8u7-Gz87E9DJJPs5iuRhNwPcFWVVfZhRIlbNLZw';
 
 export let supabase: SupabaseClient | null = null;
 
