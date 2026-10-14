@@ -1,0 +1,25 @@
+name: Supabase 4-Hour Database Health Check
+
+on:
+  schedule:
+    # Runs every 4 hours: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 Asia/Kolkata (IST)
+    # (UTC: 18:30, 22:30, 02:30, 06:30, 10:30, 14:30)
+    - cron: '30 2,6,10,14,18,22 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-db-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Server Database Health Check
+        run: |
+          echo "Executing scheduled 4-hour database health check against https://dawnexus.in/api/cron/db-health..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" https://dawnexus.in/api/cron/db-health)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Health check cron returned non-200 status code: $HTTP_CODE"
+            exit 1
+          fi

@@ -309,3 +309,4 @@ export async function getDatabaseHealthStats(): Promise<HealthStats> {
     scheduleDescription: 'Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 IST)'
   };
 }
+

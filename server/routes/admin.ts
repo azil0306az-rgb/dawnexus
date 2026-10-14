@@ -1005,7 +1005,16 @@ adminRouter.post('/clients/upload-image', async (req, res) => {
 // GET /api/admin/db-health - View health statistics and recent check history
 adminRouter.get('/db-health', async (req, res) => {
   try {
-    const stats = await getDatabaseHealthStats();
+    let stats = await getDatabaseHealthStats();
+    // Auto-refresh if no check exists or last check is older than 4 hours
+    if (!stats.lastCheck || (Date.now() - new Date(stats.lastCheck.checked_at).getTime() > 4 * 60 * 60 * 1000)) {
+      try {
+        await performDatabaseHealthCheck('scheduled');
+        stats = await getDatabaseHealthStats();
+      } catch (checkErr) {
+        console.warn('[Admin DB Health Auto-Check Notice]:', checkErr);
+      }
+    }
     return res.json({
       success: true,
       stats
