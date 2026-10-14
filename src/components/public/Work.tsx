@@ -16,21 +16,34 @@ export const Work: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
   const [clients, setClients] = useState<ClientShowcaseItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    fetch('/api/clients')
-      .then(res => res.json())
+  const loadClients = () => {
+    setIsLoading(true);
+    setFetchError(null);
+    fetch('/api/clients', { cache: 'no-cache' })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        return res.json();
+      })
       .then(data => {
-        if (isMounted && data?.items && Array.isArray(data.items)) {
+        if (data?.items && Array.isArray(data.items)) {
           setClients(data.items);
+        } else {
+          setClients([]);
         }
       })
-      .catch(err => console.warn('Failed to load published clients:', err))
+      .catch(err => {
+        console.warn('[Work] Failed to load published clients:', err);
+        setFetchError('Unable to load client deployments at this time.');
+      })
       .finally(() => {
-        if (isMounted) setIsLoading(false);
+        setIsLoading(false);
       });
-    return () => { isMounted = false; };
+  };
+
+  useEffect(() => {
+    loadClients();
   }, []);
 
   const filterOptions = [
@@ -88,96 +101,117 @@ export const Work: React.FC = () => {
           </div>
         )}
 
-        {/* Client Showcase Grid */}
+        {/* Client Showcase Grid / States */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3].map((n) => (
               <div key={n} className="bg-[#050505] border border-[#252525] rounded-2xl h-80 animate-pulse" />
             ))}
           </div>
+        ) : fetchError ? (
+          <div className="py-12 px-6 rounded-2xl bg-[#050505] border border-red-500/20 text-center max-w-lg mx-auto">
+            <p className="text-sm text-red-400 mb-3">{fetchError}</p>
+            <button
+              onClick={loadClients}
+              className="px-4 py-2 rounded-xl bg-[#0B0B0B] border border-[#252525] hover:border-[#C7FF4D] text-xs font-mono text-[#C7FF4D] transition-colors"
+            >
+              Retry Loading Deployments &rarr;
+            </button>
+          </div>
         ) : filteredClients.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredClients.map((client) => (
-              <div
-                key={client.id}
-                className="bg-[#050505] border border-[#252525] rounded-2xl overflow-hidden flex flex-col justify-between hover:border-[#C7FF4D]/40 transition-all duration-300 group shadow-lg"
-              >
-                <div>
-                  {/* Website Hero Preview Frame */}
-                  <div className="relative aspect-[16/10] bg-[#121212] overflow-hidden border-b border-[#252525]">
-                    {client.hero_preview_url ? (
-                      <img
-                        src={client.hero_preview_url}
-                        alt={`${client.client_name} website preview`}
-                        loading="lazy"
-                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-[#737373]">
-                        <Briefcase className="w-8 h-8 text-[#252525] mb-2" />
-                        <span className="text-xs font-mono">Website Preview</span>
-                        <span className="text-sm font-semibold text-white mt-1">{client.client_name}</span>
-                      </div>
-                    )}
-                    
-                    {/* Service Category Badge */}
-                    {client.service_category && (
-                      <div className="absolute top-3 right-3 bg-[#050505]/85 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-mono text-[#C7FF4D] border border-[#252525]">
-                        {client.service_category}
-                      </div>
-                    )}
-                  </div>
+            {filteredClients.map((client) => {
+              const safeUrl = client.website_url?.trim() 
+                ? (/^https?:\/\//i.test(client.website_url.trim()) ? client.website_url.trim() : `https://${client.website_url.trim()}`)
+                : '#';
+              const displayHost = safeUrl.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
 
-                  {/* Client Identity & Description */}
-                  <div className="p-6">
-                    <div className="flex items-center gap-3.5 mb-3.5">
-                      {client.logo_url ? (
-                        <div className="w-10 h-10 rounded-xl bg-[#0B0B0B] border border-[#252525] p-1.5 flex items-center justify-center overflow-hidden shrink-0">
-                          <img
-                            src={client.logo_url}
-                            alt={`${client.client_name} logo`}
-                            loading="lazy"
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
+              return (
+                <div
+                  key={client.id}
+                  className="bg-[#050505] border border-[#252525] rounded-2xl overflow-hidden flex flex-col justify-between hover:border-[#C7FF4D]/40 transition-all duration-300 group shadow-lg"
+                >
+                  <div>
+                    {/* Website Hero Preview Frame */}
+                    <div className="relative aspect-[16/10] bg-[#121212] overflow-hidden border-b border-[#252525]">
+                      {client.hero_preview_url ? (
+                        <img
+                          src={client.hero_preview_url}
+                          alt={`${client.client_name} website preview`}
+                          loading="lazy"
+                          className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                        />
                       ) : (
-                        <div className="w-10 h-10 rounded-xl bg-[#0B0B0B] border border-[#252525] flex items-center justify-center font-bold text-white text-sm shrink-0">
-                          {client.client_name.charAt(0)}
+                        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-[#737373]">
+                          <Briefcase className="w-8 h-8 text-[#252525] mb-2" />
+                          <span className="text-xs font-mono">Website Preview</span>
+                          <span className="text-sm font-semibold text-white mt-1">{client.client_name}</span>
                         </div>
                       )}
-                      <div className="min-w-0">
-                        <h3 className="text-lg font-bold text-white group-hover:text-[#C7FF4D] transition-colors truncate">
-                          {client.client_name}
-                        </h3>
-                        <div className="text-xs font-mono text-[#A5A5A5] truncate max-w-[200px]">
-                          {client.website_url.replace(/^https?:\/\/(www\.)?/, '')}
+                      
+                      {/* Service Category Badge */}
+                      {client.service_category && (
+                        <div className="absolute top-3 right-3 bg-[#050505]/85 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-mono text-[#C7FF4D] border border-[#252525]">
+                          {client.service_category}
                         </div>
-                      </div>
+                      )}
                     </div>
 
-                    {client.description && (
-                      <p className="text-xs text-[#A5A5A5] leading-relaxed line-clamp-2 mt-2">
-                        {client.description}
-                      </p>
+                    {/* Client Identity & Description */}
+                    <div className="p-6">
+                      <div className="flex items-center gap-3.5 mb-3.5">
+                        {client.logo_url ? (
+                          <div className="w-10 h-10 rounded-xl bg-[#0B0B0B] border border-[#252525] p-1.5 flex items-center justify-center overflow-hidden shrink-0">
+                            <img
+                              src={client.logo_url}
+                              alt={`${client.client_name} logo`}
+                              loading="lazy"
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-[#0B0B0B] border border-[#252525] flex items-center justify-center font-bold text-white text-sm shrink-0">
+                            {client.client_name.charAt(0)}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h3 className="text-lg font-bold text-white group-hover:text-[#C7FF4D] transition-colors truncate">
+                            {client.client_name}
+                          </h3>
+                          <div className="text-xs font-mono text-[#A5A5A5] truncate max-w-[200px]">
+                            {displayHost}
+                          </div>
+                        </div>
+                      </div>
+
+                      {client.description && (
+                        <p className="text-xs text-[#A5A5A5] leading-relaxed line-clamp-2 mt-2">
+                          {client.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Visit Website Link */}
+                  <div className="px-6 py-3.5 bg-[#0B0B0B] border-t border-[#252525] flex items-center justify-between text-xs">
+                    <span className="text-[#A5A5A5] font-mono">Client Deployment</span>
+                    {safeUrl !== '#' ? (
+                      <a
+                        href={safeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#FFFFFF] group-hover:text-[#C7FF4D] flex items-center gap-1.5 font-medium transition-colors"
+                      >
+                        <span>Visit Website</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    ) : (
+                      <span className="text-[#666] font-mono">Private Deployment</span>
                     )}
                   </div>
                 </div>
-
-                {/* Visit Website Link */}
-                <div className="px-6 py-3.5 bg-[#0B0B0B] border-t border-[#252525] flex items-center justify-between text-xs">
-                  <span className="text-[#A5A5A5] font-mono">Client Deployment</span>
-                  <a
-                    href={client.website_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#FFFFFF] group-hover:text-[#C7FF4D] flex items-center gap-1.5 font-medium transition-colors"
-                  >
-                    <span>Visit Website</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : clients.length > 0 ? (
           <div className="py-12 px-6 rounded-2xl bg-[#050505] border border-[#252525] text-center">

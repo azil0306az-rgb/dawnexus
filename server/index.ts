@@ -115,6 +115,12 @@ const handleSitemapRequest = (req: express.Request, res: express.Response) => {
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://dawnexus.in/website-cost-calculator</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://dawnexus.in/blog</loc>
     <lastmod>${today}</lastmod>
     <changefreq>daily</changefreq>

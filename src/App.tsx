@@ -5,6 +5,7 @@ import { Services } from './components/public/Services';
 import { WhyUs } from './components/public/WhyUs';
 import { Process } from './components/public/Process';
 import { Work } from './components/public/Work';
+import { ProductShowcases } from './components/public/ProductShowcases';
 import { ContactForm } from './components/public/ContactForm';
 import { Footer } from './components/public/Footer';
 import { PrivacyModal } from './components/public/PrivacyModal';
@@ -20,6 +21,7 @@ const AiVideoCreationPage = React.lazy(() => import('./pages/services/AiVideoCre
 const DigitalMarketingPage = React.lazy(() => import('./pages/services/DigitalMarketingPage').then(m => ({ default: m.DigitalMarketingPage })));
 const BlogListingPage = React.lazy(() => import('./pages/blog/BlogListingPage').then(m => ({ default: m.BlogListingPage })));
 const BlogPostPage = React.lazy(() => import('./pages/blog/BlogPostPage').then(m => ({ default: m.BlogPostPage })));
+const WebsiteCostCalculatorPage = React.lazy(() => import('./pages/calculator/WebsiteCostCalculatorPage').then(m => ({ default: m.WebsiteCostCalculatorPage })));
 
 const RouteLoadingFallback: React.FC = () => (
   <div className="flex-1 min-h-[50vh] flex items-center justify-center text-white">
@@ -51,6 +53,7 @@ const HomePageContent: React.FC = () => {
       <WhyUs />
       <Process />
       <Work />
+      <ProductShowcases />
       <ContactForm />
     </main>
   );
@@ -151,6 +154,12 @@ export const App: React.FC = () => {
     }
 
     switch (currentPath) {
+      case '/website-cost-calculator':
+        return (
+          <React.Suspense fallback={<RouteLoadingFallback />}>
+            <WebsiteCostCalculatorPage />
+          </React.Suspense>
+        );
       case '/services/website-design':
         return (
           <React.Suspense fallback={<RouteLoadingFallback />}>

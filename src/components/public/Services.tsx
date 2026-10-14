@@ -184,6 +184,30 @@ export const Services: React.FC = () => {
           })}
         </div>
 
+        {/* Cost Calculator Feature Callout */}
+        <div className="mt-12 rounded-2xl bg-gradient-to-r from-[#0d1406] via-[#0B0B0B] to-[#0B0B0B] border border-[#C7FF4D]/30 p-8 sm:p-10 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-[#C7FF4D]/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+          <div className="space-y-2 relative z-10 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#C7FF4D]/10 border border-[#C7FF4D]/30 text-[#C7FF4D] text-xs font-mono font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#C7FF4D] animate-pulse" />
+              INTERACTIVE BUDGET ESTIMATOR
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Planning a new website project?
+            </h3>
+            <p className="text-sm text-[#A5A5A5] leading-relaxed">
+              Use our interactive Website Cost Estimator to choose your website type, page count, and custom features for an instant, transparent price breakdown.
+            </p>
+          </div>
+          <button
+            onClick={() => handleCardClick('/website-cost-calculator')}
+            className="shrink-0 relative z-10 inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#C7FF4D] text-[#050505] font-bold text-sm hover:bg-[#d4ff70] active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(199,255,77,0.25)]"
+          >
+            <span>Calculate Your Website Cost</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
       </div>
     </section>
   );

@@ -21,7 +21,8 @@ import {
   Bell,
   Sparkles,
   Briefcase,
-  Activity
+  Activity,
+  Calculator
 } from 'lucide-react';
 import type { EnquiryRecord, EnquiryStats } from '../../types';
 import { EnquiryDetailModal } from './EnquiryDetailModal';
@@ -30,13 +31,14 @@ import { BlogManager } from './BlogManager';
 import { NotificationSettings } from './NotificationSettings';
 import { ClientShowcaseManager } from './ClientShowcaseManager';
 import { DatabaseHealthDashboard } from './DatabaseHealthDashboard';
+import { CalculatorSettings } from './CalculatorSettings';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'notifications' | 'db-health'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'calculator' | 'notifications' | 'db-health'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -317,6 +319,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
+              onClick={() => setActiveTab('calculator')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'calculator'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Calculator className="w-4 h-4" />
+                <span>Cost Estimator</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                v5.8
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('notifications')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'notifications'
@@ -378,6 +397,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <ClientShowcaseManager />
         ) : activeTab === 'blogs' ? (
           <BlogManager />
+        ) : activeTab === 'calculator' ? (
+          <CalculatorSettings />
         ) : activeTab === 'notifications' ? (
           <NotificationSettings />
         ) : activeTab === 'db-health' ? (

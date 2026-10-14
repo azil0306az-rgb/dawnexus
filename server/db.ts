@@ -13,6 +13,10 @@ import {
   pushNotificationSettingsToSupabase,
   pushSeoConnectionToSupabase
 } from './supabase.js';
+import {
+  CalculatorPricingConfig,
+  DEFAULT_PRICING_CONFIG
+} from './calculatorPricing.js';
 
 // Define the DB path
 const defaultDbPath = process.env.VERCEL
@@ -177,6 +181,37 @@ export function initDatabase() {
   // Singleton notification settings initialized
 
 
+  // Safe migrations for enquiries table
+  try {
+    db.exec(`ALTER TABLE enquiries ADD COLUMN estimate_ref_id TEXT DEFAULT NULL;`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE enquiries ADD COLUMN estimate_data TEXT DEFAULT NULL;`);
+  } catch {}
+
+  // Table for Website Cost Estimator pricing configuration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS calculator_pricing_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      config_json TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // Insert default config if empty
+  try {
+    const configExists = db.prepare('SELECT id FROM calculator_pricing_config WHERE id = 1').get();
+    if (!configExists) {
+      db.prepare(`
+        INSERT INTO calculator_pricing_config (id, config_json, version, updated_at)
+        VALUES (1, ?, 1, ?)
+      `).run(JSON.stringify(DEFAULT_PRICING_CONFIG), new Date().toISOString());
+    }
+  } catch (err) {
+    console.warn('[Calculator Config Seed Notice]:', err);
+  }
+
   console.log(`[Database] SQLite initialized successfully at: ${path.resolve(dbPath)}`);
 
   // Asynchronously synchronize with Supabase PostgreSQL cloud store
@@ -196,6 +231,8 @@ export interface EnquiryRecord {
   project_details: string;
   status: 'New' | 'Contacted' | 'In Progress' | 'Completed' | 'Archived';
   admin_notes: string;
+  estimate_ref_id?: string | null;
+  estimate_data?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -208,6 +245,8 @@ export interface CreateEnquiryInput {
   requested_services: string[];
   budget?: string;
   project_details: string;
+  estimate_ref_id?: string;
+  estimate_data?: string;
 }
 
 // Queries
@@ -218,8 +257,8 @@ export function createEnquiry(input: CreateEnquiryInput): EnquiryRecord {
   const stmt = db.prepare(`
     INSERT INTO enquiries (
       full_name, business_name, email, phone, requested_services,
-      budget, project_details, status, admin_notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'New', '', ?, ?)
+      budget, project_details, status, admin_notes, estimate_ref_id, estimate_data, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'New', '', ?, ?, ?, ?)
   `);
 
   const info = stmt.run(
@@ -230,6 +269,10 @@ export function createEnquiry(input: CreateEnquiryInput): EnquiryRecord {
     servicesJson,
     (input.budget || '').trim(),
     input.project_details.trim(),
+    input.estimate_ref_id ? input.estimate_ref_id.trim() : null,
+    input.estimate_data 
+      ? (typeof input.estimate_data === 'string' ? input.estimate_data.trim() : JSON.stringify(input.estimate_data))
+      : null,
     now,
     now
   );
@@ -239,6 +282,37 @@ export function createEnquiry(input: CreateEnquiryInput): EnquiryRecord {
   const record = getStmt.get(lastId) as unknown as EnquiryRecord;
   pushEnquiryToSupabase(record).catch(() => {});
   return record;
+}
+
+export function getCalculatorPricingConfig(): CalculatorPricingConfig {
+  try {
+    const row = db.prepare('SELECT config_json FROM calculator_pricing_config WHERE id = 1').get() as { config_json: string } | undefined;
+    if (row && row.config_json) {
+      return JSON.parse(row.config_json);
+    }
+  } catch (err) {
+    console.warn('[Get Calculator Config Notice]:', err);
+  }
+  return DEFAULT_PRICING_CONFIG;
+}
+
+export function updateCalculatorPricingConfig(newConfig: CalculatorPricingConfig): CalculatorPricingConfig {
+  const now = new Date().toISOString();
+  const nextVersion = (newConfig.version || 1) + 1;
+  const configToSave: CalculatorPricingConfig = {
+    ...newConfig,
+    version: nextVersion,
+    updatedAt: now
+  };
+
+  const json = JSON.stringify(configToSave);
+  db.prepare(`
+    INSERT INTO calculator_pricing_config (id, config_json, version, updated_at)
+    VALUES (1, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET config_json = excluded.config_json, version = excluded.version, updated_at = excluded.updated_at
+  `).run(json, nextVersion, now);
+
+  return configToSave;
 }
 
 export function getEnquiryById(id: number): EnquiryRecord | null {
@@ -1212,6 +1286,64 @@ export function getAllClients(): ClientRecord[] {
 export function getPublicClients(): ClientRecord[] {
   const stmt = db.prepare("SELECT id, client_name, website_url, logo_url, hero_preview_url, service_category, description, display_order FROM clients WHERE status = 'Published' ORDER BY display_order ASC, created_at DESC");
   return stmt.all() as unknown as ClientRecord[];
+}
+
+export async function getPublicClientsAsync(): Promise<ClientRecord[]> {
+  // First query local SQLite
+  let localClients = getPublicClients();
+  if (localClients.length > 0) {
+    return localClients;
+  }
+
+  // If local SQLite is empty (e.g. serverless cold start in Vercel /tmp or unhydrated instance), query Supabase directly
+  const supabaseUrl = process.env.SUPABASE_URL || 'https://susdqywigvzcijsvlksb.supabase.co';
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const res = await fetch(`${supabaseUrl}/rest/v1/clients?status=eq.Published&select=*&order=display_order.asc,created_at.desc`, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      });
+      if (res.ok) {
+        const remoteClients = await res.json();
+        if (Array.isArray(remoteClients) && remoteClients.length > 0) {
+          // Hydrate local SQLite in background for subsequent requests
+          for (const c of remoteClients) {
+            try {
+              db.prepare(`
+                INSERT INTO clients (
+                  id, client_name, website_url, logo_url, hero_preview_url,
+                  service_category, description, display_order, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  client_name = excluded.client_name,
+                  website_url = excluded.website_url,
+                  logo_url = excluded.logo_url,
+                  hero_preview_url = excluded.hero_preview_url,
+                  service_category = excluded.service_category,
+                  description = excluded.description,
+                  display_order = excluded.display_order,
+                  status = excluded.status,
+                  updated_at = excluded.updated_at
+              `).run(
+                c.id, c.client_name, c.website_url, c.logo_url || '', c.hero_preview_url || '',
+                c.service_category || '', c.description || '', c.display_order || 0,
+                c.status || 'Draft', c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
+              );
+            } catch {}
+          }
+          return remoteClients;
+        }
+      }
+    } catch (err) {
+      console.warn('[getPublicClientsAsync Supabase fallback error]:', err);
+    }
+  }
+
+  return localClients;
 }
 
 export function getClientById(id: number): ClientRecord | null {

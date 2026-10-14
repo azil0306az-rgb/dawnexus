@@ -10,7 +10,7 @@
     "dev:client": "vite --port 3000 --host",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "test": "tsx --test server/test/api.test.ts server/test/v29.test.ts server/test/v30.test.ts server/test/v35.test.ts server/test/v36-db-health.test.ts"
+    "test": "tsx --test server/test/api.test.ts server/test/v29.test.ts server/test/v30.test.ts server/test/v35.test.ts server/test/v36-db-health.test.ts server/test/v58-calculator.test.ts"
   },
   "keywords": [
     "dawnexus",
@@ -29,6 +29,7 @@
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.55.0",
     "nodemailer": "^10.1.0",
     "pg": "^8.23.1",

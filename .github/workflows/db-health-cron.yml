@@ -23,3 +23,4 @@ jobs:
             echo "Health check cron returned non-200 status code: $HTTP_CODE"
             exit 1
           fi
+

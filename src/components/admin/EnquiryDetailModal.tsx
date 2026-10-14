@@ -250,6 +250,113 @@ export const EnquiryDetailModal: React.FC<EnquiryDetailModalProps> = ({
             </div>
           </div>
 
+          {/* Website Cost Estimator Breakdown (Version 5.8) */}
+          {enquiry.estimate_data && (() => {
+            let parsedData: any = null;
+            try {
+              parsedData = typeof enquiry.estimate_data === 'string'
+                ? JSON.parse(enquiry.estimate_data)
+                : enquiry.estimate_data;
+            } catch {
+              parsedData = null;
+            }
+
+            if (!parsedData) return null;
+            const breakdown = parsedData.breakdown || parsedData;
+
+            return (
+              <div className="rounded-xl border border-[#C7FF4D]/30 bg-[#070b04] p-5 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-[#252525]">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#C7FF4D] animate-pulse" />
+                    <h4 className="text-xs font-mono uppercase tracking-wider text-[#C7FF4D] font-bold">
+                      Website Cost Estimator Breakdown
+                    </h4>
+                  </div>
+                  {enquiry.estimate_ref_id && (
+                    <span className="px-2 py-0.5 rounded bg-[#050505] border border-[#252525] font-mono text-xs text-white">
+                      Ref: {enquiry.estimate_ref_id}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
+                    <span className="text-[#A5A5A5] block">Website Type</span>
+                    <span className="text-white font-semibold capitalize mt-1 block">
+                      {parsedData.selections?.websiteType?.replace('-', ' ') || 'Website'}
+                    </span>
+                  </div>
+                  <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
+                    <span className="text-[#A5A5A5] block">Total Pages</span>
+                    <span className="text-white font-semibold mt-1 block">
+                      {parsedData.selections?.pageCount || 1} pages
+                    </span>
+                  </div>
+                  <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
+                    <span className="text-[#A5A5A5] block">Design Tier</span>
+                    <span className="text-white font-semibold capitalize mt-1 block">
+                      {parsedData.selections?.designTier || 'standard'}
+                    </span>
+                  </div>
+                  <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
+                    <span className="text-[#A5A5A5] block">Timeline</span>
+                    <span className="text-white font-semibold capitalize mt-1 block">
+                      {parsedData.selections?.timeline?.replace('-', ' ') || 'standard'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Line items table */}
+                {breakdown?.lineItems && breakdown.lineItems.length > 0 && (
+                  <div className="border border-[#252525] rounded-lg overflow-hidden bg-[#050505]">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-[#0e0e0e] text-[#A5A5A5] uppercase font-mono text-[10px] border-b border-[#252525]">
+                        <tr>
+                          <th className="px-3 py-2">Item Description</th>
+                          <th className="px-3 py-2 text-right">Qty</th>
+                          <th className="px-3 py-2 text-right">Cost (INR)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#252525]/60 text-white">
+                        {breakdown.lineItems.map((item: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-[#0c0c0c]">
+                            <td className="px-3 py-2">{item.description}</td>
+                            <td className="px-3 py-2 text-right text-[#A5A5A5]">{item.quantity}</td>
+                            <td className="px-3 py-2 text-right font-mono text-[#C7FF4D]">
+                              ₹{item.total?.toLocaleString('en-IN') || 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Totals */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
+                  <div>
+                    {breakdown?.recurringMonthly > 0 ? (
+                      <span className="text-[#A5A5A5]">
+                        Recurring Maintenance: <span className="text-amber-400 font-mono font-semibold">₹{breakdown.recurringMonthly.toLocaleString('en-IN')}/mo</span>
+                      </span>
+                    ) : (
+                      <span className="text-[#A5A5A5]">No recurring maintenance selected</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase font-mono text-[#A5A5A5]">Calculated Total:</span>
+                    <span className="text-lg font-bold font-mono text-[#C7FF4D]">
+                      {breakdown?.requiresCustomQuote
+                        ? 'Custom Enterprise Quote'
+                        : `₹${(breakdown?.estimatedTotal || 0).toLocaleString('en-IN')}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Manage Status & Private Administrator Notes */}
           <div className="pt-6 border-t border-[#252525] space-y-5">
             <h4 className="text-xs font-mono uppercase tracking-wider text-[#C7FF4D] font-bold">

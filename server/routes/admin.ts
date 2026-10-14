@@ -31,7 +31,9 @@ import {
   createClient,
   updateClient,
   deleteClient,
-  reorderClients
+  reorderClients,
+  getCalculatorPricingConfig,
+  updateCalculatorPricingConfig
 } from '../db.js';
 import {
   sendOtpVerificationEmail,
@@ -1038,6 +1040,49 @@ adminRouter.post('/db-health/check', async (req, res) => {
   } catch (err: any) {
     console.error('[Admin DB Health Check Error]:', err);
     return res.status(500).json({ error: 'Failed to execute manual database health check.' });
+  }
+});
+
+// ======================================================================
+// WEBSITE COST ESTIMATOR SETTINGS (VERSION 5.8)
+// ======================================================================
+
+// GET /api/admin/calculator/config
+adminRouter.get('/calculator/config', (req, res) => {
+  try {
+    const config = getCalculatorPricingConfig();
+    return res.json({
+      success: true,
+      config
+    });
+  } catch (err: any) {
+    console.error('[Admin Get Calculator Config Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve calculator settings.' });
+  }
+});
+
+// PUT /api/admin/calculator/config
+adminRouter.put('/calculator/config', (req, res) => {
+  try {
+    const newConfig = req.body;
+    if (
+      !newConfig ||
+      typeof newConfig !== 'object' ||
+      !Array.isArray(newConfig.websiteTypes) ||
+      !Array.isArray(newConfig.features)
+    ) {
+      return res.status(400).json({ error: 'Invalid calculator pricing configuration schema.' });
+    }
+
+    const updated = updateCalculatorPricingConfig(newConfig);
+    return res.json({
+      success: true,
+      message: 'Calculator pricing configuration updated successfully.',
+      config: updated
+    });
+  } catch (err: any) {
+    console.error('[Admin Update Calculator Config Error]:', err);
+    return res.status(500).json({ error: 'Failed to save calculator settings.' });
   }
 });
 

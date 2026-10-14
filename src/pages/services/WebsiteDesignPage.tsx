@@ -353,6 +353,31 @@ export const WebsiteDesignPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Interactive Estimator Callout */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12">
+        <div className="p-8 sm:p-10 rounded-2xl bg-gradient-to-r from-[#0d1406] via-[#0B0B0B] to-[#0B0B0B] border border-[#C7FF4D]/30 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-[#C7FF4D]/5 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
+          <div className="space-y-2 relative z-10 max-w-2xl">
+            <span className="text-xs font-mono text-[#C7FF4D] tracking-widest uppercase block">
+              // INSTANT BUDGET CALCULATOR
+            </span>
+            <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Curious what your ideal website will cost?
+            </h3>
+            <p className="text-sm text-[#A5A5A5] leading-relaxed">
+              Use our interactive estimator to configure your website requirements, select design tiers, and get an itemized budget calculation in under 60 seconds.
+            </p>
+          </div>
+          <button
+            onClick={() => navigateTo('/website-cost-calculator')}
+            className="shrink-0 relative z-10 inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#C7FF4D] text-[#050505] font-bold text-sm hover:bg-[#d4ff70] active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(199,255,77,0.25)]"
+          >
+            <span>Calculate Your Website Cost</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </section>
+
       {/* Bottom CTA Banner */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="p-10 sm:p-14 rounded-2xl bg-gradient-to-br from-[#0B0B0B] via-[#0e0e0e] to-[#050505] border border-[#252525] relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">

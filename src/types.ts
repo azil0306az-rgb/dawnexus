@@ -9,6 +9,8 @@ export interface EnquiryRecord {
   project_details: string;
   status: 'New' | 'Contacted' | 'In Progress' | 'Completed' | 'Archived';
   admin_notes: string;
+  estimate_ref_id?: string | null;
+  estimate_data?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -150,6 +152,131 @@ export interface NotificationSettingsData {
   pending_email: string | null;
   provider_status: 'resend' | 'smtp' | 'none';
   updated_at: string;
+}
+
+export interface WebsiteTypeConfig {
+  id: string;
+  name: string;
+  description: string;
+  basePrice: number;
+  includedPages: number;
+  additionalPagePrice: number;
+  iconName: string;
+  badge?: string;
+  popular?: boolean;
+}
+
+export interface FeatureConfig {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: 'core' | 'ecommerce' | 'booking' | 'marketing';
+  compatibleWith?: string[];
+}
+
+export interface DesignTierConfig {
+  id: 'Standard' | 'Premium' | 'Custom';
+  name: string;
+  description: string;
+  priceAdjustment: number;
+  badge?: string;
+}
+
+export interface MaintenanceOptionConfig {
+  id: 'None' | 'Monthly' | 'Annual';
+  name: string;
+  description: string;
+  amount: number;
+  period: 'month' | 'year' | 'none';
+  features: string[];
+}
+
+export interface CalculatorPricingConfig {
+  version: number;
+  currency: string;
+  currencySymbol: string;
+  websiteTypes: WebsiteTypeConfig[];
+  features: FeatureConfig[];
+  designTiers: DesignTierConfig[];
+  maintenanceOptions: MaintenanceOptionConfig[];
+  maxStandardPages: number;
+  disclaimer: string;
+  assumptions: string[];
+  exclusions: string[];
+  updatedAt: string;
+}
+
+export interface CalculatorSelections {
+  websiteType: string;
+  pageCount: number;
+  selectedFeatures: string[];
+  ecommerceDetails?: {
+    productCatalogSize?: '1-20' | '21-100' | '100+';
+    multiZoneShipping?: boolean;
+  };
+  bookingDetails?: {
+    multiStaffOrLocation?: boolean;
+    twoWayCalendarSync?: boolean;
+  };
+  customAppDetails?: {
+    complexityTier?: 'MVP' | 'Advanced' | 'Enterprise';
+    externalApiSync?: boolean;
+  };
+  designTier: 'Standard' | 'Premium' | 'Custom';
+  maintenanceOption?: 'None' | 'Monthly' | 'Annual';
+  timelinePreference?: 'Flexible' | 'Standard' | 'Urgent';
+  contentReadiness?: 'Ready' | 'Needs Copywriting' | 'Rough Drafts';
+  projectNotes?: string;
+}
+
+export interface CalculationBreakdownItem {
+  id: string;
+  label: string;
+  description?: string;
+  amount: number;
+  isIncluded?: boolean;
+  type: 'base' | 'pages' | 'feature' | 'design' | 'addon';
+}
+
+export interface CalculationResult {
+  referenceId: string;
+  websiteType: {
+    id: string;
+    name: string;
+    description: string;
+  };
+  pageCount: number;
+  includedPages: number;
+  additionalPages: number;
+  additionalPagePrice: number;
+  additionalPagesTotal: number;
+  designTier: {
+    id: string;
+    name: string;
+    priceAdjustment: number;
+  };
+  items: CalculationBreakdownItem[];
+  subtotalOneTime: number;
+  recurringMaintenance: {
+    type: string;
+    name: string;
+    amount: number;
+    period: 'month' | 'year' | 'none';
+  };
+  isCustomQuoteRequired: boolean;
+  customQuoteReasons: string[];
+  currency: string;
+  currencySymbol: string;
+  estimatedDeliveryWeeks: {
+    min: number;
+    max: number;
+  };
+  assumptions: string[];
+  exclusions: string[];
+  disclaimer: string;
+  configVersion: number;
+  calculatedAt: string;
 }
 
 

@@ -1,8 +1,20 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { createEnquiry, getPublicBlogs, getBlogBySlug, publishDueScheduledBlogs, getPublicClients } from '../db.js';
+import {
+  createEnquiry,
+  getPublicBlogs,
+  getBlogBySlug,
+  publishDueScheduledBlogs,
+  getPublicClients,
+  getPublicClientsAsync,
+  getCalculatorPricingConfig
+} from '../db.js';
 import { sendEnquiryNotification } from '../email.js';
 import { performDatabaseHealthCheck } from '../dbHealth.js';
+import {
+  calculateWebsiteCost,
+  validateCalculatorSelections
+} from '../calculatorPricing.js';
 
 export const publicRouter = Router();
 
@@ -316,9 +328,9 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
 
 // GET /api/clients
 // Returns list of published clients for public showcase
-publicRouter.get('/clients', (req, res) => {
+publicRouter.get('/clients', async (req, res) => {
   try {
-    const clients = getPublicClients();
+    const clients = await getPublicClientsAsync();
     return res.json({
       success: true,
       items: clients,
@@ -327,6 +339,166 @@ publicRouter.get('/clients', (req, res) => {
   } catch (error) {
     console.error('[Public Get Clients Error]:', error);
     return res.status(500).json({ error: 'Failed to retrieve client showcase' });
+  }
+});
+
+// ==========================================
+// PUBLIC WEBSITE COST ESTIMATOR ENDPOINTS
+// ==========================================
+
+// GET /api/calculator/config - Retrieve active pricing rules and metadata
+publicRouter.get('/calculator/config', (req, res) => {
+  try {
+    const config = getCalculatorPricingConfig();
+    return res.json({
+      success: true,
+      config
+    });
+  } catch (error) {
+    console.error('[Calculator Config Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve calculator configuration.' });
+  }
+});
+
+// POST /api/calculator/calculate - Recalculate estimate with server authority
+publicRouter.post('/calculator/calculate', (req, res) => {
+  try {
+    const validation = validateCalculatorSelections(req.body);
+    if (!validation.valid || !validation.selections) {
+      return res.status(400).json({ error: validation.error || 'Invalid calculator selections' });
+    }
+
+    const config = getCalculatorPricingConfig();
+    const result = calculateWebsiteCost(config, validation.selections);
+
+    return res.json({
+      success: true,
+      estimate: result
+    });
+  } catch (error) {
+    console.error('[Calculator Calculation Error]:', error);
+    return res.status(500).json({ error: 'Failed to calculate website project cost.' });
+  }
+});
+
+// POST /api/calculator/enquiry - Save estimate enquiry & trigger notifications
+publicRouter.post('/calculator/enquiry', enquiryLimiter, async (req, res) => {
+  try {
+    const {
+      full_name,
+      email,
+      phone,
+      business_name,
+      project_notes,
+      selections,
+      website_hp
+    } = req.body;
+
+    // Honeypot check
+    if (website_hp && typeof website_hp === 'string' && website_hp.trim().length > 0) {
+      console.warn('[Spam Detection] Estimator honeypot triggered. Dropping silently.');
+      return res.status(200).json({
+        success: true,
+        message: 'Estimate received successfully.'
+      });
+    }
+
+    const errors: Record<string, string> = {};
+
+    if (!full_name || typeof full_name !== 'string' || !full_name.trim()) {
+      errors.full_name = 'Full name is required.';
+    } else if (full_name.trim().length < 2) {
+      errors.full_name = 'Please enter at least 2 characters for your name.';
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      errors.email = 'Email address is required.';
+    } else if (!emailRegex.test(email.trim())) {
+      errors.email = 'Please provide a valid email address.';
+    }
+
+    let normalizedPhone = '';
+    if (phone && typeof phone === 'string' && phone.trim()) {
+      const phoneRes = normalizeIndianPhone(phone);
+      if (!phoneRes.valid) {
+        errors.phone = phoneRes.error || 'Please provide a valid Indian mobile number (+91).';
+      } else {
+        normalizedPhone = phoneRes.normalized || '';
+      }
+    }
+
+    const validation = validateCalculatorSelections(selections);
+    if (!validation.valid || !validation.selections) {
+      errors.selections = validation.error || 'Invalid project options selected.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({
+        error: 'Validation failed. Please correct the highlighted fields.',
+        details: errors
+      });
+    }
+
+    // Always recalculate on server before persisting
+    const config = getCalculatorPricingConfig();
+    const authoritativeEstimate = calculateWebsiteCost(config, validation.selections!);
+
+    // Construct structured project details summary for admin and email
+    const oneTimeFmt = authoritativeEstimate.isCustomQuoteRequired
+      ? 'Custom Quotation Required'
+      : `${authoritativeEstimate.currencySymbol}${authoritativeEstimate.subtotalOneTime.toLocaleString('en-IN')}`;
+
+    const maintenanceFmt = authoritativeEstimate.recurringMaintenance.amount > 0
+      ? `${authoritativeEstimate.recurringMaintenance.name} (${authoritativeEstimate.currencySymbol}${authoritativeEstimate.recurringMaintenance.amount.toLocaleString('en-IN')}/${authoritativeEstimate.recurringMaintenance.period})`
+      : 'None (Standard 30-Day Warranty)';
+
+    const featuresList = authoritativeEstimate.items
+      .filter(i => i.type === 'feature' || i.type === 'addon')
+      .map(i => i.label)
+      .join(', ');
+
+    const projectSummary = [
+      `=== WEBSITE COST ESTIMATOR ENQUIRY [${authoritativeEstimate.referenceId}] ===`,
+      `Website Type: ${authoritativeEstimate.websiteType.name}`,
+      `Total Pages: ${authoritativeEstimate.pageCount} (${authoritativeEstimate.includedPages} included in base, ${authoritativeEstimate.additionalPages} additional)`,
+      `Design Preference: ${authoritativeEstimate.designTier.name}`,
+      `Features & Add-ons: ${featuresList || 'Core package only'}`,
+      `Estimated One-Time Cost: ${oneTimeFmt}`,
+      `Maintenance Plan: ${maintenanceFmt}`,
+      `Estimated Delivery: ${authoritativeEstimate.estimatedDeliveryWeeks.min}–${authoritativeEstimate.estimatedDeliveryWeeks.max} weeks`,
+      project_notes && project_notes.trim() ? `Customer Notes: ${project_notes.trim()}` : ''
+    ].filter(Boolean).join('\n');
+
+    // Persist to enquiries with estimate snapshot
+    const newEnquiry = createEnquiry({
+      full_name: full_name.trim(),
+      business_name: typeof business_name === 'string' ? business_name.trim() : '',
+      email: email.trim().toLowerCase(),
+      phone: normalizedPhone,
+      requested_services: ['Website Development', authoritativeEstimate.websiteType.name],
+      budget: oneTimeFmt,
+      project_details: projectSummary,
+      estimate_ref_id: authoritativeEstimate.referenceId,
+      estimate_data: JSON.stringify(authoritativeEstimate)
+    });
+
+    // Send email notification safely
+    try {
+      await sendEnquiryNotification(newEnquiry);
+    } catch (err) {
+      console.warn('[Calculator Enquiry Email Notice]:', err);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Your project estimate and enquiry have been received successfully.',
+      enquiryId: newEnquiry.id,
+      estimate: authoritativeEstimate
+    });
+  } catch (error) {
+    console.error('[Calculator Enquiry Submission Error]:', error);
+    return res.status(500).json({ error: 'An unexpected error occurred while saving your estimate enquiry.' });
   }
 });
 
