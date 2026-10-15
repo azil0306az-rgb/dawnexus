@@ -118,7 +118,7 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
  * Sends a 6-digit verification OTP to the administrator to verify ownership
  * of the notification recipient address.
  */
-export async function sendOtpVerificationEmail(email: string, otp: string): Promise<boolean> {
+export async function sendOtpVerificationEmail(email: string, otp: string): Promise<{ success: boolean; error?: string }> {
   const subject = 'Dawnexus — Verify Your Notification Email';
 
   const text = `

@@ -1,9 +1,14 @@
+import 'dotenv/config';
 import pg from 'pg';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const connectionString = 'postgresql://postgres.susdqywigvzcijsvlksb:4LTSe%2FFPBJ*Fc-F@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL is required to run the Supabase migration.');
+}
 
 async function migrate() {
   console.log('Connecting to Supabase PostgreSQL...');
@@ -125,6 +130,16 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_blogs_slug ON blogs(slug);
     CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
     CREATE INDEX IF NOT EXISTS idx_clients_order ON clients(display_order);
+
+    -- The application accesses these tables only through authenticated server routes.
+    -- Service-role requests bypass RLS; anonymous direct PostgREST access is denied.
+    ALTER TABLE enquiries ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE admin_sessions ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE blogs ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE notification_settings ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE notification_otp_challenges ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE seo_research_connections ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 
     -- Ensure single row for notification_settings
     INSERT INTO notification_settings (id, active_email, is_verified, verified_at, pending_email, updated_at)

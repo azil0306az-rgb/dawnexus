@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogs, getPublishedBlogsForSitemap } from './db.js';
+import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogsReliable, getPublishedBlogsForSitemap, refreshFromPersistentStore } from './db.js';
 import { publicRouter } from './routes/api.js';
 import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
@@ -26,11 +26,9 @@ sessionTimer.unref();
 
 // Check and publish scheduled blogs every 60 seconds (for node server runtime)
 const blogTimer = setInterval(() => {
-  try {
-    publishDueScheduledBlogs();
-  } catch (err) {
+  publishDueScheduledBlogsReliable().catch((err: unknown) => {
     console.error('[Scheduled Blog Interval Error]:', err);
-  }
+  });
 }, 60 * 1000);
 blogTimer.unref();
 
@@ -72,11 +70,12 @@ function escapeXml(str: string): string {
 }
 
 // Dynamic Sitemap Generation (includes homepage, all 4 services, blog hub, and all published articles)
-const handleSitemapRequest = (req: express.Request, res: express.Response) => {
+const handleSitemapRequest = async (req: express.Request, res: express.Response) => {
   try {
+    await refreshFromPersistentStore();
     // Lazily publish any due scheduled blogs
     try {
-      publishDueScheduledBlogs();
+      await publishDueScheduledBlogsReliable();
     } catch {
       // Non-fatal
     }

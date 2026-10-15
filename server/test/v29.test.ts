@@ -48,8 +48,9 @@ test.after(async () => {
     server.close(() => resolve());
   });
   if (defaultServer && defaultServer.listening) {
+    const runningDefaultServer = defaultServer;
     await new Promise<void>((resolve) => {
-      defaultServer.close(() => resolve());
+      runningDefaultServer.close(() => resolve());
     });
   }
 });

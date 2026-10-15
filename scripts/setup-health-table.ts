@@ -31,6 +31,7 @@ async function setup() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_health_checks_checked_at ON database_health_checks(checked_at DESC);
+    ALTER TABLE database_health_checks ENABLE ROW LEVEL SECURITY;
   `);
 
   console.log('database_health_checks table created successfully in Supabase!');

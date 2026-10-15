@@ -263,6 +263,18 @@ export const EnquiryDetailModal: React.FC<EnquiryDetailModalProps> = ({
 
             if (!parsedData) return null;
             const breakdown = parsedData.breakdown || parsedData;
+            const items = parsedData.items || breakdown.lineItems || [];
+            const websiteTypeName = parsedData.websiteType?.name || parsedData.selections?.websiteType?.replace('-', ' ') || 'Website';
+            const totalPages = parsedData.pageCount || parsedData.selections?.pageCount || 1;
+            const designTierName = parsedData.designTier?.name || parsedData.selections?.designTier || 'Standard';
+            const deliveryTimeline = parsedData.estimatedDeliveryWeeks
+              ? `${parsedData.estimatedDeliveryWeeks.min}–${parsedData.estimatedDeliveryWeeks.max} weeks`
+              : (parsedData.selections?.timeline?.replace('-', ' ') || 'Standard');
+            const isCustom = parsedData.isCustomQuoteRequired || breakdown.requiresCustomQuote;
+            const oneTimeTotal = parsedData.subtotalOneTime ?? breakdown.estimatedTotal ?? 0;
+            const recurringAmount = parsedData.recurringMaintenance?.amount ?? breakdown.recurringMonthly ?? 0;
+            const recurringPeriod = parsedData.recurringMaintenance?.period || 'month';
+            const recurringName = parsedData.recurringMaintenance?.name || 'Recurring Maintenance';
 
             return (
               <div className="rounded-xl border border-[#C7FF4D]/30 bg-[#070b04] p-5 space-y-4">
@@ -284,31 +296,31 @@ export const EnquiryDetailModal: React.FC<EnquiryDetailModalProps> = ({
                   <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
                     <span className="text-[#A5A5A5] block">Website Type</span>
                     <span className="text-white font-semibold capitalize mt-1 block">
-                      {parsedData.selections?.websiteType?.replace('-', ' ') || 'Website'}
+                      {websiteTypeName}
                     </span>
                   </div>
                   <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
                     <span className="text-[#A5A5A5] block">Total Pages</span>
                     <span className="text-white font-semibold mt-1 block">
-                      {parsedData.selections?.pageCount || 1} pages
+                      {totalPages} pages
                     </span>
                   </div>
                   <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
                     <span className="text-[#A5A5A5] block">Design Tier</span>
                     <span className="text-white font-semibold capitalize mt-1 block">
-                      {parsedData.selections?.designTier || 'standard'}
+                      {designTierName}
                     </span>
                   </div>
                   <div className="bg-[#050505] p-3 rounded-lg border border-[#252525]">
-                    <span className="text-[#A5A5A5] block">Timeline</span>
+                    <span className="text-[#A5A5A5] block">Delivery</span>
                     <span className="text-white font-semibold capitalize mt-1 block">
-                      {parsedData.selections?.timeline?.replace('-', ' ') || 'standard'}
+                      {deliveryTimeline}
                     </span>
                   </div>
                 </div>
 
                 {/* Line items table */}
-                {breakdown?.lineItems && breakdown.lineItems.length > 0 && (
+                {items && items.length > 0 && (
                   <div className="border border-[#252525] rounded-lg overflow-hidden bg-[#050505]">
                     <table className="w-full text-xs text-left">
                       <thead className="bg-[#0e0e0e] text-[#A5A5A5] uppercase font-mono text-[10px] border-b border-[#252525]">
@@ -319,15 +331,25 @@ export const EnquiryDetailModal: React.FC<EnquiryDetailModalProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#252525]/60 text-white">
-                        {breakdown.lineItems.map((item: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-[#0c0c0c]">
-                            <td className="px-3 py-2">{item.description}</td>
-                            <td className="px-3 py-2 text-right text-[#A5A5A5]">{item.quantity}</td>
-                            <td className="px-3 py-2 text-right font-mono text-[#C7FF4D]">
-                              ₹{item.total?.toLocaleString('en-IN') || 0}
-                            </td>
-                          </tr>
-                        ))}
+                        {items.map((item: any, idx: number) => {
+                          const label = item.label || item.description || 'Item';
+                          const qty = item.quantity ?? 1;
+                          const cost = item.amount ?? item.total ?? 0;
+                          return (
+                            <tr key={idx} className="hover:bg-[#0c0c0c]">
+                              <td className="px-3 py-2">
+                                <span className="font-medium text-white">{label}</span>
+                                {item.description && item.label && item.description !== item.label && (
+                                  <span className="block text-[11px] text-[#777]">{item.description}</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right text-[#A5A5A5]">{qty}</td>
+                              <td className="px-3 py-2 text-right font-mono text-[#C7FF4D]">
+                                ₹{cost.toLocaleString('en-IN')}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -336,9 +358,9 @@ export const EnquiryDetailModal: React.FC<EnquiryDetailModalProps> = ({
                 {/* Totals */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
                   <div>
-                    {breakdown?.recurringMonthly > 0 ? (
+                    {recurringAmount > 0 ? (
                       <span className="text-[#A5A5A5]">
-                        Recurring Maintenance: <span className="text-amber-400 font-mono font-semibold">₹{breakdown.recurringMonthly.toLocaleString('en-IN')}/mo</span>
+                        {recurringName}: <span className="text-amber-400 font-mono font-semibold">₹{recurringAmount.toLocaleString('en-IN')}/{recurringPeriod}</span>
                       </span>
                     ) : (
                       <span className="text-[#A5A5A5]">No recurring maintenance selected</span>
@@ -347,9 +369,9 @@ export const EnquiryDetailModal: React.FC<EnquiryDetailModalProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase font-mono text-[#A5A5A5]">Calculated Total:</span>
                     <span className="text-lg font-bold font-mono text-[#C7FF4D]">
-                      {breakdown?.requiresCustomQuote
+                      {isCustom
                         ? 'Custom Enterprise Quote'
-                        : `₹${(breakdown?.estimatedTotal || 0).toLocaleString('en-IN')}`}
+                        : `₹${oneTimeTotal.toLocaleString('en-IN')}`}
                     </span>
                   </div>
                 </div>

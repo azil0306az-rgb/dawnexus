@@ -253,7 +253,11 @@ test('Blog CMS Admin: Can create, schedule, auto-publish, and manage articles', 
   assert.equal(createData.blog.status, 'Scheduled');
 
   // 2. Trigger scheduler via /api/cron/publish
-  const cronRes = await fetch(`${baseUrl}/api/cron/publish`);
+  const cronSecret = process.env.CRON_SECRET || 'test-cron-secret';
+  process.env.CRON_SECRET = cronSecret;
+  const cronRes = await fetch(`${baseUrl}/api/cron/publish`, {
+    headers: { Authorization: `Bearer ${cronSecret}` }
+  });
   assert.equal(cronRes.status, 200);
   const cronData = await cronRes.json();
   assert.ok(cronData.publishedCount >= 1);

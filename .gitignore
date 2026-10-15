@@ -13,3 +13,4 @@ server/data/*.sqlite-shm
 .env*
 lh-*.json
 server/test/*.json
+server/data/backups/v36-*.json

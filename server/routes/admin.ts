@@ -20,7 +20,6 @@ import {
   deleteBlog,
   duplicateBlog,
   getBlogStats,
-  publishDueScheduledBlogs,
   getNotificationSettings,
   createOtpChallenge,
   getLatestOtpChallenge,
@@ -33,7 +32,16 @@ import {
   deleteClient,
   reorderClients,
   getCalculatorPricingConfig,
-  updateCalculatorPricingConfig
+  updateCalculatorPricingConfig,
+  persistCalculatorPricingConfig,
+  refreshFromPersistentStore,
+  persistBlog,
+  persistBlogDeletion,
+  persistEnquiryUpdate,
+  persistEnquiryDeletion,
+  persistClient,
+  persistClientDeletion,
+  publishDueScheduledBlogsReliable
 } from '../db.js';
 import {
   sendOtpVerificationEmail,
@@ -41,7 +49,7 @@ import {
 } from '../email.js';
 import { seoResearchRouter } from './seoResearch.js';
 import { getDatabaseHealthStats, performDatabaseHealthCheck } from '../dbHealth.js';
-import { createClient } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -86,8 +94,9 @@ adminRouter.get('/stats', (req, res) => {
 // ==========================================
 
 // GET /api/admin/blogs
-adminRouter.get('/blogs', (req, res) => {
+adminRouter.get('/blogs', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
@@ -114,8 +123,9 @@ adminRouter.get('/blogs', (req, res) => {
 });
 
 // GET /api/admin/blogs/stats
-adminRouter.get('/blogs/stats', (req, res) => {
+adminRouter.get('/blogs/stats', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const stats = getBlogStats();
     return res.json(stats);
   } catch (error) {
@@ -125,9 +135,9 @@ adminRouter.get('/blogs/stats', (req, res) => {
 });
 
 // POST /api/admin/blogs/publish-due (manual trigger from admin)
-adminRouter.post('/blogs/publish-due', (req, res) => {
+adminRouter.post('/blogs/publish-due', async (req, res) => {
   try {
-    const result = publishDueScheduledBlogs();
+    const result = await publishDueScheduledBlogsReliable();
     return res.json({
       success: true,
       ...result
@@ -139,8 +149,9 @@ adminRouter.post('/blogs/publish-due', (req, res) => {
 });
 
 // GET /api/admin/blogs/:id
-adminRouter.get('/blogs/:id', (req, res) => {
+adminRouter.get('/blogs/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid blog ID' });
@@ -159,8 +170,9 @@ adminRouter.get('/blogs/:id', (req, res) => {
 });
 
 // POST /api/admin/blogs
-adminRouter.post('/blogs', (req, res) => {
+adminRouter.post('/blogs', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const {
       title,
       slug,
@@ -214,6 +226,7 @@ adminRouter.post('/blogs', (req, res) => {
       published_at: typeof published_at === 'string' && published_at.trim() ? published_at.trim() : null,
       admin_notes: typeof admin_notes === 'string' ? admin_notes.trim() : ''
     });
+    await persistBlog(created);
 
     return res.status(201).json({
       success: true,
@@ -227,8 +240,9 @@ adminRouter.post('/blogs', (req, res) => {
 });
 
 // PATCH /api/admin/blogs/:id
-adminRouter.patch('/blogs/:id', (req, res) => {
+adminRouter.patch('/blogs/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid blog ID' });
@@ -238,6 +252,7 @@ adminRouter.patch('/blogs/:id', (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: 'Blog not found' });
     }
+    await persistBlog(updated);
 
     return res.json({
       success: true,
@@ -251,8 +266,9 @@ adminRouter.patch('/blogs/:id', (req, res) => {
 });
 
 // DELETE /api/admin/blogs/:id
-adminRouter.delete('/blogs/:id', (req, res) => {
+adminRouter.delete('/blogs/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid blog ID' });
@@ -262,6 +278,7 @@ adminRouter.delete('/blogs/:id', (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Blog not found or already deleted' });
     }
+    await persistBlogDeletion(id);
 
     return res.json({
       success: true,
@@ -274,8 +291,9 @@ adminRouter.delete('/blogs/:id', (req, res) => {
 });
 
 // POST /api/admin/blogs/:id/duplicate
-adminRouter.post('/blogs/:id/duplicate', (req, res) => {
+adminRouter.post('/blogs/:id/duplicate', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid blog ID' });
@@ -285,6 +303,7 @@ adminRouter.post('/blogs/:id/duplicate', (req, res) => {
     if (!copy) {
       return res.status(404).json({ error: 'Original blog article not found' });
     }
+    await persistBlog(copy);
 
     return res.status(201).json({
       success: true,
@@ -298,8 +317,9 @@ adminRouter.post('/blogs/:id/duplicate', (req, res) => {
 });
 
 // GET /api/admin/enquiries
-adminRouter.get('/enquiries', (req, res) => {
+adminRouter.get('/enquiries', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const service = typeof req.query.service === 'string' ? req.query.service : undefined;
@@ -324,8 +344,9 @@ adminRouter.get('/enquiries', (req, res) => {
 });
 
 // GET /api/admin/enquiries/:id
-adminRouter.get('/enquiries/:id', (req, res) => {
+adminRouter.get('/enquiries/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid enquiry ID' });
@@ -344,8 +365,9 @@ adminRouter.get('/enquiries/:id', (req, res) => {
 });
 
 // PATCH /api/admin/enquiries/:id
-adminRouter.patch('/enquiries/:id', (req, res) => {
+adminRouter.patch('/enquiries/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid enquiry ID' });
@@ -368,6 +390,7 @@ adminRouter.patch('/enquiries/:id', (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: 'Enquiry not found' });
     }
+    await persistEnquiryUpdate(id, { status, admin_notes });
 
     return res.json({
       success: true,
@@ -381,8 +404,9 @@ adminRouter.patch('/enquiries/:id', (req, res) => {
 });
 
 // DELETE /api/admin/enquiries/:id
-adminRouter.delete('/enquiries/:id', (req, res) => {
+adminRouter.delete('/enquiries/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid enquiry ID' });
@@ -392,6 +416,7 @@ adminRouter.delete('/enquiries/:id', (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Enquiry not found or already deleted' });
     }
+    await persistEnquiryDeletion(id);
 
     return res.json({
       success: true,
@@ -651,8 +676,9 @@ function isValidPublicWebUrl(urlStr: string): boolean {
 }
 
 // GET /api/admin/clients
-adminRouter.get('/clients', (req, res) => {
+adminRouter.get('/clients', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const clients = getAllClients();
     return res.json({ success: true, items: clients });
   } catch (error) {
@@ -662,8 +688,9 @@ adminRouter.get('/clients', (req, res) => {
 });
 
 // POST /api/admin/clients
-adminRouter.post('/clients', (req, res) => {
+adminRouter.post('/clients', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const {
       client_name,
       website_url,
@@ -702,6 +729,7 @@ adminRouter.post('/clients', (req, res) => {
       display_order: typeof display_order === 'number' ? display_order : undefined,
       status: status === 'Published' ? 'Published' : 'Draft'
     });
+    await persistClient(created);
 
     return res.status(201).json({
       success: true,
@@ -715,8 +743,9 @@ adminRouter.post('/clients', (req, res) => {
 });
 
 // PATCH /api/admin/clients/:id
-adminRouter.patch('/clients/:id', (req, res) => {
+adminRouter.patch('/clients/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid client ID' });
@@ -766,6 +795,7 @@ adminRouter.patch('/clients/:id', (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: 'Client not found' });
     }
+    await persistClient(updated);
 
     return res.json({
       success: true,
@@ -779,8 +809,9 @@ adminRouter.patch('/clients/:id', (req, res) => {
 });
 
 // DELETE /api/admin/clients/:id
-adminRouter.delete('/clients/:id', (req, res) => {
+adminRouter.delete('/clients/:id', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const id = parseInt(req.params.id, 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid client ID' });
@@ -790,6 +821,7 @@ adminRouter.delete('/clients/:id', (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Client not found or already deleted' });
     }
+    await persistClientDeletion(id);
 
     return res.json({
       success: true,
@@ -802,14 +834,16 @@ adminRouter.delete('/clients/:id', (req, res) => {
 });
 
 // POST /api/admin/clients/reorder
-adminRouter.post('/clients/reorder', (req, res) => {
+adminRouter.post('/clients/reorder', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const { orderedIds } = req.body;
     if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
       return res.status(400).json({ error: 'Array of ordered client IDs is required.' });
     }
 
     reorderClients(orderedIds.map(Number));
+    for (const client of getAllClients()) await persistClient(client);
     return res.json({ success: true, message: 'Display order updated successfully' });
   } catch (error) {
     console.error('[Admin Reorder Clients Error]:', error);
@@ -892,10 +926,10 @@ adminRouter.post('/blogs/upload-image', async (req, res) => {
     const safeName = `blog-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (supabaseUrl && supabaseKey) {
-      const supabase = createClient(supabaseUrl, supabaseKey, {
+      const supabase = createSupabaseClient(supabaseUrl, supabaseKey, {
         auth: { persistSession: false }
       });
 
@@ -917,14 +951,11 @@ adminRouter.post('/blogs/upload-image', async (req, res) => {
           filename: safeName
         });
       }
+      console.error('[Blog Image Upload Storage Error]:', error?.message || 'Upload returned no data');
+      return res.status(502).json({ error: 'Supabase Storage rejected the blog image upload. Please retry.' });
     }
 
-    // Fallback: return data URL safely if storage bucket is unreachable
-    return res.json({
-      success: true,
-      url: image,
-      filename: safeName
-    });
+    return res.status(503).json({ error: 'Blog image storage is not configured on the server.' });
   } catch (err: any) {
     console.error('[Blog Image Upload Error]:', err);
     return res.status(500).json({ error: 'Failed to process blog image upload.' });
@@ -962,10 +993,10 @@ adminRouter.post('/clients/upload-image', async (req, res) => {
     const safeName = `client-${type}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (supabaseUrl && supabaseKey) {
-      const supabase = createClient(supabaseUrl, supabaseKey, {
+      const supabase = createSupabaseClient(supabaseUrl, supabaseKey, {
         auth: { persistSession: false }
       });
 
@@ -987,13 +1018,11 @@ adminRouter.post('/clients/upload-image', async (req, res) => {
           filename: safeName
         });
       }
+      console.error('[Client Image Upload Storage Error]:', error?.message || 'Upload returned no data');
+      return res.status(502).json({ error: 'Supabase Storage rejected the client image upload. Please retry.' });
     }
 
-    return res.json({
-      success: true,
-      url: image,
-      filename: safeName
-    });
+    return res.status(503).json({ error: 'Client image storage is not configured on the server.' });
   } catch (err: any) {
     console.error('[Client Image Upload Error]:', err);
     return res.status(500).json({ error: 'Failed to process client image upload.' });
@@ -1048,8 +1077,9 @@ adminRouter.post('/db-health/check', async (req, res) => {
 // ======================================================================
 
 // GET /api/admin/calculator/config
-adminRouter.get('/calculator/config', (req, res) => {
+adminRouter.get('/calculator/config', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const config = getCalculatorPricingConfig();
     return res.json({
       success: true,
@@ -1062,7 +1092,7 @@ adminRouter.get('/calculator/config', (req, res) => {
 });
 
 // PUT /api/admin/calculator/config
-adminRouter.put('/calculator/config', (req, res) => {
+adminRouter.put('/calculator/config', async (req, res) => {
   try {
     const newConfig = req.body;
     if (
@@ -1075,6 +1105,7 @@ adminRouter.put('/calculator/config', (req, res) => {
     }
 
     const updated = updateCalculatorPricingConfig(newConfig);
+    await persistCalculatorPricingConfig(updated);
     return res.json({
       success: true,
       message: 'Calculator pricing configuration updated successfully.',

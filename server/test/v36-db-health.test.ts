@@ -75,7 +75,11 @@ test('Database Health: Admin POST /api/admin/db-health/check executes on-demand 
 });
 
 test('Database Health: Cron GET /api/cron/db-health triggers automated 4-hour check', async () => {
-  const res = await fetch(`${baseUrl}/api/cron/db-health`);
+  const cronSecret = process.env.CRON_SECRET || 'test-cron-secret';
+  process.env.CRON_SECRET = cronSecret;
+  const res = await fetch(`${baseUrl}/api/cron/db-health`, {
+    headers: { Authorization: `Bearer ${cronSecret}` }
+  });
   assert.equal(res.status, 200);
   const data = await res.json();
   assert.equal(data.success, true);

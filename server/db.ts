@@ -11,7 +11,9 @@ import {
   pushClientToSupabase,
   deleteClientFromSupabase,
   pushNotificationSettingsToSupabase,
-  pushSeoConnectionToSupabase
+  pushSeoConnectionToSupabase,
+  pushCalculatorPricingConfigToSupabase,
+  isSupabaseActive
 } from './supabase.js';
 import {
   CalculatorPricingConfig,
@@ -42,7 +44,11 @@ try {
 }
 
 // Initialize schema
+let databaseInitialized = false;
+
 export function initDatabase() {
+  if (databaseInitialized) return;
+  databaseInitialized = true;
   // Table for customer enquiries
   db.exec(`
     CREATE TABLE IF NOT EXISTS enquiries (
@@ -280,7 +286,6 @@ export function createEnquiry(input: CreateEnquiryInput): EnquiryRecord {
   const lastId = Number(info.lastInsertRowid);
   const getStmt = db.prepare('SELECT * FROM enquiries WHERE id = ?');
   const record = getStmt.get(lastId) as unknown as EnquiryRecord;
-  pushEnquiryToSupabase(record).catch(() => {});
   return record;
 }
 
@@ -394,9 +399,6 @@ export function updateEnquiry(
   `);
   stmt.run(newStatus, newNotes, now, id);
   const updated = getEnquiryById(id);
-  if (updated) {
-    updateEnquiryInSupabase(id, { status: newStatus, admin_notes: newNotes }).catch(() => {});
-  }
   return updated;
 }
 
@@ -404,9 +406,6 @@ export function deleteEnquiry(id: number): boolean {
   const stmt = db.prepare('DELETE FROM enquiries WHERE id = ?');
   const result = stmt.run(id);
   const ok = Number(result.changes) > 0;
-  if (ok) {
-    deleteEnquiryFromSupabase(id).catch(() => {});
-  }
   return ok;
 }
 
@@ -606,7 +605,6 @@ export function createBlog(input: CreateBlogInput): BlogRecord {
   );
 
   const created = getBlogById(Number(info.lastInsertRowid))!;
-  pushBlogToSupabase(created).catch(() => {});
   return created;
 }
 
@@ -793,9 +791,6 @@ export function updateBlog(id: number, updates: Partial<CreateBlogInput>): BlogR
   );
 
   const updated = getBlogById(id);
-  if (updated) {
-    pushBlogToSupabase(updated).catch(() => {});
-  }
   return updated;
 }
 
@@ -803,9 +798,6 @@ export function deleteBlog(id: number): boolean {
   const stmt = db.prepare('DELETE FROM blogs WHERE id = ?');
   const res = stmt.run(id);
   const ok = Number(res.changes) > 0;
-  if (ok) {
-    deleteBlogFromSupabase(id).catch(() => {});
-  }
   return ok;
 }
 
@@ -888,147 +880,89 @@ export function publishDueScheduledBlogs(): { publishedCount: number; errors: { 
   return { publishedCount, errors };
 }
 
+export async function publishDueScheduledBlogsReliable(): Promise<{ publishedCount: number; errors: { id: number; error: string }[] }> {
+  const due = getDueScheduledBlogs();
+  let publishedCount = 0;
+  const errors: { id: number; error: string }[] = [];
+
+  for (const item of due) {
+    try {
+      const published = publishBlogRecord(item.id);
+      if (published && isSupabaseActive()) {
+        await pushBlogToSupabase(published);
+      }
+      publishedCount++;
+      console.log(`[Scheduler] Auto-published scheduled blog #${item.id} (${item.slug})`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Auto-publishing error';
+      console.error(`[Scheduler] Failed to publish blog #${item.id}:`, err);
+      const failed = markBlogFailed(item.id, msg);
+      if (failed && isSupabaseActive()) {
+        try {
+          await pushBlogToSupabase(failed);
+        } catch {}
+      }
+      errors.push({ id: item.id, error: msg });
+    }
+  }
+
+  return { publishedCount, errors };
+}
+
+let lastSyncTime = 0;
+export async function refreshFromPersistentStore(force = false): Promise<void> {
+  if (!isSupabaseActive()) return;
+  const now = Date.now();
+  if (!force && now - lastSyncTime < 3000) {
+    return;
+  }
+  await syncFromSupabase(db);
+  lastSyncTime = Date.now();
+}
+
+export async function persistEnquiry(record: EnquiryRecord): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await pushEnquiryToSupabase(record);
+}
+
+export async function persistEnquiryUpdate(id: number, updates: { status?: string; admin_notes?: string }): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await updateEnquiryInSupabase(id, updates);
+}
+
+export async function persistEnquiryDeletion(id: number): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await deleteEnquiryFromSupabase(id);
+}
+
+export async function persistBlog(blog: BlogRecord): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await pushBlogToSupabase(blog);
+}
+
+export async function persistBlogDeletion(id: number): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await deleteBlogFromSupabase(id);
+}
+
+export async function persistClient(client: ClientRecord): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await pushClientToSupabase(client);
+}
+
+export async function persistClientDeletion(id: number): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await deleteClientFromSupabase(id);
+}
+
+export async function persistCalculatorPricingConfig(config: CalculatorPricingConfig): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await pushCalculatorPricingConfigToSupabase(config);
+}
+
 export function getPublishedBlogsForSitemap(): { slug: string; updated_at: string; published_at: string }[] {
   const stmt = db.prepare("SELECT slug, updated_at, published_at FROM blogs WHERE status = 'Published' ORDER BY published_at DESC");
   return stmt.all() as { slug: string; updated_at: string; published_at: string }[];
-}
-
-function seedBlogsIfEmpty() {
-  const countRes = db.prepare('SELECT COUNT(*) as c FROM blogs').get() as { c: number };
-  if (Number(countRes?.c || 0) > 0) return;
-
-  const now = new Date();
-  const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
-  const oneDayAgo = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
-  const twoDaysAhead = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
-
-  // Seed 1: Coimbatore Web Design
-  createBlog({
-    title: 'Website Design Costs in Coimbatore: What Businesses Should Know in 2026',
-    slug: 'website-design-cost-coimbatore',
-    excerpt: 'A comprehensive, transparent analysis of business website development costs in Coimbatore, covering custom builds, performance factors, and return on investment.',
-    content: `<h2>Understanding Business Website Investments in Coimbatore</h2>
-<p>For growing enterprises, manufacturers, and service brands in Coimbatore, a website is no longer a static digital brochure—it is your primary commercial sales engine and conversion touchpoint.</p>
-<p>When businesses search for <strong>website design in Coimbatore</strong>, quotes often range wildly from ₹10,000 to ₹1,50,000+. This wide variance creates confusion for business owners trying to budget effectively.</p>
-
-<h3>What Determines Website Development Pricing?</h3>
-<p>The total investment for a professional business website depends on four foundational parameters:</p>
-<ul>
-  <li><strong>Architecture & Performance:</strong> Clean custom front-end code (such as React or Next.js) vs. slow, vulnerable pre-packaged WordPress templates.</li>
-  <li><strong>Conversion Architecture:</strong> Dedicated user journeys, wireframing, and persuasive copywriting tailored to your target buyers.</li>
-  <li><strong>Technical SEO Foundation:</strong> Pre-configured schema markup, Core Web Vitals optimization, and mobile-first responsiveness.</li>
-  <li><strong>Security & Scalability:</strong> Secure SSL, serverless backend workflows, and zero dependency on unmaintained third-party plugins.</li>
-</ul>
-
-<h3>Average Pricing Breakdown for Coimbatore Businesses</h3>
-<p>Based on modern web standards in 2026:</p>
-<ul>
-  <li><strong>High-Converting Landing Page:</strong> ₹15,000 – ₹30,000 (Ideal for single-product campaigns or Google Ads).</li>
-  <li><strong>Complete Corporate Website (5-10 Pages):</strong> ₹35,000 – ₹75,000 (Ideal for MSMEs, textile manufacturers, and healthcare clinics).</li>
-  <li><strong>Advanced Web Application or Enterprise Platform:</strong> ₹80,000+ (Custom quoting with custom API integrations and portals).</li>
-</ul>
-
-<h3>The Real Cost of Cheap Templates</h3>
-<p>Opting for a generic ₹10,000 template often incurs hidden liabilities: slow mobile load speeds exceeding 5 seconds, lack of localized SEO optimization, vulnerability to script injections, and high bounce rates that drive up paid advertising acquisition costs.</p>
-
-<h3>Recommended Next Step</h3>
-<p>Before commissioning a build, audit your core growth bottlenecks. Explore our <a href="/services/website-design">Website Design & Development</a> capabilities or schedule an architectural consultation with our engineering team.</p>`,
-    author: 'Dawnexus Team',
-    category: 'Website Design',
-    tags: ['Coimbatore', 'Web Design', 'Pricing Guide', 'Business Growth'],
-    primary_keyword: 'website design in Coimbatore',
-    secondary_keywords: ['website development in Coimbatore', 'business website cost', 'website designer for small business'],
-    target_location: 'Coimbatore, Tamil Nadu, India',
-    search_intent: 'Commercial Investigation',
-    target_audience: 'Coimbatore business owners, entrepreneurs, and marketing managers',
-    target_questions: [
-      'What affects the price of a business website in Coimbatore?',
-      'Does the price include hosting and domain registration?',
-      'How long does professional website development take?'
-    ],
-    seo_title: 'Website Design Costs in Coimbatore: 2026 Pricing Guide',
-    meta_description: 'Transparent guide to business website design costs in Coimbatore. Learn what factors determine development pricing, timeline, and ROI for your brand.',
-    canonical_url: 'https://dawnexus.in/blog/website-design-cost-coimbatore',
-    status: 'Published',
-    published_at: twoDaysAgo
-  });
-
-  // Seed 2: AI Video Production
-  createBlog({
-    title: 'How AI Video Production Is Accelerating Brand Marketing in 2026',
-    slug: 'ai-video-production-for-businesses',
-    excerpt: 'Discover how modern brands combine AI-assisted visual generation with human creative direction to produce high-performing social reels and ad creatives.',
-    content: `<h2>The Evolution of Commercial Video Creation</h2>
-<p>Video content consistently drives the highest return on ad spend across Meta and Google platforms. However, traditional production cycles—involving physical shoots, studio rental, and lengthy post-production—frequently stifle the testing velocity modern marketers require.</p>
-<p>Modern agencies use <strong>AI video creation for businesses</strong> not to replace directorial craft, but to supercharge creative velocity and eliminate logistical friction.</p>
-
-<h3>The Hybrid Production Workflow: AI Velocity + Human Direction</h3>
-<p>At Dawnexus, our creative pipeline pairs algorithmic visual generation with disciplined motion editing:</p>
-<ol>
-  <li><strong>Concept & Script Development:</strong> Human directors construct the narrative arc and commercial conversion triggers.</li>
-  <li><strong>AI Storyboard Prototyping:</strong> Visual scenes and environments are synthesized rapidly, allowing clients to review visual style within 48 hours.</li>
-  <li><strong>Motion Synthesis & Editing:</strong> Professional sound design, kinetic typography, and color grading unify the output into a broadcast-ready deliverable.</li>
-</ol>
-
-<h3>Key Marketing Applications</h3>
-<ul>
-  <li><strong>Paid Social Hook Testing:</strong> Render 5 distinct opening hooks for Instagram Reels to identify what stops the scroll before investing heavy media budgets.</li>
-  <li><strong>Product Feature Demos:</strong> Complex software architectures simplified into compelling visual walkthroughs.</li>
-  <li><strong>Brand Anthem Videos:</strong> High-impact website hero visuals communicating corporate ambition.</li>
-</ul>
-
-<p>Explore our complete <a href="/services/ai-video-creation">AI Video Creation</a> workflow to see how we help ambitious brands scale their visual presence.</p>`,
-    author: 'Dawnexus Editorial',
-    category: 'AI Creative',
-    tags: ['AI Video', 'Creative Production', 'Reels', 'Advertising'],
-    primary_keyword: 'AI video creation for businesses',
-    secondary_keywords: ['promotional video production', 'AI marketing videos', 'social media video ads'],
-    target_location: 'India',
-    search_intent: 'Informational',
-    target_audience: 'Brand founders, marketing directors, and creative leads',
-    target_questions: [
-      'How fast can an AI promotional video be produced?',
-      'Does AI replace video editors?',
-      'What resolutions and aspect ratios are delivered?'
-    ],
-    seo_title: 'AI Video Production for Businesses: Modern Creative Guide',
-    meta_description: 'How ambitious brands use AI video production to accelerate campaign testing, lower production bottlenecks, and drive higher engagement in 2026.',
-    canonical_url: 'https://dawnexus.in/blog/ai-video-production-for-businesses',
-    status: 'Published',
-    published_at: oneDayAgo
-  });
-
-  // Seed 3: Scheduled Article
-  createBlog({
-    title: 'Local SEO Playbook: Ranking in Google Maps and Local Search',
-    slug: 'local-seo-google-maps-playbook',
-    excerpt: 'Practical strategies for optimizing your Google Business Profile, winning local search pack rankings, and generating steady inbound customer calls.',
-    content: `<h2>Mastering Local Search Discoverability</h2>
-<p>When customers in your city search for immediate professional solutions, over 70% of clicks go to the Google Maps 3-Pack. Securing top placement requires a disciplined local SEO framework.</p>
-
-<h3>Core Ranking Factors in Google Maps</h3>
-<ul>
-  <li><strong>Relevance:</strong> Precise primary and secondary business categories aligned with customer search terms.</li>
-  <li><strong>Distance:</strong> Proximity signals reinforced by accurate localized landing pages and schema tags.</li>
-  <li><strong>Prominence:</strong> Review velocity, consistent NAP (Name, Address, Phone) citations, and active profile engagement.</li>
-</ul>
-
-<p>Learn how our structured <a href="/services/seo-services">SEO Services</a> help local businesses capture high-intent geographic searches.</p>`,
-    author: 'Dawnexus SEO Team',
-    category: 'SEO Strategy',
-    tags: ['Local SEO', 'Google Maps', 'Google Business Profile'],
-    primary_keyword: 'local SEO Google Business Profile',
-    secondary_keywords: ['Google maps ranking', 'local search optimization'],
-    target_location: 'Coimbatore, Tamil Nadu, India',
-    search_intent: 'Informational',
-    target_audience: 'Local business owners and multi-location brands',
-    seo_title: 'Local SEO & Google Maps Playbook | Dawnexus Guide',
-    meta_description: 'Step-by-step strategies to optimize your Google Business Profile and capture top rankings in local map search queries.',
-    canonical_url: 'https://dawnexus.in/blog/local-seo-google-maps-playbook',
-    status: 'Published',
-    published_at: '2026-10-11T09:00:00.000Z',
-    scheduled_at: null
-  });
 }
 
 // ----------------------------------------------------
@@ -1296,8 +1230,8 @@ export async function getPublicClientsAsync(): Promise<ClientRecord[]> {
   }
 
   // If local SQLite is empty (e.g. serverless cold start in Vercel /tmp or unhydrated instance), query Supabase directly
-  const supabaseUrl = process.env.SUPABASE_URL || 'https://susdqywigvzcijsvlksb.supabase.co';
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1c2RxeXdpZ3Z6Y2lqc3Zsa3NiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk4NTYxOCwiZXhwIjoyMTA3NTYxNjE4fQ.4Akv8u7-Gz87E9DJJPs5iuRhNwPcFWVVfZhRIlbNLZw';
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
 
   if (supabaseUrl && supabaseKey) {
     try {
@@ -1385,7 +1319,6 @@ export function createClient(input: CreateClientInput): ClientRecord {
 
   const lastId = Number(info.lastInsertRowid);
   const created = getClientById(lastId)!;
-  pushClientToSupabase(created).catch(() => {});
   return created;
 }
 
@@ -1429,18 +1362,12 @@ export function updateClient(id: number, input: UpdateClientInput): ClientRecord
   );
 
   const updated = getClientById(id);
-  if (updated) {
-    pushClientToSupabase(updated).catch(() => {});
-  }
   return updated;
 }
 
 export function deleteClient(id: number): boolean {
   const res = db.prepare('DELETE FROM clients WHERE id = ?').run(id);
   const ok = res.changes > 0;
-  if (ok) {
-    deleteClientFromSupabase(id).catch(() => {});
-  }
   return ok;
 }
 
@@ -1450,10 +1377,6 @@ export function reorderClients(orderedIds: number[]): boolean {
   
   for (let i = 0; i < orderedIds.length; i++) {
     updateStmt.run(i, now, orderedIds[i]);
-    const c = getClientById(orderedIds[i]);
-    if (c) {
-      pushClientToSupabase(c).catch(() => {});
-    }
   }
   return true;
 }

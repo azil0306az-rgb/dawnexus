@@ -1,8 +1,9 @@
+import 'dotenv/config';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // Resolve environment variables
-const supabaseUrl = process.env.SUPABASE_URL || 'https://susdqywigvzcijsvlksb.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1c2RxeXdpZ3Z6Y2lqc3Zsa3NiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk4NTYxOCwiZXhwIjoyMTA3NTYxNjE4fQ.4Akv8u7-Gz87E9DJJPs5iuRhNwPcFWVVfZhRIlbNLZw';
+const supabaseUrl = process.env.SUPABASE_URL?.trim();
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
 export let supabase: SupabaseClient | null = null;
 
@@ -15,10 +16,18 @@ if (supabaseUrl && supabaseKey) {
   } catch (err) {
     console.warn('[Supabase] Initialization error:', err);
   }
+} else {
+  console.warn('[Supabase] Disabled: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be configured.');
 }
 
 export function isSupabaseActive(): boolean {
   return !!supabase;
+}
+
+function assertSupabaseSuccess(error: { message?: string; code?: string } | null, operation: string): void {
+  if (!error) return;
+  const code = error.code ? ` (${error.code})` : '';
+  throw new Error(`${operation} failed${code}: ${error.message || 'Unknown Supabase error'}`);
 }
 
 /**
@@ -35,7 +44,11 @@ export async function syncFromSupabase(db: any): Promise<void> {
       .from('blogs')
       .select('*');
 
-    if (!blogErr && blogs && blogs.length > 0) {
+    assertSupabaseSuccess(blogErr, 'Blog synchronization');
+    if (blogs) {
+      db.exec('BEGIN');
+      try {
+        db.prepare('DELETE FROM blogs').run();
       for (const blog of blogs) {
         db.prepare(`
           INSERT INTO blogs (
@@ -72,6 +85,11 @@ export async function syncFromSupabase(db: any): Promise<void> {
           blog.admin_notes || '', blog.created_at || new Date().toISOString(), blog.updated_at || new Date().toISOString()
         );
       }
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
       console.log(`[Supabase Sync] Hydrated ${blogs.length} blogs.`);
     }
 
@@ -80,7 +98,11 @@ export async function syncFromSupabase(db: any): Promise<void> {
       .from('clients')
       .select('*');
 
-    if (!clientErr && clients && clients.length > 0) {
+    assertSupabaseSuccess(clientErr, 'Client synchronization');
+    if (clients) {
+      db.exec('BEGIN');
+      try {
+        db.prepare('DELETE FROM clients').run();
       for (const c of clients) {
         db.prepare(`
           INSERT INTO clients (
@@ -102,6 +124,11 @@ export async function syncFromSupabase(db: any): Promise<void> {
           c.service_category || '', c.description || '', c.display_order || 0,
           c.status || 'Draft', c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
         );
+      }
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
       }
       console.log(`[Supabase Sync] Hydrated ${clients.length} clients.`);
     }
@@ -134,13 +161,17 @@ export async function syncFromSupabase(db: any): Promise<void> {
     }
 
     // 4. Sync Enquiries
-    const { data: enquiries } = await supabase
+    const { data: enquiries, error: enquiryErr } = await supabase
       .from('enquiries')
       .select('*')
       .order('id', { ascending: false })
       .limit(200);
 
-    if (enquiries && enquiries.length > 0) {
+    assertSupabaseSuccess(enquiryErr, 'Enquiry synchronization');
+    if (enquiries) {
+      db.exec('BEGIN');
+      try {
+        db.prepare('DELETE FROM enquiries').run();
       for (const enq of enquiries) {
         db.prepare(`
           INSERT INTO enquiries (
@@ -157,12 +188,44 @@ export async function syncFromSupabase(db: any): Promise<void> {
           enq.status || 'New', enq.admin_notes || '', enq.created_at, enq.updated_at
         );
       }
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
       console.log(`[Supabase Sync] Hydrated ${enquiries.length} enquiries.`);
+    }
+
+    // 5. Sync Calculator Pricing Config
+    try {
+      const { data: calcConfig } = await supabase
+        .from('calculator_pricing_config')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (calcConfig && calcConfig.config_json) {
+        const cfgObj = typeof calcConfig.config_json === 'string'
+          ? calcConfig.config_json
+          : JSON.stringify(calcConfig.config_json);
+        db.prepare(`
+          INSERT INTO calculator_pricing_config (id, config_json, version, updated_at)
+          VALUES (1, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            config_json = excluded.config_json,
+            version = excluded.version,
+            updated_at = excluded.updated_at
+        `).run(cfgObj, calcConfig.version || 1, calcConfig.updated_at || new Date().toISOString());
+        console.log('[Supabase Sync] Hydrated calculator pricing config.');
+      }
+    } catch (calcErr) {
+      console.warn('[Supabase Sync Calculator Notice]:', calcErr);
     }
 
     console.log('[Supabase Sync] Local database is fully synchronized with Supabase.');
   } catch (err) {
     console.warn('[Supabase Sync Error]:', err);
+    throw err;
   }
 }
 
@@ -171,9 +234,8 @@ export async function syncFromSupabase(db: any): Promise<void> {
 // ----------------------------------------------------------------------
 
 export async function pushEnquiryToSupabase(record: any): Promise<void> {
-  if (!supabase) return;
-  try {
-    await supabase.from('enquiries').upsert({
+  if (!supabase) throw new Error('Supabase is not configured for enquiry persistence.');
+  const { error } = await supabase.from('enquiries').upsert({
       id: record.id,
       full_name: record.full_name,
       business_name: record.business_name || '',
@@ -187,36 +249,27 @@ export async function pushEnquiryToSupabase(record: any): Promise<void> {
       created_at: record.created_at,
       updated_at: record.updated_at
     });
-  } catch (err) {
-    console.warn('[Supabase pushEnquiry Error]:', err);
-  }
+  assertSupabaseSuccess(error, 'Enquiry persistence');
 }
 
 export async function updateEnquiryInSupabase(id: number, updates: any): Promise<void> {
-  if (!supabase) return;
-  try {
-    await supabase.from('enquiries').update({
+  if (!supabase) throw new Error('Supabase is not configured for enquiry updates.');
+  const { error } = await supabase.from('enquiries').update({
       ...updates,
       updated_at: new Date().toISOString()
     }).eq('id', id);
-  } catch (err) {
-    console.warn('[Supabase updateEnquiry Error]:', err);
-  }
+  assertSupabaseSuccess(error, 'Enquiry update');
 }
 
 export async function deleteEnquiryFromSupabase(id: number): Promise<void> {
-  if (!supabase) return;
-  try {
-    await supabase.from('enquiries').delete().eq('id', id);
-  } catch (err) {
-    console.warn('[Supabase deleteEnquiry Error]:', err);
-  }
+  if (!supabase) throw new Error('Supabase is not configured for enquiry deletion.');
+  const { error } = await supabase.from('enquiries').delete().eq('id', id);
+  assertSupabaseSuccess(error, 'Enquiry deletion');
 }
 
 export async function pushBlogToSupabase(blog: any): Promise<void> {
-  if (!supabase) return;
-  try {
-    await supabase.from('blogs').upsert({
+  if (!supabase) throw new Error('Supabase is not configured for blog persistence.');
+  const { error } = await supabase.from('blogs').upsert({
       id: blog.id,
       title: blog.title,
       slug: blog.slug,
@@ -244,24 +297,18 @@ export async function pushBlogToSupabase(blog: any): Promise<void> {
       created_at: blog.created_at,
       updated_at: blog.updated_at
     });
-  } catch (err) {
-    console.warn('[Supabase pushBlog Error]:', err);
-  }
+  assertSupabaseSuccess(error, 'Blog persistence');
 }
 
 export async function deleteBlogFromSupabase(id: number): Promise<void> {
-  if (!supabase) return;
-  try {
-    await supabase.from('blogs').delete().eq('id', id);
-  } catch (err) {
-    console.warn('[Supabase deleteBlog Error]:', err);
-  }
+  if (!supabase) throw new Error('Supabase is not configured for blog deletion.');
+  const { error } = await supabase.from('blogs').delete().eq('id', id);
+  assertSupabaseSuccess(error, 'Blog deletion');
 }
 
 export async function pushClientToSupabase(client: any): Promise<void> {
-  if (!supabase) return;
-  try {
-    await supabase.from('clients').upsert({
+  if (!supabase) throw new Error('Supabase is not configured for client persistence.');
+  const { error } = await supabase.from('clients').upsert({
       id: client.id,
       client_name: client.client_name,
       website_url: client.website_url,
@@ -274,18 +321,13 @@ export async function pushClientToSupabase(client: any): Promise<void> {
       created_at: client.created_at,
       updated_at: client.updated_at
     });
-  } catch (err) {
-    console.warn('[Supabase pushClient Error]:', err);
-  }
+  assertSupabaseSuccess(error, 'Client persistence');
 }
 
 export async function deleteClientFromSupabase(id: number): Promise<void> {
-  if (!supabase) return;
-  try {
-    await supabase.from('clients').delete().eq('id', id);
-  } catch (err) {
-    console.warn('[Supabase deleteClient Error]:', err);
-  }
+  if (!supabase) throw new Error('Supabase is not configured for client deletion.');
+  const { error } = await supabase.from('clients').delete().eq('id', id);
+  assertSupabaseSuccess(error, 'Client deletion');
 }
 
 export async function pushNotificationSettingsToSupabase(settings: any): Promise<void> {
@@ -320,5 +362,22 @@ export async function pushSeoConnectionToSupabase(conn: any): Promise<void> {
     }
   } catch (err) {
     console.warn('[Supabase pushSeoConnection Error]:', err);
+  }
+}
+
+export async function pushCalculatorPricingConfigToSupabase(config: any): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.from('calculator_pricing_config').upsert({
+      id: 1,
+      config_json: config,
+      version: config.version || 1,
+      updated_at: config.updatedAt || new Date().toISOString()
+    });
+    if (error) {
+      console.warn('[Supabase pushCalculatorPricingConfig Notice]:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase pushCalculatorPricingConfig Error]:', err);
   }
 }

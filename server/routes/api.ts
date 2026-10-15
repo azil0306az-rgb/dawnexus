@@ -4,10 +4,12 @@ import {
   createEnquiry,
   getPublicBlogs,
   getBlogBySlug,
-  publishDueScheduledBlogs,
   getPublicClients,
   getPublicClientsAsync,
-  getCalculatorPricingConfig
+  getCalculatorPricingConfig,
+  persistEnquiry,
+  refreshFromPersistentStore,
+  publishDueScheduledBlogsReliable
 } from '../db.js';
 import { sendEnquiryNotification } from '../email.js';
 import { performDatabaseHealthCheck } from '../dbHealth.js';
@@ -21,9 +23,15 @@ export const publicRouter = Router();
 // ==========================================
 // CRON / AUTOMATED PUBLISHING ENDPOINT
 // ==========================================
-const handleCronPublish = (req: any, res: any) => {
+function isAuthorizedCron(req: any): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  return Boolean(cronSecret && req.headers.authorization === `Bearer ${cronSecret}`);
+}
+
+const handleCronPublish = async (req: any, res: any) => {
   try {
-    const result = publishDueScheduledBlogs();
+    if (!isAuthorizedCron(req)) return res.status(401).json({ error: 'Unauthorized cron invocation' });
+    const result = await publishDueScheduledBlogsReliable();
     return res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -43,9 +51,7 @@ publicRouter.post('/cron/publish', handleCronPublish);
 // ==========================================
 const handleCronDbHealth = async (req: any, res: any) => {
   try {
-    const cronSecret = process.env.CRON_SECRET;
-    const authHeader = req.headers.authorization;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}` && req.headers['x-vercel-cron'] !== '1') {
+    if (!isAuthorizedCron(req)) {
       return res.status(401).json({ error: 'Unauthorized cron invocation' });
     }
 
@@ -69,11 +75,12 @@ publicRouter.post('/cron/db-health', handleCronDbHealth);
 // ==========================================
 
 // GET /api/blogs
-publicRouter.get('/blogs', (req, res) => {
+publicRouter.get('/blogs', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     // Lazily ensure any due scheduled posts are published
     try {
-      publishDueScheduledBlogs();
+      await publishDueScheduledBlogsReliable();
     } catch {
       // Ignore background errors
     }
@@ -92,8 +99,9 @@ publicRouter.get('/blogs', (req, res) => {
 });
 
 // GET /api/blogs/:slug
-publicRouter.get('/blogs/:slug', (req, res) => {
+publicRouter.get('/blogs/:slug', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const slug = req.params.slug;
     if (!slug || typeof slug !== 'string') {
       return res.status(400).json({ error: 'Slug parameter is required' });
@@ -101,7 +109,7 @@ publicRouter.get('/blogs/:slug', (req, res) => {
 
     // Lazily ensure any due scheduled posts are published
     try {
-      publishDueScheduledBlogs();
+      await publishDueScheduledBlogsReliable();
     } catch {
       // Ignore
     }
@@ -213,6 +221,7 @@ export function normalizeIndianPhone(raw: string): { valid: boolean; normalized?
 // POST /api/enquiries
 publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const {
       full_name,
       business_name,
@@ -291,7 +300,7 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
       });
     }
 
-    // Persist to SQLite database
+    // Persist locally, then wait for durable Supabase confirmation before acknowledging success.
     const newRecord = createEnquiry({
       full_name: full_name.trim(),
       business_name: typeof business_name === 'string' ? business_name.trim() : '',
@@ -301,6 +310,7 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
       budget: validatedBudget,
       project_details: project_details.trim()
     });
+    await persistEnquiry(newRecord);
 
     // Send email notification safely before ending serverless function cycle
     try {
@@ -330,6 +340,7 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
 // Returns list of published clients for public showcase
 publicRouter.get('/clients', async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const clients = await getPublicClientsAsync();
     return res.json({
       success: true,
@@ -384,6 +395,7 @@ publicRouter.post('/calculator/calculate', (req, res) => {
 // POST /api/calculator/enquiry - Save estimate enquiry & trigger notifications
 publicRouter.post('/calculator/enquiry', enquiryLimiter, async (req, res) => {
   try {
+    await refreshFromPersistentStore();
     const {
       full_name,
       email,
@@ -482,6 +494,7 @@ publicRouter.post('/calculator/enquiry', enquiryLimiter, async (req, res) => {
       estimate_ref_id: authoritativeEstimate.referenceId,
       estimate_data: JSON.stringify(authoritativeEstimate)
     });
+    await persistEnquiry(newEnquiry);
 
     // Send email notification safely
     try {

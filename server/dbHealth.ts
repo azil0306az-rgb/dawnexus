@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import { DatabaseSync } from 'node:sqlite';
@@ -56,7 +57,7 @@ export async function performDatabaseHealthCheck(
   const nowIso = new Date().toISOString();
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!supabaseUrl && !databaseUrl) {
@@ -210,14 +211,14 @@ async function persistHealthCheckRecord(record: HealthCheckRecord): Promise<void
   // 2. Persist to Supabase PostgreSQL (durable cloud storage)
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey, {
         auth: { persistSession: false }
       });
 
-      await supabase.from('database_health_checks').insert({
+      const { error } = await supabase.from('database_health_checks').insert({
         status: record.status,
         response_time_ms: record.response_time_ms,
         source: record.source,
@@ -226,6 +227,7 @@ async function persistHealthCheckRecord(record: HealthCheckRecord): Promise<void
         error_message: record.error_message,
         checked_at: record.checked_at
       });
+      if (error) throw new Error(`Health history persistence failed (${error.code || 'unknown'}): ${error.message}`);
     }
   } catch (err) {
     console.warn('[Health Check Supabase Save Notice]:', err);
@@ -252,7 +254,7 @@ export async function getDatabaseHealthStats(): Promise<HealthStats> {
     );
   `);
 
-  const recentHistory = (
+  let recentHistory = (
     db.prepare(`
       SELECT id, status, response_time_ms, source, check_type, error_category, error_message, checked_at
       FROM database_health_checks
@@ -261,7 +263,7 @@ export async function getDatabaseHealthStats(): Promise<HealthStats> {
     `).all() as unknown as HealthCheckRecord[]
   ) || [];
 
-  const failedHistory = (
+  let failedHistory = (
     db.prepare(`
       SELECT id, status, response_time_ms, source, check_type, error_category, error_message, checked_at
       FROM database_health_checks
@@ -271,15 +273,32 @@ export async function getDatabaseHealthStats(): Promise<HealthStats> {
     `).all() as unknown as HealthCheckRecord[]
   ) || [];
 
-  const lastCheck = recentHistory[0] || null;
-
-  const lastSuccessfulRow = db.prepare(`
+  let lastSuccessfulRow = db.prepare(`
     SELECT id, status, response_time_ms, source, check_type, error_category, error_message, checked_at
     FROM database_health_checks
     WHERE status = 'Healthy'
     ORDER BY id DESC
     LIMIT 1
   `).get() as unknown as HealthCheckRecord | undefined;
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseUrl && supabaseKey) {
+    const client = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+    const { data, error } = await client
+      .from('database_health_checks')
+      .select('id,status,response_time_ms,source,check_type,error_category,error_message,checked_at')
+      .order('checked_at', { ascending: false })
+      .limit(200);
+    if (error) throw new Error(`Health history query failed (${error.code || 'unknown'}): ${error.message}`);
+    if (data) {
+      recentHistory = data.slice(0, 25) as HealthCheckRecord[];
+      failedHistory = data.filter(item => item.status === 'Unavailable' || item.status === 'Degraded').slice(0, 25) as HealthCheckRecord[];
+      lastSuccessfulRow = data.find(item => item.status === 'Healthy') as HealthCheckRecord | undefined;
+    }
+  }
+
+  const lastCheck = recentHistory[0] || null;
 
   // Calculate consecutive failures
   let consecutiveFailures = 0;
@@ -303,7 +322,7 @@ export async function getDatabaseHealthStats(): Promise<HealthStats> {
     consecutiveFailures,
     recentHistory,
     failedHistory,
-    supabaseConfigured: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)),
+    supabaseConfigured: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
     maskedConnectionString: maskedConn,
     timezone: 'Asia/Kolkata (IST)',
     scheduleDescription: 'Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 IST)'
