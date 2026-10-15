@@ -11,16 +11,6 @@ export interface ProductShowcaseItem {
 
 export const PRODUCT_SHOWCASES_DATA: ProductShowcaseItem[] = [
   {
-    id: 'website-quotation-builder',
-    name: 'Website Quotation Builder',
-    shortDescription: 'Interactive website configuration, budget estimation, and professional quotation generation.',
-    category: 'Commercial Tools',
-    status: 'Demo Available',
-    thumbnailUrl: '/showcases/website-quotation-builder.webp',
-    demoUrl: '/website-cost-calculator',
-    inquiryService: 'Website Design & Development'
-  },
-  {
     id: 'festival-theme-system',
     name: 'Festival Theme System',
     shortDescription: 'Scheduled festival themes, campaign visuals, and interactive website effects.',
