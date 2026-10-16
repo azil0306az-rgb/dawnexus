@@ -4,13 +4,15 @@ import http from 'node:http';
 import app from '../index.js';
 import { getExpectedMcpKey, getMcpAuditTrail } from '../mcpAuth.js';
 import { MCP_TOOLS } from '../mcpServer.js';
+import { McpService } from '../mcpService.js';
 import { calculateSeoScore, VALID_CATEGORIES } from '../seoScorer.js';
-import { getBlogById, deleteBlog, persistBlogDeletion } from '../db.js';
+import { getBlogById, deleteBlog, persistBlogDeletion, publishDueScheduledBlogsReliable } from '../db.js';
 
 let server: http.Server;
 let baseUrl: string;
 let mcpToken: string;
 let createdDraftId: number;
+let uploadedImageUrl: string;
 const uniqueRunId = Date.now();
 const testArticleTitle = `B2B Digital Marketing with AI Tools ${uniqueRunId}`;
 
@@ -38,8 +40,10 @@ test.after(async () => {
   }
 
   if (server) {
+    server.closeAllConnections?.();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+  process.exit(0);
 });
 
 // 1. Status & Public Info
@@ -505,3 +509,281 @@ test('Audit Trail: /api/mcp/audit records all read, write, and audit tool operat
   assert.ok(toolNames.includes('update_blog_draft'));
   assert.ok(toolNames.includes('attach_blog_image'));
 });
+
+// 14. Image Validation Unit Tests
+test('Image Validation: McpService.validateImageBuffer verifies magic bytes and detects formats', () => {
+  // Valid PNG signature: 89 50 4E 47 0D 0A 1A 0A
+  const validPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+  const pngMeta = McpService.validateImageBuffer(validPng);
+  assert.equal(pngMeta.mimeType, 'image/png');
+  assert.equal(pngMeta.extension, 'png');
+
+  // Valid JPEG signature: FF D8 FF
+  const validJpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+  const jpgMeta = McpService.validateImageBuffer(validJpg);
+  assert.equal(jpgMeta.mimeType, 'image/jpeg');
+  assert.equal(jpgMeta.extension, 'jpg');
+
+  // Empty payload rejection
+  assert.throws(() => McpService.validateImageBuffer(Buffer.alloc(0)), /Image payload is empty/);
+
+  // Corrupted / non-image text payload rejection
+  const fakeImage = Buffer.from('<html><script>alert(1)</script></html>');
+  assert.throws(() => McpService.validateImageBuffer(fakeImage), /Unsupported or corrupted image format/);
+
+  // Oversized payload (> 5MB)
+  const oversized = Buffer.alloc(6 * 1024 * 1024);
+  assert.throws(() => McpService.validateImageBuffer(oversized), /exceeds 5MB limit/);
+});
+
+// 15. Kolkata Timezone Date Parsing Unit Tests
+test('Kolkata Timezone: parseKolkataScheduleDate and formatKolkataDate correctly handle IST conventions', () => {
+  // Standard ISO with offset
+  const dateWithOffset = McpService.parseKolkataScheduleDate('2026-10-25T10:00:00+05:30');
+  assert.equal(dateWithOffset.toISOString(), '2026-10-25T04:30:00.000Z');
+
+  // Date-only defaults to 9 AM IST (+05:30)
+  const dateOnly = McpService.parseKolkataScheduleDate('2026-10-25');
+  assert.equal(dateOnly.toISOString(), '2026-10-25T03:30:00.000Z');
+
+  // Space-separated string
+  const spaceDate = McpService.parseKolkataScheduleDate('2026-10-25 15:30:00');
+  assert.equal(spaceDate.toISOString(), '2026-10-25T10:00:00.000Z');
+
+  // Format back into IST string
+  const formatted = McpService.formatKolkataDate(dateWithOffset);
+  assert.ok(formatted.includes('2026'));
+  assert.ok(formatted.includes('(IST)'));
+
+  // Invalid format rejection
+  assert.throws(() => McpService.parseKolkataScheduleDate('not-a-valid-date-str'), /Invalid scheduled_at date\/time format/);
+});
+
+// 16. MCP Upload Blog Image Endpoint
+test('MCP Upload Image: /tools/upload-image uploads valid base64 image to Supabase Storage and returns CDN URL', async () => {
+  // 1x1 transparent PNG data URL
+  const sample1x1Png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  const res = await fetch(`${baseUrl}/api/mcp/tools/upload-image`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      image: sample1x1Png,
+      filename: 'sample-ai-creative-hero'
+    })
+  });
+
+  assert.equal(res.status, 201);
+  const data = await res.json();
+  assert.equal(data.success, true);
+  assert.ok(data.url.startsWith('https://'));
+  assert.ok(data.url.includes('blog-images'));
+  assert.ok(data.filename.includes('sample-ai-creative-hero'));
+  assert.equal(data.mimeType, 'image/png');
+  assert.ok(data.size > 0);
+  uploadedImageUrl = data.url;
+
+  // Test rejection of invalid payload
+  const badRes = await fetch(`${baseUrl}/api/mcp/tools/upload-image`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      image: 'data:image/png;base64,invalid-base64-random-string'
+    })
+  });
+  assert.equal(badRes.status, 400);
+});
+
+// 17. MCP Verify Blog Image Endpoint
+test('MCP Verify Image: /tools/verify-image/:id confirms image accessibility and association', async () => {
+  assert.ok(createdDraftId > 0);
+  assert.ok(uploadedImageUrl);
+
+  // Attach authentic uploaded image to draft
+  const attachRes = await fetch(`${baseUrl}/api/mcp/tools/attach-image`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      id: createdDraftId,
+      image_url: uploadedImageUrl,
+      image_alt: 'Futuristic AI Creative design dashboard render in dark mode with lime accents'
+    })
+  });
+  assert.equal(attachRes.status, 200);
+
+  const res = await fetch(`${baseUrl}/api/mcp/tools/verify-image/${createdDraftId}`, {
+    headers: { Authorization: `Bearer ${mcpToken}` }
+  });
+
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.success, true);
+  assert.equal(data.id, createdDraftId);
+  assert.equal(data.accessible, true);
+  assert.equal(data.imageUrl, uploadedImageUrl);
+  assert.ok(data.imageAlt.length > 0);
+
+  // Test non-existent article
+  const notFoundRes = await fetch(`${baseUrl}/api/mcp/tools/verify-image/999999`, {
+    headers: { Authorization: `Bearer ${mcpToken}` }
+  });
+  assert.equal(notFoundRes.status, 400);
+});
+
+// 18. MCP Update Blog Image Metadata Endpoint
+test('MCP Image Metadata: /tools/image-metadata/:id updates image alt text and caption', async () => {
+  assert.ok(createdDraftId > 0);
+  const newAltText = 'Updated dark-mode dashboard with responsive metrics and neon accents';
+
+  const res = await fetch(`${baseUrl}/api/mcp/tools/image-metadata/${createdDraftId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      image_alt: newAltText,
+      caption: 'Figure 1: Live performance telemetry dashboard'
+    })
+  });
+
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.success, true);
+  assert.equal(data.image_alt, newAltText);
+
+  // Confirm in database
+  const updated = getBlogById(createdDraftId);
+  assert.equal(updated?.image_alt, newAltText);
+  assert.ok(updated?.admin_notes?.includes('Figure 1'));
+});
+
+// 19. MCP Schedule Blog Draft — Rejection without explicit user approval
+test('MCP Schedule Draft: Rejects scheduling when approved !== true', async () => {
+  assert.ok(createdDraftId > 0);
+
+  const res = await fetch(`${baseUrl}/api/mcp/tools/schedule`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      id: createdDraftId,
+      scheduled_at: '2026-11-15T10:00:00+05:30',
+      approved: false
+    })
+  });
+
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.ok(data.error.includes('Approval required'));
+  assert.ok(data.error.includes('approved: true'));
+
+  // Confirm status remains Draft
+  const current = getBlogById(createdDraftId);
+  assert.equal(current?.status, 'Draft');
+});
+
+// 20. MCP Schedule Blog Draft — Rejection with past publication date
+test('MCP Schedule Draft: Rejects scheduling when publication date is in the past', async () => {
+  assert.ok(createdDraftId > 0);
+
+  const res = await fetch(`${baseUrl}/api/mcp/tools/schedule`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      id: createdDraftId,
+      scheduled_at: '2020-01-01T10:00:00+05:30',
+      approved: true
+    })
+  });
+
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.ok(data.error.includes('must be in the future'));
+});
+
+// 21. MCP Schedule Blog Draft — Successful Scheduling with IST Timezone
+test('MCP Schedule Draft: Successfully schedules approved draft in Asia/Kolkata timezone', async () => {
+  assert.ok(createdDraftId > 0);
+  const futureSchedule = '2026-11-20T10:00:00+05:30';
+
+  const res = await fetch(`${baseUrl}/api/mcp/tools/schedule`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      id: createdDraftId,
+      scheduled_at: futureSchedule,
+      approved: true
+    })
+  });
+
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.success, true);
+  assert.equal(data.id, createdDraftId);
+  assert.equal(data.status, 'Scheduled');
+  assert.equal(data.scheduled_at, '2026-11-20T04:30:00.000Z');
+  assert.ok(data.scheduled_at_ist.includes('2026'));
+  assert.ok(data.scheduled_at_ist.includes('(IST)'));
+  assert.ok(data.calendarUrl.includes('/admin'));
+
+  // Confirm in database
+  const inDb = getBlogById(createdDraftId);
+  assert.equal(inDb?.status, 'Scheduled');
+  assert.equal(inDb?.scheduled_at, '2026-11-20T04:30:00.000Z');
+
+  // Verify server-side scheduler does not publish future date prematurely
+  const schedulerRun = await publishDueScheduledBlogsReliable();
+  const checkAgain = getBlogById(createdDraftId);
+  assert.equal(checkAgain?.status, 'Scheduled', 'Future scheduled article must remain Scheduled until its time arrives');
+});
+
+// 22. MCP OpenAPI 3.1 Specification Completeness
+test('OpenAPI: Specification contains all required new tool paths and single security scheme', async () => {
+  const res = await fetch(`${baseUrl}/api/mcp/openapi.json`);
+  assert.equal(res.status, 200);
+  const spec = await res.json();
+
+  // All tool paths
+  assert.ok(spec.paths['/tools/categories']);
+  assert.ok(spec.paths['/tools/articles']);
+  assert.ok(spec.paths['/tools/drafts']);
+  assert.ok(spec.paths['/tools/upload-image']);
+  assert.ok(spec.paths['/tools/attach-image']);
+  assert.ok(spec.paths['/tools/verify-image/{id}']);
+  assert.ok(spec.paths['/tools/image-metadata/{id}']);
+  assert.ok(spec.paths['/tools/schedule']);
+  assert.ok(spec.paths['/tools/seo-check']);
+
+  // All schemas in components.schemas
+  assert.ok(spec.components.schemas.CreateBlogDraftRequest.properties);
+  assert.ok(spec.components.schemas.UpdateBlogDraftRequest.properties);
+  assert.ok(spec.components.schemas.UploadImageRequest.properties);
+  assert.ok(spec.components.schemas.AttachImageRequest.properties);
+  assert.ok(spec.components.schemas.UpdateImageMetadataRequest.properties);
+  assert.ok(spec.components.schemas.ScheduleBlogDraftRequest.properties);
+  assert.ok(spec.components.schemas.SeoCheckRequest.properties);
+
+  // Exactly 1 security scheme
+  const secSchemes = Object.keys(spec.components.securitySchemes);
+  assert.equal(secSchemes.length, 1);
+  assert.equal(secSchemes[0], 'ApiKeyAuth');
+});
+

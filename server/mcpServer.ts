@@ -117,17 +117,67 @@ export const MCP_TOOLS: Tool[] = [
     }
   },
   {
+    name: 'upload_blog_image',
+    description: "Upload an image (base64 data URL or hosted public HTTPS image URL from ChatGPT) to Supabase Storage ('blog-images' bucket) and return its permanent public CDN URL.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        image: { type: 'string', description: 'Base64 data URL (e.g. data:image/png;base64,...) or hosted public HTTPS image URL' },
+        filename: { type: 'string', description: 'Optional descriptive filename or article slug prefix (e.g. web-architecture-hero)' }
+      },
+      required: ['image']
+    }
+  },
+  {
     name: 'attach_blog_image',
-    description: "Upload an image (base64 data URL or hosted HTTPS URL) to Supabase Storage ('blog-images') and attach it to a draft article.",
+    description: "Attach an image to an existing blog draft as its featured image. Accepts a permanent image URL (from upload_blog_image or storage) or base64 data URL.",
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'number', description: 'Draft article ID' },
-        image: { type: 'string', description: 'Base64 data URL or hosted HTTPS image URL' },
+        image_url: { type: 'string', description: 'Permanent public HTTPS image URL (from upload_blog_image or Supabase storage)' },
+        image: { type: 'string', description: 'Alternative: Base64 data URL or hosted image URL' },
         image_alt: { type: 'string', description: 'Descriptive alt text for accessibility and SEO' },
         caption: { type: 'string', description: 'Optional image caption' }
       },
-      required: ['id', 'image', 'image_alt']
+      required: ['id', 'image_alt']
+    }
+  },
+  {
+    name: 'verify_blog_image',
+    description: 'Verify that a blog draft has a valid featured image attached and that the image URL is accessible over HTTP (200 OK).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Draft article ID to verify' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'update_blog_image_metadata',
+    description: 'Update the alt text or caption of an existing blog draft without re-uploading the image file.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Draft article ID' },
+        image_alt: { type: 'string', description: 'Updated descriptive alt text' },
+        caption: { type: 'string', description: 'Updated caption' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'schedule_blog_draft',
+    description: 'Schedule an approved blog draft for publication using the Dawnexus publication calendar. Requires explicit human user approval confirmation (approved: true), valid future date/time in Asia/Kolkata timezone, complete metadata and featured image, and deterministic SEO quality score >= 90/100.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Draft article ID' },
+        scheduled_at: { type: 'string', description: 'Publication date/time in Asia/Kolkata timezone (e.g. 2026-10-25T10:00:00+05:30 or 2026-10-25 10:00:00)' },
+        approved: { type: 'boolean', description: 'Must be true confirming the user has reviewed and explicitly approved the draft and publication schedule' }
+      },
+      required: ['id', 'scheduled_at', 'approved']
     }
   },
   {
@@ -208,8 +258,30 @@ export function createDawnexusMcpServer(): Server {
           break;
         }
 
+        case 'upload_blog_image': {
+          result = await McpService.uploadBlogImage(args as any, callerIp);
+          break;
+        }
+
         case 'attach_blog_image': {
           result = await McpService.attachBlogImage(args as any, callerIp);
+          break;
+        }
+
+        case 'verify_blog_image': {
+          const id = Number((args as any)?.id);
+          if (!id) throw new Error('Article ID is required for verify_blog_image.');
+          result = await McpService.verifyBlogImage(id, callerIp);
+          break;
+        }
+
+        case 'update_blog_image_metadata': {
+          result = await McpService.updateBlogImageMetadata(args as any, callerIp);
+          break;
+        }
+
+        case 'schedule_blog_draft': {
+          result = await McpService.scheduleBlogDraft(args as any, callerIp);
           break;
         }
 
@@ -335,14 +407,39 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
             image_alt: { type: 'string', description: 'Updated image alt text' }
           }
         },
+        UploadImageRequest: {
+          type: 'object',
+          required: ['image'],
+          properties: {
+            image: { type: 'string', description: 'Base64 data URL (e.g. data:image/png;base64,...) or hosted public HTTPS image URL' },
+            filename: { type: 'string', description: 'Optional descriptive filename or article slug prefix' }
+          }
+        },
         AttachImageRequest: {
           type: 'object',
-          required: ['id', 'image', 'image_alt'],
+          required: ['id', 'image_alt'],
           properties: {
             id: { type: 'integer', description: 'Draft article ID' },
-            image: { type: 'string', description: 'Base64 data URL or hosted HTTPS image URL' },
+            image_url: { type: 'string', description: 'Permanent public HTTPS image URL (from upload_blog_image or storage)' },
+            image: { type: 'string', description: 'Alternative: Base64 data URL or hosted image URL' },
             image_alt: { type: 'string', description: 'Descriptive alt text for image' },
             caption: { type: 'string', description: 'Optional image caption' }
+          }
+        },
+        UpdateImageMetadataRequest: {
+          type: 'object',
+          properties: {
+            image_alt: { type: 'string', description: 'Updated descriptive alt text' },
+            caption: { type: 'string', description: 'Updated caption' }
+          }
+        },
+        ScheduleBlogDraftRequest: {
+          type: 'object',
+          required: ['id', 'scheduled_at', 'approved'],
+          properties: {
+            id: { type: 'integer', description: 'Draft article ID' },
+            scheduled_at: { type: 'string', description: 'Publication date/time in Asia/Kolkata timezone (e.g. 2026-10-25T10:00:00+05:30 or 2026-10-25 10:00:00)' },
+            approved: { type: 'boolean', description: 'Must be true confirming the user has reviewed and explicitly approved the draft and publication schedule' }
           }
         },
         SeoCheckRequest: {
@@ -436,11 +533,29 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           responses: { '200': { description: 'Draft updated' } }
         }
       },
+      '/tools/upload-image': {
+        post: {
+          operationId: 'upload_blog_image',
+          summary: 'Upload image to Supabase Storage',
+          description: 'Uploads an image to the Supabase Storage blog-images bucket and returns the permanent CDN URL.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/UploadImageRequest'
+                }
+              }
+            }
+          },
+          responses: { '201': { description: 'Image uploaded' }, '400': { description: 'Invalid image payload' } }
+        }
+      },
       '/tools/attach-image': {
         post: {
           operationId: 'attach_blog_image',
-          summary: 'Upload and attach image to draft',
-          description: 'Uploads image to Supabase Storage and updates draft featured image.',
+          summary: 'Attach image to blog draft',
+          description: 'Attaches permanent image URL or uploads image to Supabase Storage and updates draft featured image.',
           requestBody: {
             required: true,
             content: {
@@ -452,6 +567,52 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
             }
           },
           responses: { '200': { description: 'Image attached' } }
+        }
+      },
+      '/tools/verify-image/{id}': {
+        get: {
+          operationId: 'verify_blog_image',
+          summary: 'Verify draft featured image exists and is accessible',
+          description: 'Checks that the draft has a featured image and that the image URL is reachable over HTTP (200 OK).',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+          responses: { '200': { description: 'Image is accessible' }, '422': { description: 'Image inaccessible' } }
+        }
+      },
+      '/tools/image-metadata/{id}': {
+        patch: {
+          operationId: 'update_blog_image_metadata',
+          summary: 'Update draft image alt text or caption',
+          description: 'Updates alt text or caption on an existing draft without re-uploading the image.',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/UpdateImageMetadataRequest'
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Metadata updated' } }
+        }
+      },
+      '/tools/schedule': {
+        post: {
+          operationId: 'schedule_blog_draft',
+          summary: 'Schedule approved draft for publication',
+          description: 'Schedules an approved draft for publication in the Dawnexus publication calendar. Requires approved: true and SEO score >= 90.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ScheduleBlogDraftRequest'
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Article scheduled' }, '400': { description: 'Validation failed' } }
         }
       },
       '/tools/seo-check': {
@@ -575,8 +736,20 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
         case 'update_blog_draft':
           resultData = await McpService.updateBlogDraft(Number(toolArgs.id), toolArgs, callerIp);
           break;
+        case 'upload_blog_image':
+          resultData = await McpService.uploadBlogImage(toolArgs, callerIp);
+          break;
         case 'attach_blog_image':
           resultData = await McpService.attachBlogImage(toolArgs, callerIp);
+          break;
+        case 'verify_blog_image':
+          resultData = await McpService.verifyBlogImage(Number(toolArgs.id), callerIp);
+          break;
+        case 'update_blog_image_metadata':
+          resultData = await McpService.updateBlogImageMetadata(toolArgs, callerIp);
+          break;
+        case 'schedule_blog_draft':
+          resultData = await McpService.scheduleBlogDraft(toolArgs, callerIp);
           break;
         case 'run_seo_quality_check':
           resultData = McpService.runSeoQualityCheck(toolArgs, callerIp);
@@ -660,6 +833,16 @@ mcpRouter.patch('/tools/drafts/:id', async (req: Request, res: Response) => {
   }
 });
 
+mcpRouter.post('/tools/upload-image', async (req: Request, res: Response) => {
+  try {
+    const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
+    const result = await McpService.uploadBlogImage(req.body, callerIp);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to upload image' });
+  }
+});
+
 mcpRouter.post('/tools/attach-image', async (req: Request, res: Response) => {
   try {
     const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
@@ -667,6 +850,41 @@ mcpRouter.post('/tools/attach-image', async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Failed to attach image' });
+  }
+});
+
+mcpRouter.get('/tools/verify-image/:id', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
+    const result = await McpService.verifyBlogImage(id, callerIp);
+    if (!result.accessible) {
+      return res.status(422).json(result);
+    }
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to verify image' });
+  }
+});
+
+mcpRouter.patch('/tools/image-metadata/:id', async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
+    const result = await McpService.updateBlogImageMetadata({ id, ...req.body }, callerIp);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to update image metadata' });
+  }
+});
+
+mcpRouter.post('/tools/schedule', async (req: Request, res: Response) => {
+  try {
+    const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
+    const result = await McpService.scheduleBlogDraft(req.body, callerIp);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to schedule draft' });
   }
 });
 

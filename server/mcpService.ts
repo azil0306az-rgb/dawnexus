@@ -710,13 +710,225 @@ export class McpService {
   }
 
   /**
-   * Tool 7: attach_blog_image
-   * Uploads base64 or hosted image to Supabase Storage and attaches it to a draft.
+   * Helper: Parse date for Asia/Kolkata timezone convention
+   */
+  static parseKolkataScheduleDate(inputDateStr: string): Date {
+    const trimmed = (inputDateStr || '').trim();
+    if (!trimmed) {
+      throw new Error('Publication date is required.');
+    }
+
+    let parseable = trimmed;
+
+    // Date-only format YYYY-MM-DD -> default 09:00:00 IST (+05:30)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      parseable = `${trimmed}T09:00:00+05:30`;
+    }
+    // ISO without timezone offset e.g. YYYY-MM-DDTHH:mm or YYYY-MM-DDTHH:mm:ss
+    else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(trimmed)) {
+      parseable = `${trimmed}+05:30`;
+    }
+    // Space-separated date and time without offset e.g. YYYY-MM-DD HH:mm:ss or YYYY-MM-DD HH:mm
+    else if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+      parseable = `${trimmed.replace(/\s+/, 'T')}+05:30`;
+    }
+
+    const parsed = new Date(parseable);
+    if (isNaN(parsed.getTime())) {
+      throw new Error(
+        `Invalid scheduled_at date/time format: "${inputDateStr}". Please supply an ISO 8601 string or YYYY-MM-DDTHH:mm:ss+05:30 in Asia/Kolkata timezone.`
+      );
+    }
+
+    return parsed;
+  }
+
+  /**
+   * Helper: Format Date into Asia/Kolkata IST string
+   */
+  static formatKolkataDate(date: Date): string {
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'full',
+      timeStyle: 'short'
+    }).format(date) + ' (IST)';
+  }
+
+  /**
+   * Helper: Fetch buffer from base64 data URL or hosted public image URL
+   */
+  static async fetchImageBuffer(source: string): Promise<{ buffer: Buffer; mimeType?: string }> {
+    const trimmed = (source || '').trim();
+    const dataUrlMatch = trimmed.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/s);
+    if (dataUrlMatch) {
+      const mimeType = dataUrlMatch[1];
+      const buffer = Buffer.from(dataUrlMatch[2], 'base64');
+      return { buffer, mimeType };
+    }
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      const res = await fetch(trimmed, {
+        headers: { 'User-Agent': 'Dawnexus-Image-Transfer/1.0' },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to download image from source URL (HTTP ${res.status} ${res.statusText})`);
+      }
+      const arrayBuffer = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const mimeType = res.headers.get('content-type') || undefined;
+      return { buffer, mimeType };
+    }
+
+    // Raw base64 string check
+    if (trimmed.length > 50 && /^[A-Za-z0-9+/=\r\n\s]+$/.test(trimmed.slice(0, 50))) {
+      try {
+        const buffer = Buffer.from(trimmed.replace(/\s+/g, ''), 'base64');
+        return { buffer };
+      } catch {}
+    }
+
+    throw new Error('Invalid image format. Provide a base64 data URL (data:image/...) or a hosted public HTTPS image URL.');
+  }
+
+  /**
+   * Helper: Validate image file type and magic bytes (PNG, JPEG, WEBP, GIF) <= 5MB
+   */
+  static validateImageBuffer(buffer: Buffer): { mimeType: string; extension: string } {
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Validation error: Image payload is empty.');
+    }
+
+    if (buffer.length > 5 * 1024 * 1024) {
+      throw new Error(`Validation error: Image file size (${(buffer.length / (1024 * 1024)).toFixed(2)} MB) exceeds 5MB limit.`);
+    }
+
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+      return { mimeType: 'image/png', extension: 'png' };
+    }
+
+    // JPEG: FF D8 FF
+    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+      return { mimeType: 'image/jpeg', extension: 'jpg' };
+    }
+
+    // WEBP: RIFF....WEBP
+    if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+      return { mimeType: 'image/webp', extension: 'webp' };
+    }
+
+    // GIF: GIF8
+    if (buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === 'GIF8') {
+      return { mimeType: 'image/gif', extension: 'gif' };
+    }
+
+    throw new Error('Validation error: Unsupported or corrupted image format. Only PNG, JPEG, WEBP, and GIF images are permitted.');
+  }
+
+  /**
+   * Helper: Upload validated buffer to Supabase Storage bucket 'blog-images'
+   */
+  static async uploadBufferToSupabaseStorage(
+    buffer: Buffer,
+    mimeType: string,
+    extension: string,
+    prefix: string = 'mcp-blog'
+  ): Promise<{ publicUrl: string; filename: string }> {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase Storage is not configured on the server (missing SUPABASE_SERVICE_ROLE_KEY).');
+    }
+
+    const supabase = createSupabaseClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false }
+    });
+
+    const cleanPrefix = prefix.toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 30) || 'mcp-blog';
+    const safeName = `${cleanPrefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${extension}`;
+
+    const { data, error } = await supabase.storage
+      .from('blog-images')
+      .upload(safeName, buffer, {
+        contentType: mimeType,
+        upsert: true
+      });
+
+    if (error || !data) {
+      throw new Error(`Supabase Storage upload rejected: ${error?.message || 'No data returned'}`);
+    }
+
+    const { data: pubData } = supabase.storage
+      .from('blog-images')
+      .getPublicUrl(safeName);
+
+    return {
+      publicUrl: pubData.publicUrl,
+      filename: safeName
+    };
+  }
+
+  /**
+   * Tool: upload_blog_image
+   * Securely accepts image content (base64 data URL or hosted public URL such as DALL-E),
+   * validates magic bytes and size (<= 5MB), and uploads to Supabase Storage bucket 'blog-images'.
+   */
+  static async uploadBlogImage(
+    input: { image: string; filename?: string },
+    callerIp: string = 'mcp-client'
+  ): Promise<{
+    success: boolean;
+    url: string;
+    filename: string;
+    size: number;
+    mimeType: string;
+    message: string;
+  }> {
+    if (!input.image || typeof input.image !== 'string' || !input.image.trim()) {
+      throw new Error('Image data (base64 data URL or hosted HTTPS image URL) is required.');
+    }
+
+    const { buffer } = await McpService.fetchImageBuffer(input.image);
+    const validated = McpService.validateImageBuffer(buffer);
+
+    const prefix = input.filename ? input.filename.replace(/\.[^/.]+$/, '') : 'mcp-blog';
+    const { publicUrl, filename } = await McpService.uploadBufferToSupabaseStorage(
+      buffer,
+      validated.mimeType,
+      validated.extension,
+      prefix
+    );
+
+    recordMcpAudit({
+      tool: 'upload_blog_image',
+      action: 'write',
+      status: 'success',
+      callerIp,
+      details: `Uploaded image ${filename} (${buffer.length} bytes, ${validated.mimeType}) to Supabase Storage.`
+    });
+
+    return {
+      success: true,
+      url: publicUrl,
+      filename,
+      size: buffer.length,
+      mimeType: validated.mimeType,
+      message: 'Image successfully validated and uploaded to Supabase Storage (blog-images).'
+    };
+  }
+
+  /**
+   * Tool: attach_blog_image
+   * Attaches an image to an existing draft. Supports permanent image URL (from upload_blog_image)
+   * or direct base64 / URL input.
    */
   static async attachBlogImage(
     input: {
       id: number;
-      image: string; // base64 data URL or hosted https URL
+      image_url?: string;
+      image?: string;
       image_alt: string;
       caption?: string;
     },
@@ -728,6 +940,7 @@ export class McpService {
     image_alt: string;
     message: string;
   }> {
+    await refreshFromPersistentStore();
     const existing = getBlogById(input.id);
     if (!existing) {
       throw new Error(`Article with ID #${input.id} not found.`);
@@ -737,68 +950,39 @@ export class McpService {
       throw new Error(`Cannot attach image to article #${input.id} because its status is '${existing.status}'. Only drafts can be modified.`);
     }
 
-    if (!input.image || typeof input.image !== 'string' || !input.image.trim()) {
-      throw new Error('Image data or URL is required.');
+    if (!input.image_alt || typeof input.image_alt !== 'string' || !input.image_alt.trim()) {
+      throw new Error('Descriptive image_alt text is required for accessibility and SEO.');
     }
 
-    let finalImageUrl = input.image.trim();
+    let finalImageUrl = (input.image_url || '').trim();
 
-    // Check if it's a data URL
-    const matches = input.image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (matches && matches.length === 3) {
-      const mimeType = matches[1];
-      const base64Data = matches[2];
-      const buffer = Buffer.from(base64Data, 'base64');
-
-      if (buffer.length > 5 * 1024 * 1024) {
-        throw new Error('Image file size exceeds 5MB limit.');
+    if (!finalImageUrl && input.image) {
+      const rawImage = input.image.trim();
+      // If base64 or raw data, upload to Supabase Storage
+      if (rawImage.startsWith('data:image/') || (!rawImage.startsWith('http://') && !rawImage.startsWith('https://'))) {
+        const uploadRes = await McpService.uploadBlogImage({ image: rawImage, filename: existing.slug }, callerIp);
+        finalImageUrl = uploadRes.url;
+      } else if (rawImage.startsWith('http://') || rawImage.startsWith('https://')) {
+        // If temporary DALL-E URL (Azure blob storage), transfer to permanent Supabase Storage
+        if (rawImage.includes('blob.core.windows.net') || rawImage.includes('oaidalleapiprodscus')) {
+          const uploadRes = await McpService.uploadBlogImage({ image: rawImage, filename: existing.slug }, callerIp);
+          finalImageUrl = uploadRes.url;
+        } else {
+          finalImageUrl = rawImage;
+        }
       }
-
-      const extension = (mimeType.split('/')[1] || 'png').replace('jpeg', 'jpg');
-      const safeName = `mcp-blog-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${extension}`;
-
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-      if (!supabaseUrl || !supabaseKey) {
-        throw new Error('Supabase Storage is not configured on the server.');
-      }
-
-      const supabase = createSupabaseClient(supabaseUrl, supabaseKey, {
-        auth: { persistSession: false }
-      });
-
-      const { data, error } = await supabase.storage
-        .from('blog-images')
-        .upload(safeName, buffer, {
-          contentType: mimeType,
-          upsert: true
-        });
-
-      if (error || !data) {
-        recordMcpAudit({
-          tool: 'attach_blog_image',
-          action: 'write',
-          status: 'failed',
-          callerIp,
-          targetId: input.id,
-          details: `Supabase Storage upload failed: ${error?.message}`
-        });
-        throw new Error(`Supabase Storage upload failed: ${error?.message || 'No data returned'}`);
-      }
-
-      const { data: pubData } = supabase.storage
-        .from('blog-images')
-        .getPublicUrl(safeName);
-
-      finalImageUrl = pubData.publicUrl;
-    } else if (!finalImageUrl.startsWith('http://') && !finalImageUrl.startsWith('https://')) {
-      throw new Error('Invalid image format. Provide a valid base64 data URL or hosted HTTPS image URL.');
     }
+
+    if (!finalImageUrl) {
+      throw new Error('Either image_url or image data must be provided.');
+    }
+
+    const captionNote = input.caption ? ` Caption: "${input.caption.trim()}".` : '';
 
     const updated = updateBlog(input.id, {
       featured_image: finalImageUrl,
-      image_alt: (input.image_alt || existing.image_alt || existing.title).trim()
+      image_alt: input.image_alt.trim(),
+      admin_notes: `${existing.admin_notes || ''}\n[MCP AI SEO Studio] Featured image attached on ${new Date().toISOString()}.${captionNote}`.trim()
     });
 
     if (!updated) {
@@ -821,7 +1005,333 @@ export class McpService {
       id: input.id,
       featured_image: finalImageUrl,
       image_alt: updated.image_alt,
-      message: `Featured image successfully uploaded and attached to draft #${input.id}.`
+      message: `Featured image successfully attached to draft #${input.id}.`
+    };
+  }
+
+  /**
+   * Tool: verify_blog_image
+   * Verifies that the draft exists, has a featured image, and that the image URL is accessible over HTTP (200 OK).
+   */
+  static async verifyBlogImage(
+    id: number,
+    callerIp: string = 'mcp-client'
+  ): Promise<{
+    success: boolean;
+    id: number;
+    accessible: boolean;
+    imageUrl: string;
+    imageAlt: string;
+    httpStatus?: number;
+    contentType?: string;
+    message: string;
+  }> {
+    await refreshFromPersistentStore();
+    const blog = getBlogById(id);
+    if (!blog) {
+      throw new Error(`Article with ID #${id} not found.`);
+    }
+
+    if (!blog.featured_image || !blog.featured_image.trim()) {
+      throw new Error(`Article #${id} does not have a featured image attached.`);
+    }
+
+    const imageUrl = blog.featured_image.trim();
+    let testUrl = imageUrl;
+    if (testUrl.startsWith('/')) {
+      testUrl = `https://dawnexus.in${testUrl}`;
+    }
+
+    try {
+      let httpStatus = 200;
+      let contentType = 'image/*';
+
+      if (testUrl.startsWith('http://') || testUrl.startsWith('https://')) {
+        let probeRes: Response;
+        try {
+          probeRes = await fetch(testUrl, {
+            method: 'HEAD',
+            signal: AbortSignal.timeout(6000),
+            headers: { 'User-Agent': 'Dawnexus-Image-Verifier/1.0' }
+          });
+          if (probeRes.status === 405) {
+            probeRes = await fetch(testUrl, {
+              method: 'GET',
+              signal: AbortSignal.timeout(6000),
+              headers: { 'User-Agent': 'Dawnexus-Image-Verifier/1.0', Range: 'bytes=0-100' }
+            });
+          }
+        } catch {
+          probeRes = await fetch(testUrl, {
+            method: 'GET',
+            signal: AbortSignal.timeout(6000),
+            headers: { 'User-Agent': 'Dawnexus-Image-Verifier/1.0' }
+          });
+        }
+
+        httpStatus = probeRes.status;
+        contentType = probeRes.headers.get('content-type') || 'image/*';
+
+        if (!probeRes.ok) {
+          recordMcpAudit({
+            tool: 'verify_blog_image',
+            action: 'audit',
+            status: 'failed',
+            callerIp,
+            targetId: id,
+            details: `Image verification failed: ${imageUrl} returned HTTP ${httpStatus}.`
+          });
+
+          return {
+            success: false,
+            id,
+            accessible: false,
+            imageUrl,
+            imageAlt: blog.image_alt,
+            httpStatus,
+            contentType,
+            message: `Featured image exists on article #${id} but failed HTTP accessibility verification (HTTP ${httpStatus}).`
+          };
+        }
+      }
+
+      recordMcpAudit({
+        tool: 'verify_blog_image',
+        action: 'audit',
+        status: 'success',
+        callerIp,
+        targetId: id,
+        details: `Verified featured image on article #${id} (${imageUrl}). HTTP ${httpStatus}.`
+      });
+
+      return {
+        success: true,
+        id,
+        accessible: true,
+        imageUrl,
+        imageAlt: blog.image_alt,
+        httpStatus,
+        contentType,
+        message: `Featured image is verified, accessible (HTTP ${httpStatus}), and correctly associated with draft #${id}.`
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        id,
+        accessible: false,
+        imageUrl,
+        imageAlt: blog.image_alt,
+        message: `Image verification encountered an error probing ${imageUrl}: ${err?.message || err}`
+      };
+    }
+  }
+
+  /**
+   * Tool: update_blog_image_metadata
+   * Updates image alt text or caption on an existing draft without re-uploading the image.
+   */
+  static async updateBlogImageMetadata(
+    input: { id: number; image_alt?: string; caption?: string },
+    callerIp: string = 'mcp-client'
+  ): Promise<{
+    success: boolean;
+    id: number;
+    featured_image: string;
+    image_alt: string;
+    message: string;
+  }> {
+    await refreshFromPersistentStore();
+    const blog = getBlogById(input.id);
+    if (!blog) {
+      throw new Error(`Article with ID #${input.id} not found.`);
+    }
+
+    if (blog.status !== 'Draft') {
+      throw new Error(`Cannot update image metadata for article #${input.id} because status is '${blog.status}'. Only drafts can be modified.`);
+    }
+
+    const newAlt = input.image_alt !== undefined ? input.image_alt.trim() : blog.image_alt;
+    const captionNote = input.caption ? ` Caption: "${input.caption.trim()}".` : '';
+
+    const updated = updateBlog(input.id, {
+      image_alt: newAlt,
+      admin_notes: `${blog.admin_notes || ''}\n[MCP AI SEO Studio] Image metadata updated on ${new Date().toISOString()}.${captionNote}`.trim()
+    });
+
+    if (!updated) {
+      throw new Error(`Failed to update draft #${input.id}.`);
+    }
+
+    await persistBlog(updated);
+
+    recordMcpAudit({
+      tool: 'update_blog_image_metadata',
+      action: 'write',
+      status: 'success',
+      callerIp,
+      targetId: input.id,
+      details: `Updated image alt text for draft #${input.id}.`
+    });
+
+    return {
+      success: true,
+      id: input.id,
+      featured_image: updated.featured_image,
+      image_alt: updated.image_alt,
+      message: `Image metadata for draft #${input.id} successfully updated.`
+    };
+  }
+
+  /**
+   * Tool: schedule_blog_draft
+   * Schedules an approved draft using the Dawnexus publication calendar.
+   * Requires human approval (approved: true), future date/time in Asia/Kolkata timezone,
+   * complete metadata/image, and SEO quality score >= 90/100.
+   */
+  static async scheduleBlogDraft(
+    input: { id: number; scheduled_at: string; approved: boolean },
+    callerIp: string = 'mcp-client'
+  ): Promise<{
+    success: boolean;
+    id: number;
+    title: string;
+    slug: string;
+    status: string;
+    scheduled_at: string;
+    scheduled_at_ist: string;
+    seoScore: number;
+    previewUrl: string;
+    calendarUrl: string;
+    message: string;
+  }> {
+    // 1. Approval Gate: ChatGPT cannot schedule without explicit human approval confirmation
+    if (input.approved !== true) {
+      recordMcpAudit({
+        tool: 'schedule_blog_draft',
+        action: 'write',
+        status: 'rejected',
+        callerIp,
+        targetId: input.id,
+        details: 'Rejected attempt to schedule draft without explicit human approval (approved !== true).'
+      });
+      throw new Error(
+        `Approval required: Draft #${input.id} cannot be scheduled without explicit approval confirmation (approved: true) from the user. Please present the draft preview and proposed schedule to the user for explicit approval first.`
+      );
+    }
+
+    await refreshFromPersistentStore();
+    const blog = getBlogById(input.id);
+    if (!blog) {
+      throw new Error(`Article with ID #${input.id} not found.`);
+    }
+
+    // 2. Draft Status Enforcement: Cannot schedule already Published articles
+    if (blog.status === 'Published') {
+      throw new Error(`Action prohibited: Article #${input.id} is already published. Published articles cannot be scheduled.`);
+    }
+
+    // 3. Completeness Checks
+    if (!blog.title || !blog.title.trim()) {
+      throw new Error(`Cannot schedule draft #${input.id}: Article title is missing.`);
+    }
+    if (!blog.content || blog.content.trim().length < 500) {
+      throw new Error(`Cannot schedule draft #${input.id}: Article content is incomplete (minimum 500 characters required).`);
+    }
+    if (!blog.category || !(VALID_CATEGORIES as readonly string[]).includes(blog.category)) {
+      throw new Error(`Cannot schedule draft #${input.id}: Category '${blog.category}' is invalid.`);
+    }
+    if (!blog.primary_keyword || !blog.primary_keyword.trim()) {
+      throw new Error(`Cannot schedule draft #${input.id}: Primary target keyword is required.`);
+    }
+    if (!blog.featured_image || !blog.featured_image.trim()) {
+      throw new Error(`Cannot schedule draft #${input.id}: Featured image is missing. Please create and attach a featured image before scheduling.`);
+    }
+    if (!blog.image_alt || !blog.image_alt.trim()) {
+      throw new Error(`Cannot schedule draft #${input.id}: Featured image alt text is missing.`);
+    }
+
+    // 4. Deterministic SEO Quality Check (>= 90 score required)
+    const { items: allBlogs } = getBlogs({ limit: 100 });
+    const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
+    const seoReport = calculateSeoScore(
+      {
+        title: blog.title,
+        slug: blog.slug,
+        content: blog.content,
+        excerpt: blog.excerpt,
+        category: blog.category,
+        primary_keyword: blog.primary_keyword,
+        secondary_keywords: blog.secondary_keywords,
+        search_intent: blog.search_intent,
+        target_audience: blog.target_audience,
+        seo_title: blog.seo_title,
+        meta_description: blog.meta_description,
+        canonical_url: blog.canonical_url,
+        featured_image: blog.featured_image,
+        image_alt: blog.image_alt
+      },
+      publishedSlugs
+    );
+
+    if (seoReport.totalScore < 90 || !seoReport.meetsThreshold) {
+      const issues = [...seoReport.mandatoryFailures, ...seoReport.recommendations].slice(0, 3).join('; ');
+      recordMcpAudit({
+        tool: 'schedule_blog_draft',
+        action: 'write',
+        status: 'rejected',
+        callerIp,
+        targetId: input.id,
+        details: `Scheduling rejected: SEO score ${seoReport.totalScore}/100 is below 90 threshold. ${issues}`
+      });
+      throw new Error(
+        `Quality check failed: Article SEO score is ${seoReport.totalScore}/100 (minimum 90/100 required for scheduling). Issues to resolve: ${issues}`
+      );
+    }
+
+    // 5. Timezone & Schedule Date Validation (Asia/Kolkata convention)
+    const targetDate = McpService.parseKolkataScheduleDate(input.scheduled_at);
+    if (targetDate.getTime() <= Date.now() + 60000) {
+      throw new Error('Scheduled publication time must be in the future (at least 1-2 minutes from now).');
+    }
+
+    const isoScheduledAt = targetDate.toISOString();
+    const formattedIst = McpService.formatKolkataDate(targetDate);
+
+    // 6. Update Article Status to Scheduled
+    const updated = updateBlog(input.id, {
+      status: 'Scheduled',
+      scheduled_at: isoScheduledAt,
+      admin_notes: `${blog.admin_notes || ''}\n[MCP AI SEO Studio] Approved and scheduled by user for ${formattedIst} on ${new Date().toISOString()}`.trim()
+    });
+
+    if (!updated) {
+      throw new Error(`Failed to update draft #${input.id} to scheduled status.`);
+    }
+
+    // 7. Persist to Supabase
+    await persistBlog(updated);
+
+    recordMcpAudit({
+      tool: 'schedule_blog_draft',
+      action: 'write',
+      status: 'success',
+      callerIp,
+      targetId: input.id,
+      details: `Draft #${input.id} approved and scheduled for ${formattedIst} (${isoScheduledAt}). SEO score: ${seoReport.totalScore}/100.`
+    });
+
+    return {
+      success: true,
+      id: input.id,
+      title: updated.title,
+      slug: updated.slug,
+      status: 'Scheduled',
+      scheduled_at: isoScheduledAt,
+      scheduled_at_ist: formattedIst,
+      seoScore: seoReport.totalScore,
+      previewUrl: `https://dawnexus.in/blog/${updated.slug}`,
+      calendarUrl: 'https://dawnexus.in/admin',
+      message: `Article #${input.id} ("${updated.title}") has been approved and successfully scheduled for publication on ${formattedIst}. It will be automatically published by the Dawnexus background scheduler.`
     };
   }
 
