@@ -50,6 +50,8 @@ import {
 import { seoResearchRouter } from './seoResearch.js';
 import { getDatabaseHealthStats, performDatabaseHealthCheck } from '../dbHealth.js';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { getExpectedMcpKey, getMcpAuditTrail } from '../mcpAuth.js';
+import { MCP_TOOLS } from '../mcpServer.js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1116,6 +1118,33 @@ adminRouter.put('/calculator/config', async (req, res) => {
     return res.status(500).json({ error: 'Failed to save calculator settings.' });
   }
 });
+
+// GET /api/admin/mcp/settings
+// Provides connection endpoints, credentials, and audit logs for ChatGPT MCP integration
+adminRouter.get('/mcp/settings', (req, res) => {
+  const host = req.get('host') || 'dawnexus.in';
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const baseUrl = `${protocol}://${host}`;
+
+  return res.json({
+    success: true,
+    feature: 'Dawnexus AI SEO Studio',
+    architecture: 'ChatGPT-operated custom MCP connector (No Generative AI API)',
+    policy: 'Draft first. Human approval required in Admin panel.',
+    connection: {
+      sseEndpoint: `${baseUrl}/api/mcp/sse`,
+      rpcEndpoint: `${baseUrl}/api/mcp/rpc`,
+      openApiSchemaUrl: `${baseUrl}/api/mcp/openapi.json`,
+      bearerToken: getExpectedMcpKey()
+    },
+    tools: MCP_TOOLS.map(t => ({
+      name: t.name,
+      description: t.description
+    })),
+    recentAuditTrail: getMcpAuditTrail().slice(0, 30)
+  });
+});
+
 
 
 

@@ -14,6 +14,7 @@ import { publicRouter } from './routes/api.js';
 import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
 import { performDatabaseHealthCheck } from './dbHealth.js';
+import { mcpRouter } from './mcpServer.js';
 
 // Initialize DB schema & tables
 initDatabase();
@@ -158,6 +159,7 @@ app.get('/api/sitemap.xml', handleSitemapRequest);
 app.get('/api/admin/seo-research/google/callback', handleGoogleOAuthCallback);
 
 // API route mounts
+app.use('/api/mcp', mcpRouter);
 app.use('/api', publicRouter);
 app.use('/api/admin', adminRouter);
 

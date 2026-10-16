@@ -10,7 +10,7 @@
     "dev:client": "vite --port 3000 --host",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "test": "tsx --test --test-concurrency=1 server/test/api.test.ts server/test/v29.test.ts server/test/v30.test.ts server/test/v35.test.ts server/test/v36-db-health.test.ts server/test/v58-calculator.test.ts"
+    "test": "tsx --test --test-concurrency=1 server/test/api.test.ts server/test/v29.test.ts server/test/v30.test.ts server/test/v35.test.ts server/test/v36-db-health.test.ts server/test/v58-calculator.test.ts server/test/mcp.test.ts"
   },
   "keywords": [
     "dawnexus",
@@ -22,6 +22,7 @@
   "author": "Dawnexus",
   "license": "ISC",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@supabase/supabase-js": "^2.117.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
