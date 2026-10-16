@@ -291,17 +291,80 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           in: 'header',
           name: 'x-mcp-api-key',
           description: 'Provide your MCP_API_KEY in the x-mcp-api-key header'
+        }
+      },
+      schemas: {
+        CreateBlogDraftRequest: {
+          type: 'object',
+          required: ['title', 'category', 'content'],
+          properties: {
+            title: { type: 'string', description: 'Article title' },
+            category: { type: 'string', description: 'Existing CMS category' },
+            content: { type: 'string', description: 'Complete article body in Markdown or HTML' },
+            slug: { type: 'string', description: 'URL slug' },
+            excerpt: { type: 'string', description: 'Article summary' },
+            primary_keyword: { type: 'string', description: 'Primary keyword' },
+            secondary_keywords: { type: 'array', items: { type: 'string' }, description: 'Secondary keywords' },
+            target_location: { type: 'string', description: 'Target location' },
+            search_intent: { type: 'string', enum: ['Informational', 'Commercial Investigation', 'Transactional', 'Navigational'] },
+            target_audience: { type: 'string', description: 'Target audience' },
+            seo_title: { type: 'string', description: 'SERP title tag' },
+            meta_description: { type: 'string', description: 'Meta description' },
+            canonical_url: { type: 'string', description: 'Canonical URL' },
+            featured_image: { type: 'string', description: 'Featured image URL or data URL' },
+            image_alt: { type: 'string', description: 'Image alt text' }
+          }
         },
-        BearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          description: 'Provide your MCP_API_KEY as Bearer token'
+        UpdateBlogDraftRequest: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Updated title' },
+            category: { type: 'string', description: 'Updated category' },
+            content: { type: 'string', description: 'Updated content' },
+            slug: { type: 'string', description: 'Updated slug' },
+            excerpt: { type: 'string', description: 'Updated excerpt' },
+            primary_keyword: { type: 'string', description: 'Updated primary keyword' },
+            secondary_keywords: { type: 'array', items: { type: 'string' } },
+            target_location: { type: 'string', description: 'Updated target location' },
+            search_intent: { type: 'string', description: 'Updated search intent' },
+            target_audience: { type: 'string', description: 'Updated target audience' },
+            seo_title: { type: 'string', description: 'Updated SEO title' },
+            meta_description: { type: 'string', description: 'Updated meta description' },
+            canonical_url: { type: 'string', description: 'Updated canonical URL' },
+            featured_image: { type: 'string', description: 'Updated featured image URL' },
+            image_alt: { type: 'string', description: 'Updated image alt text' }
+          }
+        },
+        AttachImageRequest: {
+          type: 'object',
+          required: ['id', 'image', 'image_alt'],
+          properties: {
+            id: { type: 'integer', description: 'Draft article ID' },
+            image: { type: 'string', description: 'Base64 data URL or hosted HTTPS image URL' },
+            image_alt: { type: 'string', description: 'Descriptive alt text for image' },
+            caption: { type: 'string', description: 'Optional image caption' }
+          }
+        },
+        SeoCheckRequest: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', description: 'Draft ID in database' },
+            draft: {
+              type: 'object',
+              description: 'Draft payload to evaluate without saving',
+              properties: {
+                title: { type: 'string' },
+                category: { type: 'string' },
+                content: { type: 'string' },
+                primary_keyword: { type: 'string' }
+              }
+            }
+          }
         }
       }
     },
     security: [
-      { ApiKeyAuth: [] },
-      { BearerAuth: [] }
+      { ApiKeyAuth: [] }
     ],
     paths: {
       '/tools/categories': {
@@ -346,25 +409,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
             content: {
               'application/json': {
                 schema: {
-                  type: 'object',
-                  required: ['title', 'category', 'content'],
-                  properties: {
-                    title: { type: 'string' },
-                    category: { type: 'string' },
-                    content: { type: 'string' },
-                    slug: { type: 'string' },
-                    excerpt: { type: 'string' },
-                    primary_keyword: { type: 'string' },
-                    secondary_keywords: { type: 'array', items: { type: 'string' } },
-                    target_location: { type: 'string' },
-                    search_intent: { type: 'string' },
-                    target_audience: { type: 'string' },
-                    seo_title: { type: 'string' },
-                    meta_description: { type: 'string' },
-                    canonical_url: { type: 'string' },
-                    featured_image: { type: 'string' },
-                    image_alt: { type: 'string' }
-                  }
+                  $ref: '#/components/schemas/CreateBlogDraftRequest'
                 }
               }
             }
@@ -380,7 +425,13 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: { type: 'object' } } }
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/UpdateBlogDraftRequest'
+                }
+              }
+            }
           },
           responses: { '200': { description: 'Draft updated' } }
         }
@@ -395,14 +446,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
             content: {
               'application/json': {
                 schema: {
-                  type: 'object',
-                  required: ['id', 'image', 'image_alt'],
-                  properties: {
-                    id: { type: 'integer' },
-                    image: { type: 'string' },
-                    image_alt: { type: 'string' },
-                    caption: { type: 'string' }
-                  }
+                  $ref: '#/components/schemas/AttachImageRequest'
                 }
               }
             }
@@ -420,11 +464,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
             content: {
               'application/json': {
                 schema: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'integer' },
-                    draft: { type: 'object' }
-                  }
+                  $ref: '#/components/schemas/SeoCheckRequest'
                 }
               }
             }
