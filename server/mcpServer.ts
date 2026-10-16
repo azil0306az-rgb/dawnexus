@@ -286,6 +286,12 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
     servers: [{ url: baseUrl }],
     components: {
       securitySchemes: {
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'x-mcp-api-key',
+          description: 'Provide your MCP_API_KEY in the x-mcp-api-key header'
+        },
         BearerAuth: {
           type: 'http',
           scheme: 'bearer',
@@ -293,7 +299,10 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
         }
       }
     },
-    security: [{ BearerAuth: [] }],
+    security: [
+      { ApiKeyAuth: [] },
+      { BearerAuth: [] }
+    ],
     paths: {
       '/tools/categories': {
         get: {
