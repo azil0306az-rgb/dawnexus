@@ -237,8 +237,11 @@ export async function syncFromSupabase(db: any): Promise<void> {
         db.prepare(`
           INSERT INTO seo_research_connections (
             id, google_email, encrypted_tokens, selected_property,
-            last_sync_at, last_attempt_at, last_error, connection_status, updated_at
-          ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+            last_sync_at, last_attempt_at, last_error, connection_status,
+            selected_ga4_property, selected_ga4_property_name,
+            ga4_last_sync_at, ga4_last_attempt_at, ga4_last_error, ga4_connection_status,
+            updated_at
+          ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             google_email = excluded.google_email,
             encrypted_tokens = excluded.encrypted_tokens,
@@ -247,6 +250,12 @@ export async function syncFromSupabase(db: any): Promise<void> {
             last_attempt_at = excluded.last_attempt_at,
             last_error = excluded.last_error,
             connection_status = excluded.connection_status,
+            selected_ga4_property = COALESCE(excluded.selected_ga4_property, seo_research_connections.selected_ga4_property),
+            selected_ga4_property_name = COALESCE(excluded.selected_ga4_property_name, seo_research_connections.selected_ga4_property_name),
+            ga4_last_sync_at = excluded.ga4_last_sync_at,
+            ga4_last_attempt_at = excluded.ga4_last_attempt_at,
+            ga4_last_error = excluded.ga4_last_error,
+            ga4_connection_status = excluded.ga4_connection_status,
             updated_at = excluded.updated_at
         `).run(
           seoConn.google_email,
@@ -256,6 +265,12 @@ export async function syncFromSupabase(db: any): Promise<void> {
           seoConn.last_attempt_at,
           seoConn.last_error,
           seoConn.connection_status || 'Disconnected',
+          seoConn.selected_ga4_property || null,
+          seoConn.selected_ga4_property_name || null,
+          seoConn.ga4_last_sync_at || null,
+          seoConn.ga4_last_attempt_at || null,
+          seoConn.ga4_last_error || null,
+          seoConn.ga4_connection_status || 'Disconnected',
           seoConn.updated_at || new Date().toISOString()
         );
         console.log('[Supabase Sync] Hydrated SEO research connection.');
@@ -409,7 +424,7 @@ export async function pushSeoConnectionToSupabase(conn: any): Promise<void> {
     if (!conn) {
       await supabase.from('seo_research_connections').delete().eq('id', 1);
     } else {
-      await supabase.from('seo_research_connections').upsert({
+      const fullPayload = {
         id: 1,
         google_email: conn.google_email,
         encrypted_tokens: conn.encrypted_tokens,
@@ -418,8 +433,29 @@ export async function pushSeoConnectionToSupabase(conn: any): Promise<void> {
         last_attempt_at: conn.last_attempt_at || null,
         last_error: conn.last_error || null,
         connection_status: conn.connection_status || 'Disconnected',
+        selected_ga4_property: conn.selected_ga4_property || null,
+        selected_ga4_property_name: conn.selected_ga4_property_name || null,
+        ga4_last_sync_at: conn.ga4_last_sync_at || null,
+        ga4_last_attempt_at: conn.ga4_last_attempt_at || null,
+        ga4_last_error: conn.ga4_last_error || null,
+        ga4_connection_status: conn.ga4_connection_status || 'Disconnected',
         updated_at: conn.updated_at || new Date().toISOString()
-      });
+      };
+      const { error: upsertErr } = await supabase.from('seo_research_connections').upsert(fullPayload);
+      if (upsertErr) {
+        // Fallback to base columns if remote Supabase PostgreSQL does not have GA4 columns yet
+        await supabase.from('seo_research_connections').upsert({
+          id: 1,
+          google_email: conn.google_email,
+          encrypted_tokens: conn.encrypted_tokens,
+          selected_property: conn.selected_property,
+          last_sync_at: conn.last_sync_at || null,
+          last_attempt_at: conn.last_attempt_at || null,
+          last_error: conn.last_error || null,
+          connection_status: conn.connection_status || 'Disconnected',
+          updated_at: conn.updated_at || new Date().toISOString()
+        });
+      }
     }
   } catch (err) {
     console.warn('[Supabase pushSeoConnection Error]:', err);

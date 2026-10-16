@@ -278,6 +278,116 @@ export const MCP_TOOLS: Tool[] = [
       },
       required: ['jobId']
     }
+  },
+  {
+    name: 'ga4_get_connection_status',
+    description: 'Inspect Google Analytics 4 integration status, selected property, last sync timestamp, and sanitized errors. Zero secrets or tokens returned.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'ga4_list_properties',
+    description: 'List accessible Google Analytics 4 properties for the authorized Google account.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'ga4_get_overview',
+    description: 'Retrieve headline GA4 website traffic metrics (total users, active users, sessions, engagement rate, views, event count, conversions) with previous period comparisons and daily timeline.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'custom'], description: 'Date range (default 28d)' },
+        startDate: { type: 'string', description: 'Custom start date YYYY-MM-DD' },
+        endDate: { type: 'string', description: 'Custom end date YYYY-MM-DD' },
+        forceRefresh: { type: 'boolean', description: 'Bypass cache and query Google API directly' }
+      }
+    }
+  },
+  {
+    name: 'ga4_get_traffic_acquisition',
+    description: 'Retrieve traffic acquisition breakdown by session default channel group, source, and medium with sessions, users, engagement, and conversions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'custom'], description: 'Date range (default 28d)' },
+        startDate: { type: 'string', description: 'Custom start date YYYY-MM-DD' },
+        endDate: { type: 'string', description: 'Custom end date YYYY-MM-DD' },
+        limit: { type: 'number', description: 'Max channels to return (default 25)' }
+      }
+    }
+  },
+  {
+    name: 'ga4_get_landing_pages',
+    description: 'Retrieve landing-page performance with sessions, active users, engagement rate, page views, and conversions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'custom'], description: 'Date range (default 28d)' },
+        startDate: { type: 'string', description: 'Custom start date YYYY-MM-DD' },
+        endDate: { type: 'string', description: 'Custom end date YYYY-MM-DD' },
+        limit: { type: 'number', description: 'Max landing pages to return (default 25)' }
+      }
+    }
+  },
+  {
+    name: 'ga4_get_page_performance',
+    description: 'Retrieve top page paths and page titles by views, active users, average engagement time, and event count.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'custom'], description: 'Date range (default 28d)' },
+        startDate: { type: 'string', description: 'Custom start date YYYY-MM-DD' },
+        endDate: { type: 'string', description: 'Custom end date YYYY-MM-DD' },
+        limit: { type: 'number', description: 'Max pages to return (default 25)' }
+      }
+    }
+  },
+  {
+    name: 'ga4_get_realtime',
+    description: 'Retrieve real-time website analytics (active users in the last 30 minutes and active screen names).',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'ga4_get_report',
+    description: 'Execute a validated custom Google Analytics 4 report with supported dimensions and metrics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dimensions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Supported dimensions (e.g. sessionDefaultChannelGroup, pagePath, deviceCategory, country, date)'
+        },
+        metrics: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Supported metrics (e.g. activeUsers, sessions, screenPageViews, engagementRate, conversions)'
+        },
+        dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'custom'], description: 'Standard date range' },
+        startDate: { type: 'string', description: 'Custom start date YYYY-MM-DD' },
+        endDate: { type: 'string', description: 'Custom end date YYYY-MM-DD' },
+        limit: { type: 'number', description: 'Max rows to return (default 50, max 250)' }
+      },
+      required: ['dimensions', 'metrics']
+    }
+  },
+  {
+    name: 'ga4_get_analytics_status',
+    description: 'Inspect GA4 analytics activity, job execution counts (attempted, completed, failed), latest retrieval time, and duration.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max recent jobs to return (default 15)' }
+      }
+    }
   }
 ];
 
@@ -412,6 +522,51 @@ export function createDawnexusMcpServer(): Server {
 
         case 'gsc_get_research_job': {
           result = await McpService.gscGetResearchJob(args as any);
+          break;
+        }
+
+        case 'ga4_get_connection_status': {
+          result = await McpService.ga4GetConnectionStatus();
+          break;
+        }
+
+        case 'ga4_list_properties': {
+          result = await McpService.ga4ListProperties();
+          break;
+        }
+
+        case 'ga4_get_overview': {
+          result = await McpService.ga4GetOverview(args as any);
+          break;
+        }
+
+        case 'ga4_get_traffic_acquisition': {
+          result = await McpService.ga4GetTrafficAcquisition(args as any);
+          break;
+        }
+
+        case 'ga4_get_landing_pages': {
+          result = await McpService.ga4GetLandingPages(args as any);
+          break;
+        }
+
+        case 'ga4_get_page_performance': {
+          result = await McpService.ga4GetPagePerformance(args as any);
+          break;
+        }
+
+        case 'ga4_get_realtime': {
+          result = await McpService.ga4GetRealtime();
+          break;
+        }
+
+        case 'ga4_get_report': {
+          result = await McpService.ga4GetReport(args as any);
+          break;
+        }
+
+        case 'ga4_get_analytics_status': {
+          result = await McpService.ga4GetAnalyticsStatus(args as any);
           break;
         }
 
@@ -861,6 +1016,111 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           ],
           responses: { '200': { description: 'Job record' }, '404': { description: 'Not found' } }
         }
+      },
+      '/tools/ga4/status': {
+        get: {
+          operationId: 'ga4_get_connection_status',
+          summary: 'Inspect GA4 connection status',
+          description: 'Returns live connection status, authorized Google email, selected GA4 property, and sync telemetry.',
+          responses: { '200': { description: 'Connection status' } }
+        }
+      },
+      '/tools/ga4/properties': {
+        get: {
+          operationId: 'ga4_list_properties',
+          summary: 'List accessible GA4 properties',
+          description: 'Returns accessible properties with ID and display name.',
+          responses: { '200': { description: 'List of properties' } }
+        }
+      },
+      '/tools/ga4/overview': {
+        get: {
+          operationId: 'ga4_get_overview',
+          summary: 'Get GA4 overview traffic metrics',
+          description: 'Returns headline metrics with period comparison and daily timeline.',
+          parameters: [
+            { name: 'dateRange', in: 'query', schema: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] } },
+            { name: 'startDate', in: 'query', schema: { type: 'string' } },
+            { name: 'endDate', in: 'query', schema: { type: 'string' } }
+          ],
+          responses: { '200': { description: 'Overview metrics' } }
+        }
+      },
+      '/tools/ga4/traffic-acquisition': {
+        get: {
+          operationId: 'ga4_get_traffic_acquisition',
+          summary: 'Get traffic acquisition breakdown',
+          description: 'Returns metrics by channel, source, and medium.',
+          parameters: [
+            { name: 'dateRange', in: 'query', schema: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] } },
+            { name: 'limit', in: 'query', schema: { type: 'integer' } }
+          ],
+          responses: { '200': { description: 'Traffic channels' } }
+        }
+      },
+      '/tools/ga4/landing-pages': {
+        get: {
+          operationId: 'ga4_get_landing_pages',
+          summary: 'Get landing pages performance',
+          description: 'Returns sessions, users, engagement rate, views, and conversions for landing pages.',
+          parameters: [
+            { name: 'dateRange', in: 'query', schema: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] } },
+            { name: 'limit', in: 'query', schema: { type: 'integer' } }
+          ],
+          responses: { '200': { description: 'Landing pages' } }
+        }
+      },
+      '/tools/ga4/page-performance': {
+        get: {
+          operationId: 'ga4_get_page_performance',
+          summary: 'Get page performance',
+          description: 'Returns views, active users, avg engagement time, and events by page.',
+          parameters: [
+            { name: 'dateRange', in: 'query', schema: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] } },
+            { name: 'limit', in: 'query', schema: { type: 'integer' } }
+          ],
+          responses: { '200': { description: 'Page performance' } }
+        }
+      },
+      '/tools/ga4/realtime': {
+        get: {
+          operationId: 'ga4_get_realtime',
+          summary: 'Get realtime active users',
+          description: 'Returns active users in the last 30 minutes and active screen names.',
+          responses: { '200': { description: 'Realtime report' } }
+        }
+      },
+      '/tools/ga4/report': {
+        post: {
+          operationId: 'ga4_get_report',
+          summary: 'Execute custom validated report',
+          description: 'Executes custom query with supported dimensions and metrics.',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['dimensions', 'metrics'],
+                  properties: {
+                    dimensions: { type: 'array', items: { type: 'string' } },
+                    metrics: { type: 'array', items: { type: 'string' } },
+                    dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] },
+                    limit: { type: 'integer' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Custom report data' } }
+        }
+      },
+      '/tools/ga4/analytics-status': {
+        get: {
+          operationId: 'ga4_get_analytics_status',
+          summary: 'Get analytics jobs and status',
+          description: 'Returns report retrieval activity, job counts, and recent sanitized errors.',
+          responses: { '200': { description: 'Analytics status' } }
+        }
       }
     }
   };
@@ -1006,6 +1266,33 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           break;
         case 'gsc_get_research_job':
           resultData = await McpService.gscGetResearchJob(toolArgs);
+          break;
+        case 'ga4_get_connection_status':
+          resultData = await McpService.ga4GetConnectionStatus();
+          break;
+        case 'ga4_list_properties':
+          resultData = await McpService.ga4ListProperties();
+          break;
+        case 'ga4_get_overview':
+          resultData = await McpService.ga4GetOverview(toolArgs);
+          break;
+        case 'ga4_get_traffic_acquisition':
+          resultData = await McpService.ga4GetTrafficAcquisition(toolArgs);
+          break;
+        case 'ga4_get_landing_pages':
+          resultData = await McpService.ga4GetLandingPages(toolArgs);
+          break;
+        case 'ga4_get_page_performance':
+          resultData = await McpService.ga4GetPagePerformance(toolArgs);
+          break;
+        case 'ga4_get_realtime':
+          resultData = await McpService.ga4GetRealtime();
+          break;
+        case 'ga4_get_report':
+          resultData = await McpService.ga4GetReport(toolArgs);
+          break;
+        case 'ga4_get_analytics_status':
+          resultData = await McpService.ga4GetAnalyticsStatus(toolArgs);
           break;
         default:
           return res.status(404).json({
@@ -1225,6 +1512,105 @@ mcpRouter.get('/tools/gsc/jobs/:jobId', async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     res.status(404).json({ error: err?.message || 'Job not found' });
+  }
+});
+
+// GA4 REST Bridge Endpoints
+mcpRouter.get('/tools/ga4/status', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.ga4GetConnectionStatus();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get GA4 status' });
+  }
+});
+
+mcpRouter.get('/tools/ga4/properties', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.ga4ListProperties();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to list GA4 properties' });
+  }
+});
+
+mcpRouter.get('/tools/ga4/overview', async (req: Request, res: Response) => {
+  try {
+    const dateRange = String(req.query.dateRange || '28d');
+    const startDate = req.query.startDate ? String(req.query.startDate) : undefined;
+    const endDate = req.query.endDate ? String(req.query.endDate) : undefined;
+    const forceRefresh = req.query.forceRefresh === 'true';
+    const result = await McpService.ga4GetOverview({ dateRange, startDate, endDate, forceRefresh });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get GA4 overview' });
+  }
+});
+
+mcpRouter.get('/tools/ga4/traffic-acquisition', async (req: Request, res: Response) => {
+  try {
+    const dateRange = String(req.query.dateRange || '28d');
+    const startDate = req.query.startDate ? String(req.query.startDate) : undefined;
+    const endDate = req.query.endDate ? String(req.query.endDate) : undefined;
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 25;
+    const result = await McpService.ga4GetTrafficAcquisition({ dateRange, startDate, endDate, limit });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get traffic acquisition' });
+  }
+});
+
+mcpRouter.get('/tools/ga4/landing-pages', async (req: Request, res: Response) => {
+  try {
+    const dateRange = String(req.query.dateRange || '28d');
+    const startDate = req.query.startDate ? String(req.query.startDate) : undefined;
+    const endDate = req.query.endDate ? String(req.query.endDate) : undefined;
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 25;
+    const result = await McpService.ga4GetLandingPages({ dateRange, startDate, endDate, limit });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get landing pages' });
+  }
+});
+
+mcpRouter.get('/tools/ga4/page-performance', async (req: Request, res: Response) => {
+  try {
+    const dateRange = String(req.query.dateRange || '28d');
+    const startDate = req.query.startDate ? String(req.query.startDate) : undefined;
+    const endDate = req.query.endDate ? String(req.query.endDate) : undefined;
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 25;
+    const result = await McpService.ga4GetPagePerformance({ dateRange, startDate, endDate, limit });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get page performance' });
+  }
+});
+
+mcpRouter.get('/tools/ga4/realtime', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.ga4GetRealtime();
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get realtime data' });
+  }
+});
+
+mcpRouter.post('/tools/ga4/report', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.ga4GetReport(req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to execute custom report' });
+  }
+});
+
+mcpRouter.get('/tools/ga4/analytics-status', async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 15;
+    const result = await McpService.ga4GetAnalyticsStatus({ limit });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get analytics status' });
   }
 });
 

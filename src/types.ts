@@ -281,4 +281,33 @@ export interface CalculationResult {
   calculatedAt: string;
 }
 
+export interface Ga4ConnectionStatus {
+  featureEnabled: boolean;
+  hasGoogleCredentials: boolean;
+  isConnected: boolean;
+  hasGa4Scope: boolean;
+  connectionStatus: 'Connected' | 'Missing GA4 Scope' | 'Disconnected' | 'Error';
+  googleEmail: string | null;
+  selectedProperty: string | null;
+  selectedPropertyName: string | null;
+  lastSyncAt: string | null;
+  lastAttemptAt: string | null;
+  lastError: string | null;
+  redirectUri: string;
+  diagnosticMessage?: string;
+}
+
+export interface Ga4OverviewTotals {
+  totalUsers: number;
+  activeUsers: number;
+  newUsers: number;
+  sessions: number;
+  engagedSessions: number;
+  engagementRate: number;
+  avgEngagementDurationSeconds: number;
+  screenPageViews: number;
+  eventCount: number;
+  conversions: number;
+}
+
 

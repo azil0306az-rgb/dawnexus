@@ -48,6 +48,7 @@ import {
   getEmailProviderStatus
 } from '../email.js';
 import { seoResearchRouter } from './seoResearch.js';
+import { analyticsRouter } from './analytics.js';
 import { calculateSeoScore, normalizeSeoReport, computeContentRevision } from '../seoScorer.js';
 import { getDatabaseHealthStats, performDatabaseHealthCheck } from '../dbHealth.js';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
@@ -698,6 +699,9 @@ adminRouter.post('/notification-settings/deactivate', (req, res) => {
 
 // VERSION 3.0: SEO Research & Blog Ideas Router
 adminRouter.use('/seo-research', seoResearchRouter);
+
+// Google Analytics 4 Router
+adminRouter.use('/analytics', analyticsRouter);
 
 // ==========================================
 // VERSION 3.5.297: CLIENT SHOWCASE / OUR WORK ENDPOINTS

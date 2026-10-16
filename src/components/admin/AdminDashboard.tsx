@@ -22,7 +22,8 @@ import {
   Sparkles,
   Briefcase,
   Activity,
-  Calculator
+  Calculator,
+  BarChart3
 } from 'lucide-react';
 import type { EnquiryRecord, EnquiryStats } from '../../types';
 import { EnquiryDetailModal } from './EnquiryDetailModal';
@@ -33,13 +34,14 @@ import { ClientShowcaseManager } from './ClientShowcaseManager';
 import { DatabaseHealthDashboard } from './DatabaseHealthDashboard';
 import { CalculatorSettings } from './CalculatorSettings';
 import { GscDashboard } from './GscDashboard';
+import { Ga4Dashboard } from './Ga4Dashboard';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'calculator' | 'notifications' | 'db-health'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'analytics' | 'calculator' | 'notifications' | 'db-health'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -337,6 +339,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
+              onClick={() => setActiveTab('analytics')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'analytics'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <BarChart3 className="w-4 h-4" />
+                <span>Google Analytics 4</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                GA4
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('calculator')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'calculator'
@@ -417,6 +436,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <BlogManager />
         ) : activeTab === 'gsc' ? (
           <GscDashboard />
+        ) : activeTab === 'analytics' ? (
+          <Ga4Dashboard />
         ) : activeTab === 'calculator' ? (
           <CalculatorSettings />
         ) : activeTab === 'notifications' ? (

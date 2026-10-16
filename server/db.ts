@@ -189,6 +189,45 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN last_attempt_at TEXT DEFAULT NULL;`); } catch {}
   try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN last_error TEXT DEFAULT NULL;`); } catch {}
   try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN connection_status TEXT DEFAULT 'Disconnected';`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN selected_ga4_property TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN selected_ga4_property_name TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN ga4_last_sync_at TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN ga4_last_attempt_at TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN ga4_last_error TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN ga4_connection_status TEXT DEFAULT 'Disconnected';`); } catch {}
+
+  // GA4 Analytics jobs and report cache tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ga4_analytics_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT UNIQUE NOT NULL,
+      property_id TEXT NOT NULL,
+      report_type TEXT NOT NULL,
+      date_range TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      rows_returned INTEGER NOT NULL DEFAULT 0,
+      api_requests_count INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT DEFAULT NULL,
+      triggered_by TEXT NOT NULL DEFAULT 'admin',
+      created_at TEXT NOT NULL,
+      completed_at TEXT DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ga4_analytics_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      property_id TEXT NOT NULL,
+      report_type TEXT NOT NULL,
+      date_range TEXT NOT NULL,
+      data_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL,
+      UNIQUE(property_id, report_type, date_range)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ga4_jobs_status ON ga4_analytics_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_ga4_jobs_created ON ga4_analytics_jobs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_ga4_cache_lookup ON ga4_analytics_cache(property_id, report_type, date_range);
+  `);
 
   // Table for Version 3.5.297: Our Work / Client Showcase
   db.exec(`
@@ -1190,7 +1229,38 @@ export interface SeoConnectionRecord {
   last_attempt_at?: string | null;
   last_error?: string | null;
   connection_status?: string | null;
+  selected_ga4_property?: string | null;
+  selected_ga4_property_name?: string | null;
+  ga4_last_sync_at?: string | null;
+  ga4_last_attempt_at?: string | null;
+  ga4_last_error?: string | null;
+  ga4_connection_status?: string | null;
   updated_at: string;
+}
+
+export interface Ga4AnalyticsJobRecord {
+  id: number;
+  job_id: string;
+  property_id: string;
+  report_type: string;
+  date_range: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  rows_returned: number;
+  api_requests_count: number;
+  duration_ms: number;
+  error_message: string | null;
+  triggered_by: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface Ga4ReportCacheRecord {
+  id: number;
+  property_id: string;
+  report_type: string;
+  date_range: string;
+  data_json: string;
+  synced_at: string;
 }
 
 export interface SeoResearchJobRecord {
@@ -1439,6 +1509,155 @@ export function saveGscSearchAnalyticsCache(rows: Array<{
 export function getGscSearchAnalyticsCache(property: string, periodType: 'current' | 'previous' = 'current'): GscSearchAnalyticsCacheRecord[] {
   const res = db.prepare('SELECT * FROM gsc_search_analytics_cache WHERE property = ? AND period_type = ?').all(property, periodType);
   return res as unknown as GscSearchAnalyticsCacheRecord[];
+}
+
+// ----------------------------------------------------
+// GA4 ANALYTICS CONNECTION, JOB & CACHE HELPERS
+// ----------------------------------------------------
+
+export function updateGa4SelectedProperty(propertyId: string, propertyName?: string): SeoConnectionRecord {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO seo_research_connections (id, selected_ga4_property, selected_ga4_property_name, updated_at)
+    VALUES (1, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      selected_ga4_property = excluded.selected_ga4_property,
+      selected_ga4_property_name = COALESCE(excluded.selected_ga4_property_name, seo_research_connections.selected_ga4_property_name),
+      updated_at = excluded.updated_at
+  `).run(propertyId, propertyName || null, now);
+
+  const conn = getSeoConnection()!;
+  pushSeoConnectionToSupabase(conn).catch(() => {});
+  return conn;
+}
+
+export function updateGa4ConnectionTelemetry(updates: {
+  ga4_last_sync_at?: string | null;
+  ga4_last_attempt_at?: string | null;
+  ga4_last_error?: string | null;
+  ga4_connection_status?: string;
+}): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE seo_research_connections SET
+      ga4_last_sync_at = COALESCE(?, ga4_last_sync_at),
+      ga4_last_attempt_at = COALESCE(?, ga4_last_attempt_at),
+      ga4_last_error = ?,
+      ga4_connection_status = COALESCE(?, ga4_connection_status),
+      updated_at = ?
+    WHERE id = 1
+  `).run(
+    updates.ga4_last_sync_at || null,
+    updates.ga4_last_attempt_at || now,
+    updates.ga4_last_error !== undefined ? updates.ga4_last_error : null,
+    updates.ga4_connection_status || null,
+    now
+  );
+  const conn = getSeoConnection();
+  if (conn) {
+    pushSeoConnectionToSupabase(conn).catch(() => {});
+  }
+}
+
+export function createGa4Job(job: {
+  job_id: string;
+  property_id: string;
+  report_type: string;
+  date_range: string;
+  status?: 'queued' | 'running';
+  triggered_by?: string;
+}): Ga4AnalyticsJobRecord {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO ga4_analytics_jobs (
+      job_id, property_id, report_type, date_range, status, triggered_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(job_id) DO UPDATE SET
+      property_id = excluded.property_id,
+      report_type = excluded.report_type,
+      date_range = excluded.date_range,
+      status = excluded.status,
+      triggered_by = excluded.triggered_by
+  `).run(
+    job.job_id,
+    job.property_id,
+    job.report_type,
+    job.date_range,
+    job.status || 'queued',
+    job.triggered_by || 'admin',
+    now
+  );
+  return getGa4JobById(job.job_id)!;
+}
+
+export function updateGa4Job(
+  jobId: string,
+  updates: Partial<Omit<Ga4AnalyticsJobRecord, 'id' | 'job_id' | 'created_at'>>
+): Ga4AnalyticsJobRecord | null {
+  const existing = getGa4JobById(jobId);
+  if (!existing) return null;
+
+  db.prepare(`
+    UPDATE ga4_analytics_jobs SET
+      status = COALESCE(?, status),
+      rows_returned = COALESCE(?, rows_returned),
+      api_requests_count = COALESCE(?, api_requests_count),
+      duration_ms = COALESCE(?, duration_ms),
+      error_message = ?,
+      completed_at = COALESCE(?, completed_at)
+    WHERE job_id = ?
+  `).run(
+    updates.status || null,
+    updates.rows_returned !== undefined ? updates.rows_returned : null,
+    updates.api_requests_count !== undefined ? updates.api_requests_count : null,
+    updates.duration_ms !== undefined ? updates.duration_ms : null,
+    updates.error_message !== undefined ? updates.error_message : existing.error_message,
+    updates.completed_at || null,
+    jobId
+  );
+
+  return getGa4JobById(jobId);
+}
+
+export function getGa4JobById(jobId: string): Ga4AnalyticsJobRecord | null {
+  const res = db.prepare('SELECT * FROM ga4_analytics_jobs WHERE job_id = ?').get(jobId);
+  return (res as unknown as Ga4AnalyticsJobRecord) || null;
+}
+
+export function getGa4Jobs(limit = 15): Ga4AnalyticsJobRecord[] {
+  const res = db.prepare('SELECT * FROM ga4_analytics_jobs ORDER BY created_at DESC LIMIT ?').all(limit);
+  return res as unknown as Ga4AnalyticsJobRecord[];
+}
+
+export function getGa4JobStats(): { total: number; completed: number; failed: number; running: number } {
+  const total = (db.prepare('SELECT COUNT(*) as count FROM ga4_analytics_jobs').get() as any)?.count || 0;
+  const completed = (db.prepare("SELECT COUNT(*) as count FROM ga4_analytics_jobs WHERE status = 'completed'").get() as any)?.count || 0;
+  const failed = (db.prepare("SELECT COUNT(*) as count FROM ga4_analytics_jobs WHERE status = 'failed'").get() as any)?.count || 0;
+  const running = (db.prepare("SELECT COUNT(*) as count FROM ga4_analytics_jobs WHERE status = 'running' OR status = 'queued'").get() as any)?.count || 0;
+  return { total, completed, failed, running };
+}
+
+export function getGa4ReportCache(propertyId: string, reportType: string, dateRange: string, maxAgeMs = 15 * 60 * 1000): any | null {
+  const row = db.prepare('SELECT * FROM ga4_analytics_cache WHERE property_id = ? AND report_type = ? AND date_range = ?').get(propertyId, reportType, dateRange) as any;
+  if (!row) return null;
+  const age = Date.now() - new Date(row.synced_at).getTime();
+  if (age > maxAgeMs) return null;
+  try {
+    return JSON.parse(row.data_json);
+  } catch {
+    return null;
+  }
+}
+
+export function setGa4ReportCache(propertyId: string, reportType: string, dateRange: string, data: any): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO ga4_analytics_cache (property_id, report_type, date_range, data_json, synced_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(property_id, report_type, date_range) DO UPDATE SET
+      data_json = excluded.data_json,
+      synced_at = excluded.synced_at
+  `).run(propertyId, reportType, dateRange, JSON.stringify(data), now);
 }
 
 // ----------------------------------------------------

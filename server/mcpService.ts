@@ -26,6 +26,7 @@ import {
 } from './seoScorer.js';
 import { recordMcpAudit } from './mcpAuth.js';
 import { GscService, decryptPayload } from './gscService.js';
+import { Ga4Service } from './ga4Service.js';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 export interface CategoryInfo {
@@ -330,6 +331,11 @@ export class McpService {
         property: gscResult.property,
         diagnostic: gscResult.diagnosticMessage
       },
+      googleAnalyticsStatus: {
+        isConnected: (await Ga4Service.getConnectionStatus()).isConnected && (await Ga4Service.getConnectionStatus()).hasGa4Scope,
+        selectedProperty: (await Ga4Service.getConnectionStatus()).selectedProperty,
+        diagnostic: (await Ga4Service.getConnectionStatus()).diagnosticMessage
+      },
       contentGuidelines: {
         targetAudience: 'Business owners, founders, CTOs, and marketing directors looking for modern web design, technical SEO, and AI digital growth.',
         tone: 'Authoritative, transparent, highly actionable, forward-looking agency perspective. No generic AI fluff.',
@@ -338,7 +344,8 @@ export class McpService {
           'Must select from existing CMS categories.',
           'Must link to at least 2 authentic Dawnexus URLs.',
           'No fabricated statistics or unverified client claims.',
-          'Must achieve 90/100 or higher on deterministic SEO quality audit.'
+          'Must achieve 90/100 or higher on deterministic SEO quality audit.',
+          'Clearly distinguish Google Search Console data (organic search performance) from Google Analytics 4 data (on-site user behavior & conversions).'
         ]
       }
     };
@@ -1533,4 +1540,137 @@ export class McpService {
     if (!job) throw new Error(`Job not found with ID: ${args.jobId}`);
     return job;
   }
+
+  // ==========================================
+  // GOOGLE ANALYTICS 4 MCP TOOLS
+  // ==========================================
+
+  /**
+   * Tool: ga4_get_connection_status
+   */
+  static async ga4GetConnectionStatus() {
+    return await Ga4Service.getConnectionStatus();
+  }
+
+  /**
+   * Tool: ga4_list_properties
+   */
+  static async ga4ListProperties() {
+    return await Ga4Service.listProperties();
+  }
+
+  /**
+   * Tool: ga4_get_overview
+   */
+  static async ga4GetOverview(args?: {
+    dateRange?: string;
+    startDate?: string;
+    endDate?: string;
+    forceRefresh?: boolean;
+  }) {
+    const res = await Ga4Service.getOverview(
+      args?.dateRange || '28d',
+      args?.startDate,
+      args?.endDate,
+      args?.forceRefresh || false
+    );
+    if (res.error) throw new Error(res.error);
+    return res.data;
+  }
+
+  /**
+   * Tool: ga4_get_traffic_acquisition
+   */
+  static async ga4GetTrafficAcquisition(args?: {
+    dateRange?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }) {
+    const res = await Ga4Service.getTrafficAcquisition(
+      args?.dateRange || '28d',
+      args?.startDate,
+      args?.endDate,
+      args?.limit || 25
+    );
+    if (res.error) throw new Error(res.error);
+    return { channels: res.data || [] };
+  }
+
+  /**
+   * Tool: ga4_get_landing_pages
+   */
+  static async ga4GetLandingPages(args?: {
+    dateRange?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }) {
+    const res = await Ga4Service.getLandingPages(
+      args?.dateRange || '28d',
+      args?.startDate,
+      args?.endDate,
+      args?.limit || 25
+    );
+    if (res.error) throw new Error(res.error);
+    return { landingPages: res.data || [] };
+  }
+
+  /**
+   * Tool: ga4_get_page_performance
+   */
+  static async ga4GetPagePerformance(args?: {
+    dateRange?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }) {
+    const res = await Ga4Service.getPagePerformance(
+      args?.dateRange || '28d',
+      args?.startDate,
+      args?.endDate,
+      args?.limit || 25
+    );
+    if (res.error) throw new Error(res.error);
+    return { pages: res.data || [] };
+  }
+
+  /**
+   * Tool: ga4_get_realtime
+   */
+  static async ga4GetRealtime() {
+    const res = await Ga4Service.getRealtimeReport();
+    if (res.error) throw new Error(res.error);
+    return res.data;
+  }
+
+  /**
+   * Tool: ga4_get_report
+   */
+  static async ga4GetReport(args: {
+    dimensions: string[];
+    metrics: string[];
+    dateRange?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }) {
+    const res = await Ga4Service.getValidatedReport(args);
+    if (res.error) throw new Error(res.error);
+    return res.data;
+  }
+
+  /**
+   * Tool: ga4_get_analytics_status
+   */
+  static async ga4GetAnalyticsStatus(args?: { limit?: number }) {
+    const status = await Ga4Service.getConnectionStatus();
+    const { stats, recentJobs } = Ga4Service.getJobStatsAndHistory(args?.limit || 15);
+    return {
+      connection: status,
+      jobStats: stats,
+      recentJobs
+    };
+  }
 }
+

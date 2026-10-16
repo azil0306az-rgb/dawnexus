@@ -5,6 +5,8 @@ import {
   saveSeoConnection,
   updateSeoSelectedProperty,
   clearSeoConnection,
+  updateGa4SelectedProperty,
+  updateGa4ConnectionTelemetry,
   getBlogs
 } from '../db.js';
 import {
@@ -335,7 +337,7 @@ seoResearchRouter.get('/google/auth-url', (req, res) => {
   const state = crypto.randomBytes(24).toString('hex');
   oauthStates.set(state, Date.now() + 10 * 60 * 1000);
 
-  const scope = encodeURIComponent('https://www.googleapis.com/auth/webmasters.readonly email profile');
+  const scope = encodeURIComponent('https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly email profile');
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
 
   return res.json({
@@ -433,7 +435,37 @@ export async function handleGoogleOAuthCallback(req: any, res: any) {
       last_error: null
     });
 
-    return res.redirect('/admin?seo_connected=1');
+    // Auto-discover accessible GA4 properties
+    try {
+      const ga4Res = await fetch('https://analyticsadmin.googleapis.com/v1beta/accountSummaries', {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      });
+      if (ga4Res.ok) {
+        const ga4Data = await ga4Res.json();
+        const summaries = (ga4Data.accountSummaries || []) as any[];
+        const allProperties: Array<{ property: string; displayName: string }> = [];
+        for (const acc of summaries) {
+          for (const prop of acc.propertySummaries || []) {
+            allProperties.push({
+              property: prop.property,
+              displayName: prop.displayName || prop.property
+            });
+          }
+        }
+        if (allProperties.length > 0) {
+          const match = allProperties.find(p => p.displayName.toLowerCase().includes('dawnexus')) || allProperties[0];
+          updateGa4SelectedProperty(match.property, match.displayName);
+          updateGa4ConnectionTelemetry({
+            ga4_connection_status: 'Connected',
+            ga4_last_error: null
+          });
+        }
+      }
+    } catch (ga4Err) {
+      console.warn('[GA4 Property Discovery Notice]:', ga4Err);
+    }
+
+    return res.redirect('/admin?seo_connected=1&analytics_connected=1');
   } catch (err) {
     console.error('[Google Callback Exception]:', err);
     return res.redirect('/admin?seo_error=internal_error');
