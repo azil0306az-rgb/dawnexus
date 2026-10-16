@@ -51,7 +51,8 @@ app.use(
       // Allow localhost dev origins
       callback(null, true);
     },
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'authorization', 'x-mcp-api-key', 'x-api-key']
   })
 );
 

@@ -54,13 +54,16 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   }
 
   // Check Authorization header or query parameter for SSE stream handshake
-  const authHeader = req.headers['authorization'] || '';
-  const headerKey = req.headers['x-mcp-api-key'] || req.headers['x-api-key'] || '';
+  const rawAuth = (req.headers['authorization'] || req.headers['Authorization'] || '') as string;
+  const headerKey = (req.headers['x-mcp-api-key'] || req.headers['x-api-key'] || '') as string;
   const queryKey = req.query.apiKey || req.query.token;
 
   let providedToken = '';
-  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    providedToken = authHeader.substring(7).trim();
+  const bearerMatch = typeof rawAuth === 'string' ? rawAuth.match(/^bearer\s+(.+)$/i) : null;
+  if (bearerMatch) {
+    providedToken = bearerMatch[1].trim();
+  } else if (typeof rawAuth === 'string' && rawAuth.trim() && !rawAuth.includes(' ')) {
+    providedToken = rawAuth.trim();
   } else if (typeof headerKey === 'string' && headerKey.trim()) {
     providedToken = headerKey.trim();
   } else if (typeof queryKey === 'string' && queryKey.trim()) {
@@ -103,3 +106,4 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   // Authenticated successfully
   next();
 }
+
