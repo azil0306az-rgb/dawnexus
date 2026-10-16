@@ -193,6 +193,91 @@ export const MCP_TOOLS: Tool[] = [
         }
       }
     }
+  },
+  {
+    name: 'gsc_get_connection_status',
+    description: 'Inspect the live connection and authorization status of Google Search Console.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'gsc_list_properties',
+    description: 'List verified Search Console properties accessible by the connected Google account.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'gsc_get_search_analytics',
+    description: 'Query Search Console search analytics performance metrics for given dates, dimensions, and filters.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startDate: { type: 'string', description: 'Start date in YYYY-MM-DD' },
+        endDate: { type: 'string', description: 'End date in YYYY-MM-DD' },
+        dimensions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Dimensions: query, page, date, device, or country'
+        },
+        rowLimit: { type: 'number', description: 'Row limit (default 100)' },
+        property: { type: 'string', description: 'Optional property URL' }
+      },
+      required: ['startDate', 'endDate']
+    }
+  },
+  {
+    name: 'gsc_get_top_queries',
+    description: 'Retrieve top search queries with period-over-period performance comparisons and intent classification.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dateRange: { type: 'string', enum: ['7d', '28d', '3m'], description: 'Date range' },
+        limit: { type: 'number', description: 'Max queries to return (default 50)' }
+      }
+    }
+  },
+  {
+    name: 'gsc_get_top_pages',
+    description: 'Retrieve top landing pages with impressions, clicks, CTR, and average rankings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max pages to return (default 25)' }
+      }
+    }
+  },
+  {
+    name: 'gsc_get_research_status',
+    description: 'Inspect SEO research activity, recent research/sync jobs, and job execution counts.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'gsc_run_research_sync',
+    description: 'Trigger a fresh synchronization job to ingest Search Console queries into research cache with duplicate-job protection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dateRange: { type: 'string', enum: ['28d', '3m'], description: 'Date range to sync' }
+      }
+    }
+  },
+  {
+    name: 'gsc_get_research_job',
+    description: 'Retrieve status, queries returned, queries saved, API request count, and duration of a specific research job.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jobId: { type: 'string', description: 'Job identifier (e.g. sync_1729...)' }
+      },
+      required: ['jobId']
+    }
   }
 ];
 
@@ -287,6 +372,46 @@ export function createDawnexusMcpServer(): Server {
 
         case 'run_seo_quality_check': {
           result = McpService.runSeoQualityCheck(args as any, callerIp);
+          break;
+        }
+
+        case 'gsc_get_connection_status': {
+          result = await McpService.gscGetConnectionStatus();
+          break;
+        }
+
+        case 'gsc_list_properties': {
+          result = await McpService.gscListProperties();
+          break;
+        }
+
+        case 'gsc_get_search_analytics': {
+          result = await McpService.gscGetSearchAnalytics(args as any);
+          break;
+        }
+
+        case 'gsc_get_top_queries': {
+          result = await McpService.gscGetTopQueries(args as any);
+          break;
+        }
+
+        case 'gsc_get_top_pages': {
+          result = await McpService.gscGetTopPages(args as any);
+          break;
+        }
+
+        case 'gsc_get_research_status': {
+          result = await McpService.gscGetResearchStatus();
+          break;
+        }
+
+        case 'gsc_run_research_sync': {
+          result = await McpService.gscRunResearchSync(args as any);
+          break;
+        }
+
+        case 'gsc_get_research_job': {
+          result = await McpService.gscGetResearchJob(args as any);
           break;
         }
 
@@ -632,6 +757,110 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           },
           responses: { '200': { description: 'SEO audit report' } }
         }
+      },
+      '/tools/gsc/status': {
+        get: {
+          operationId: 'gsc_get_connection_status',
+          summary: 'Inspect Search Console connection status',
+          description: 'Returns live connection status, Google email, selected property, and sync telemetry.',
+          responses: { '200': { description: 'Connection status' } }
+        }
+      },
+      '/tools/gsc/properties': {
+        get: {
+          operationId: 'gsc_list_properties',
+          summary: 'List verified Search Console properties',
+          description: 'Returns accessible sites from Google Search Console.',
+          responses: { '200': { description: 'List of properties' } }
+        }
+      },
+      '/tools/gsc/search-analytics': {
+        post: {
+          operationId: 'gsc_get_search_analytics',
+          summary: 'Query Search Console search performance',
+          description: 'Queries GSC search analytics for given dates and dimensions.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['startDate', 'endDate'],
+                  properties: {
+                    startDate: { type: 'string' },
+                    endDate: { type: 'string' },
+                    dimensions: { type: 'array', items: { type: 'string' } },
+                    rowLimit: { type: 'integer' },
+                    property: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Search analytics rows' } }
+        }
+      },
+      '/tools/gsc/top-queries': {
+        get: {
+          operationId: 'gsc_get_top_queries',
+          summary: 'Get top search queries with period comparison',
+          description: 'Returns top queries with period-over-period delta comparison and search intent.',
+          parameters: [
+            { name: 'dateRange', in: 'query', schema: { type: 'string', enum: ['7d', '28d', '3m'] } },
+            { name: 'limit', in: 'query', schema: { type: 'integer' } }
+          ],
+          responses: { '200': { description: 'Top queries with comparisons' } }
+        }
+      },
+      '/tools/gsc/top-pages': {
+        get: {
+          operationId: 'gsc_get_top_pages',
+          summary: 'Get top landing pages',
+          description: 'Returns top landing pages with impressions, clicks, CTR, and average position.',
+          parameters: [
+            { name: 'limit', in: 'query', schema: { type: 'integer' } }
+          ],
+          responses: { '200': { description: 'Top landing pages' } }
+        }
+      },
+      '/tools/gsc/research-status': {
+        get: {
+          operationId: 'gsc_get_research_status',
+          summary: 'Get research status and recent jobs',
+          description: 'Returns connection status and recent research sync jobs.',
+          responses: { '200': { description: 'Research status' } }
+        }
+      },
+      '/tools/gsc/sync': {
+        post: {
+          operationId: 'gsc_run_research_sync',
+          summary: 'Trigger Search Console synchronization job',
+          description: 'Executes research sync job with concurrency protection and caches query metrics.',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    dateRange: { type: 'string', enum: ['28d', '3m'] }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Sync completed' } }
+        }
+      },
+      '/tools/gsc/jobs/{jobId}': {
+        get: {
+          operationId: 'gsc_get_research_job',
+          summary: 'Get specific research job details',
+          description: 'Returns status, queries returned, queries saved, and API request count for a job ID.',
+          parameters: [
+            { name: 'jobId', in: 'path', required: true, schema: { type: 'string' } }
+          ],
+          responses: { '200': { description: 'Job record' }, '404': { description: 'Not found' } }
+        }
       }
     }
   };
@@ -753,6 +982,30 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           break;
         case 'run_seo_quality_check':
           resultData = McpService.runSeoQualityCheck(toolArgs, callerIp);
+          break;
+        case 'gsc_get_connection_status':
+          resultData = await McpService.gscGetConnectionStatus();
+          break;
+        case 'gsc_list_properties':
+          resultData = await McpService.gscListProperties();
+          break;
+        case 'gsc_get_search_analytics':
+          resultData = await McpService.gscGetSearchAnalytics(toolArgs);
+          break;
+        case 'gsc_get_top_queries':
+          resultData = await McpService.gscGetTopQueries(toolArgs);
+          break;
+        case 'gsc_get_top_pages':
+          resultData = await McpService.gscGetTopPages(toolArgs);
+          break;
+        case 'gsc_get_research_status':
+          resultData = await McpService.gscGetResearchStatus();
+          break;
+        case 'gsc_run_research_sync':
+          resultData = await McpService.gscRunResearchSync(toolArgs);
+          break;
+        case 'gsc_get_research_job':
+          resultData = await McpService.gscGetResearchJob(toolArgs);
           break;
         default:
           return res.status(404).json({
@@ -895,6 +1148,83 @@ mcpRouter.post('/tools/seo-check', (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Failed to run SEO check' });
+  }
+});
+
+// GSC Specific REST Bridge endpoints
+mcpRouter.get('/tools/gsc/status', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.gscGetConnectionStatus();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get GSC status' });
+  }
+});
+
+mcpRouter.get('/tools/gsc/properties', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.gscListProperties();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to list properties' });
+  }
+});
+
+mcpRouter.post('/tools/gsc/search-analytics', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.gscGetSearchAnalytics(req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to query analytics' });
+  }
+});
+
+mcpRouter.get('/tools/gsc/top-queries', async (req: Request, res: Response) => {
+  try {
+    const dateRange = (req.query.dateRange as '7d' | '28d' | '3m') || '28d';
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
+    const result = await McpService.gscGetTopQueries({ dateRange, limit });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get top queries' });
+  }
+});
+
+mcpRouter.get('/tools/gsc/top-pages', async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 25;
+    const result = await McpService.gscGetTopPages({ limit });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get top pages' });
+  }
+});
+
+mcpRouter.get('/tools/gsc/research-status', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.gscGetResearchStatus();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get research status' });
+  }
+});
+
+mcpRouter.post('/tools/gsc/sync', async (req: Request, res: Response) => {
+  try {
+    const { dateRange = '28d' } = req.body || {};
+    const result = await McpService.gscRunResearchSync({ dateRange, triggeredBy: 'mcp-rest' });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to run sync job' });
+  }
+});
+
+mcpRouter.get('/tools/gsc/jobs/:jobId', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.gscGetResearchJob({ jobId: req.params.jobId });
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err?.message || 'Job not found' });
   }
 });
 

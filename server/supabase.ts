@@ -222,6 +222,45 @@ export async function syncFromSupabase(db: any): Promise<void> {
       console.warn('[Supabase Sync Calculator Notice]:', calcErr);
     }
 
+    // 6. Sync SEO Research Connection
+    try {
+      const { data: seoConn } = await supabase
+        .from('seo_research_connections')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (seoConn) {
+        db.prepare(`
+          INSERT INTO seo_research_connections (
+            id, google_email, encrypted_tokens, selected_property,
+            last_sync_at, last_attempt_at, last_error, connection_status, updated_at
+          ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            google_email = excluded.google_email,
+            encrypted_tokens = excluded.encrypted_tokens,
+            selected_property = excluded.selected_property,
+            last_sync_at = excluded.last_sync_at,
+            last_attempt_at = excluded.last_attempt_at,
+            last_error = excluded.last_error,
+            connection_status = excluded.connection_status,
+            updated_at = excluded.updated_at
+        `).run(
+          seoConn.google_email,
+          seoConn.encrypted_tokens,
+          seoConn.selected_property,
+          seoConn.last_sync_at,
+          seoConn.last_attempt_at,
+          seoConn.last_error,
+          seoConn.connection_status || 'Disconnected',
+          seoConn.updated_at || new Date().toISOString()
+        );
+        console.log('[Supabase Sync] Hydrated SEO research connection.');
+      }
+    } catch (seoErr) {
+      console.warn('[Supabase Sync SEO Notice]:', seoErr);
+    }
+
     console.log('[Supabase Sync] Local database is fully synchronized with Supabase.');
   } catch (err) {
     console.warn('[Supabase Sync Error]:', err);
@@ -357,6 +396,10 @@ export async function pushSeoConnectionToSupabase(conn: any): Promise<void> {
         google_email: conn.google_email,
         encrypted_tokens: conn.encrypted_tokens,
         selected_property: conn.selected_property,
+        last_sync_at: conn.last_sync_at || null,
+        last_attempt_at: conn.last_attempt_at || null,
+        last_error: conn.last_error || null,
+        connection_status: conn.connection_status || 'Disconnected',
         updated_at: conn.updated_at || new Date().toISOString()
       });
     }

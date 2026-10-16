@@ -143,9 +143,50 @@ export function initDatabase() {
       google_email TEXT DEFAULT NULL,
       encrypted_tokens TEXT DEFAULT NULL,
       selected_property TEXT DEFAULT NULL,
+      last_sync_at TEXT DEFAULT NULL,
+      last_attempt_at TEXT DEFAULT NULL,
+      last_error TEXT DEFAULT NULL,
+      connection_status TEXT DEFAULT 'Disconnected',
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS seo_research_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT UNIQUE NOT NULL,
+      property TEXT NOT NULL,
+      date_range TEXT NOT NULL,
+      dimensions TEXT NOT NULL DEFAULT 'query',
+      status TEXT NOT NULL DEFAULT 'queued',
+      queries_returned INTEGER NOT NULL DEFAULT 0,
+      queries_saved INTEGER NOT NULL DEFAULT 0,
+      api_requests_count INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT DEFAULT NULL,
+      triggered_by TEXT NOT NULL DEFAULT 'admin',
+      created_at TEXT NOT NULL,
+      completed_at TEXT DEFAULT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS gsc_search_analytics_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      property TEXT NOT NULL,
+      query TEXT NOT NULL,
+      clicks INTEGER NOT NULL DEFAULT 0,
+      impressions INTEGER NOT NULL DEFAULT 0,
+      ctr REAL NOT NULL DEFAULT 0.0,
+      position REAL NOT NULL DEFAULT 0.0,
+      period_type TEXT NOT NULL DEFAULT 'current',
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
   `);
+
+  // Safe migrations for seo_research_connections
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN last_sync_at TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN last_attempt_at TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN last_error TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE seo_research_connections ADD COLUMN connection_status TEXT DEFAULT 'Disconnected';`); } catch {}
 
   // Table for Version 3.5.297: Our Work / Client Showcase
   db.exec(`
@@ -1125,7 +1166,42 @@ export interface SeoConnectionRecord {
   google_email: string | null;
   encrypted_tokens: string | null;
   selected_property: string | null;
+  last_sync_at?: string | null;
+  last_attempt_at?: string | null;
+  last_error?: string | null;
+  connection_status?: string | null;
   updated_at: string;
+}
+
+export interface SeoResearchJobRecord {
+  id: number;
+  job_id: string;
+  property: string;
+  date_range: string;
+  dimensions: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  queries_returned: number;
+  queries_saved: number;
+  api_requests_count: number;
+  duration_ms: number;
+  error_message: string | null;
+  triggered_by: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface GscSearchAnalyticsCacheRecord {
+  id: number;
+  property: string;
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  period_type: 'current' | 'previous';
+  start_date: string;
+  end_date: string;
+  synced_at: string;
 }
 
 export function getSeoConnection(): SeoConnectionRecord | null {
@@ -1134,22 +1210,71 @@ export function getSeoConnection(): SeoConnectionRecord | null {
   return (res as unknown as SeoConnectionRecord) || null;
 }
 
-export function saveSeoConnection(googleEmail: string, encryptedTokens: string, defaultProperty?: string): SeoConnectionRecord {
+export function saveSeoConnection(
+  googleEmail: string,
+  encryptedTokens: string,
+  defaultProperty?: string,
+  extra?: { last_sync_at?: string; last_attempt_at?: string; last_error?: string | null; connection_status?: string }
+): SeoConnectionRecord {
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO seo_research_connections (id, google_email, encrypted_tokens, selected_property, updated_at)
-    VALUES (1, ?, ?, ?, ?)
+    INSERT INTO seo_research_connections (
+      id, google_email, encrypted_tokens, selected_property,
+      last_sync_at, last_attempt_at, last_error, connection_status, updated_at
+    )
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       google_email = excluded.google_email,
       encrypted_tokens = excluded.encrypted_tokens,
       selected_property = COALESCE(excluded.selected_property, seo_research_connections.selected_property),
+      last_sync_at = COALESCE(excluded.last_sync_at, seo_research_connections.last_sync_at),
+      last_attempt_at = COALESCE(excluded.last_attempt_at, seo_research_connections.last_attempt_at),
+      last_error = excluded.last_error,
+      connection_status = COALESCE(excluded.connection_status, seo_research_connections.connection_status),
       updated_at = excluded.updated_at
-  `).run(googleEmail, encryptedTokens, defaultProperty || null, now);
+  `).run(
+    googleEmail,
+    encryptedTokens,
+    defaultProperty || null,
+    extra?.last_sync_at || null,
+    extra?.last_attempt_at || now,
+    extra?.last_error || null,
+    extra?.connection_status || 'Connected',
+    now
+  );
 
   const conn = getSeoConnection()!;
   pushSeoConnectionToSupabase(conn).catch(() => {});
   return conn;
+}
+
+export function updateSeoConnectionTelemetry(updates: {
+  last_sync_at?: string | null;
+  last_attempt_at?: string | null;
+  last_error?: string | null;
+  connection_status?: string;
+}): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE seo_research_connections SET
+      last_sync_at = COALESCE(?, last_sync_at),
+      last_attempt_at = COALESCE(?, last_attempt_at),
+      last_error = ?,
+      connection_status = COALESCE(?, connection_status),
+      updated_at = ?
+    WHERE id = 1
+  `).run(
+    updates.last_sync_at || null,
+    updates.last_attempt_at || now,
+    updates.last_error !== undefined ? updates.last_error : null,
+    updates.connection_status || null,
+    now
+  );
+  const conn = getSeoConnection();
+  if (conn) {
+    pushSeoConnectionToSupabase(conn).catch(() => {});
+  }
 }
 
 export function updateSeoSelectedProperty(propertyUrl: string): SeoConnectionRecord {
@@ -1170,6 +1295,130 @@ export function updateSeoSelectedProperty(propertyUrl: string): SeoConnectionRec
 export function clearSeoConnection(): void {
   db.prepare('DELETE FROM seo_research_connections WHERE id = 1').run();
   pushSeoConnectionToSupabase(null).catch(() => {});
+}
+
+// ----------------------------------------------------
+// SEO RESEARCH JOBS & SEARCH ANALYTICS CACHE
+// ----------------------------------------------------
+
+export function createSeoResearchJob(job: {
+  job_id: string;
+  property: string;
+  date_range: string;
+  dimensions?: string;
+  status?: 'queued' | 'running';
+  triggered_by?: string;
+}): SeoResearchJobRecord {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO seo_research_jobs (
+      job_id, property, date_range, dimensions, status, triggered_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    job.job_id,
+    job.property,
+    job.date_range,
+    job.dimensions || 'query',
+    job.status || 'queued',
+    job.triggered_by || 'admin',
+    now
+  );
+  return getSeoResearchJobById(job.job_id)!;
+}
+
+export function updateSeoResearchJob(
+  jobId: string,
+  updates: Partial<Omit<SeoResearchJobRecord, 'id' | 'job_id' | 'created_at'>>
+): SeoResearchJobRecord | null {
+  const existing = getSeoResearchJobById(jobId);
+  if (!existing) return null;
+
+  db.prepare(`
+    UPDATE seo_research_jobs SET
+      status = COALESCE(?, status),
+      queries_returned = COALESCE(?, queries_returned),
+      queries_saved = COALESCE(?, queries_saved),
+      api_requests_count = COALESCE(?, api_requests_count),
+      duration_ms = COALESCE(?, duration_ms),
+      error_message = ?,
+      completed_at = COALESCE(?, completed_at)
+    WHERE job_id = ?
+  `).run(
+    updates.status || null,
+    updates.queries_returned !== undefined ? updates.queries_returned : null,
+    updates.queries_saved !== undefined ? updates.queries_saved : null,
+    updates.api_requests_count !== undefined ? updates.api_requests_count : null,
+    updates.duration_ms !== undefined ? updates.duration_ms : null,
+    updates.error_message !== undefined ? updates.error_message : existing.error_message,
+    updates.completed_at || null,
+    jobId
+  );
+
+  return getSeoResearchJobById(jobId);
+}
+
+export function getSeoResearchJobById(jobId: string): SeoResearchJobRecord | null {
+  const res = db.prepare('SELECT * FROM seo_research_jobs WHERE job_id = ?').get(jobId);
+  return (res as unknown as SeoResearchJobRecord) || null;
+}
+
+export function getLatestSeoResearchJobs(limit = 15): SeoResearchJobRecord[] {
+  const res = db.prepare('SELECT * FROM seo_research_jobs ORDER BY id DESC LIMIT ?').all(limit);
+  return res as unknown as SeoResearchJobRecord[];
+}
+
+export function saveGscSearchAnalyticsCache(rows: Array<{
+  property: string;
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  period_type: 'current' | 'previous';
+  start_date: string;
+  end_date: string;
+}>): number {
+  if (rows.length === 0) return 0;
+  const now = new Date().toISOString();
+  const property = rows[0].property;
+  const periodType = rows[0].period_type;
+
+  db.exec('BEGIN');
+  try {
+    // Clear old cache for this property and period
+    db.prepare('DELETE FROM gsc_search_analytics_cache WHERE property = ? AND period_type = ?').run(property, periodType);
+
+    const stmt = db.prepare(`
+      INSERT INTO gsc_search_analytics_cache (
+        property, query, clicks, impressions, ctr, position, period_type, start_date, end_date, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const r of rows) {
+      stmt.run(
+        r.property,
+        r.query,
+        r.clicks,
+        r.impressions,
+        r.ctr,
+        r.position,
+        r.period_type,
+        r.start_date,
+        r.end_date,
+        now
+      );
+    }
+    db.exec('COMMIT');
+    return rows.length;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+export function getGscSearchAnalyticsCache(property: string, periodType: 'current' | 'previous' = 'current'): GscSearchAnalyticsCacheRecord[] {
+  const res = db.prepare('SELECT * FROM gsc_search_analytics_cache WHERE property = ? AND period_type = ?').all(property, periodType);
+  return res as unknown as GscSearchAnalyticsCacheRecord[];
 }
 
 // ----------------------------------------------------

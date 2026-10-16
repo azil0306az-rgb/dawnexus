@@ -24,7 +24,7 @@ import {
   BlogAuditInput
 } from './seoScorer.js';
 import { recordMcpAudit } from './mcpAuth.js';
-import { decryptPayload } from './routes/seoResearch.js';
+import { GscService, decryptPayload } from './gscService.js';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 export interface CategoryInfo {
@@ -173,73 +173,41 @@ export class McpService {
     const conn = getSeoConnection();
     const targetProperty = conn?.selected_property || 'https://dawnexus.in/';
 
-    if (!conn || !conn.encrypted_tokens) {
+    const { accessToken, selectedProperty, error } = await GscService.getValidAccessToken();
+
+    if (!accessToken) {
       return {
         status: 'diagnostic',
-        property: targetProperty,
+        property: selectedProperty,
         hasLiveMetrics: false,
-        diagnosticMessage: 'Google Search Console is not connected. Connect your authorized Google Account in Dawnexus Admin > SEO Research.',
+        diagnosticMessage: error || 'Google Search Console is not connected. Connect your authorized Google Account in Dawnexus Admin > SEO Research.',
         resolution: 'Authenticate Google Search Console via OAuth in the Admin panel to stream live query performance metrics.',
-        opportunities: []
-      };
-    }
-
-    const decrypted = decryptPayload(conn.encrypted_tokens);
-    if (!decrypted) {
-      return {
-        status: 'error',
-        property: targetProperty,
-        hasLiveMetrics: false,
-        diagnosticMessage: 'Stored OAuth token could not be decrypted. Secret key rotation may have occurred.',
-        resolution: 'Reconnect Google Search Console in Admin > SEO Research to establish a new encrypted session.',
-        opportunities: []
-      };
-    }
-
-    let tokens: any;
-    try {
-      tokens = JSON.parse(decrypted);
-    } catch {
-      return {
-        status: 'error',
-        property: targetProperty,
-        hasLiveMetrics: false,
-        diagnosticMessage: 'OAuth token payload corrupted.',
         opportunities: []
       };
     }
 
     // Attempt real Search Console API query
     try {
-      const gscEndpoint = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(targetProperty)}/searchAnalytics/query`;
-      const gscRes = await fetch(gscEndpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          startDate: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          endDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          dimensions: ['query'],
-          rowLimit: 25
-        })
+      const gscRes = await GscService.executeSearchAnalyticsQuery({
+        property: selectedProperty,
+        startDate: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        dimensions: ['query'],
+        rowLimit: 25
       });
 
-      if (!gscRes.ok) {
-        const errorText = await gscRes.text();
+      if (gscRes.error) {
         return {
           status: 'diagnostic',
-          property: targetProperty,
+          property: selectedProperty,
           hasLiveMetrics: false,
-          diagnosticMessage: `Google Search Console API returned HTTP ${gscRes.status}: ${errorText.slice(0, 200)}. The connected Google account does not have verified owner/viewer permissions for the property ${targetProperty} in Google Search Console.`,
+          diagnosticMessage: `Google Search Console API returned: ${gscRes.error}. The connected Google account may not have verified owner/viewer permissions for the property ${selectedProperty} in Google Search Console.`,
           resolution: 'Ensure the Google account authorized in Dawnexus Admin has been added as a Verified Owner or Full User in Google Search Console for https://dawnexus.in/.',
           opportunities: []
         };
       }
 
-      const data = await gscRes.json();
-      const rows = data.rows || [];
+      const rows = gscRes.rows || [];
       const { items: existingBlogs } = getBlogs({ limit: 100 });
 
       const opportunities = rows.map((r: any) => {
@@ -263,14 +231,14 @@ export class McpService {
 
       return {
         status: 'connected',
-        property: targetProperty,
+        property: selectedProperty,
         hasLiveMetrics: true,
         opportunities
       };
     } catch (err: any) {
       return {
         status: 'error',
-        property: targetProperty,
+        property: selectedProperty,
         hasLiveMetrics: false,
         diagnosticMessage: `Network or API exception querying Search Console: ${err?.message || err}`,
         opportunities: []
@@ -1403,5 +1371,81 @@ export class McpService {
     });
 
     return report;
+  }
+
+  /**
+   * Tool: gsc_get_connection_status
+   */
+  static async gscGetConnectionStatus() {
+    return await GscService.getConnectionStatus();
+  }
+
+  /**
+   * Tool: gsc_list_properties
+   */
+  static async gscListProperties() {
+    return await GscService.listProperties();
+  }
+
+  /**
+   * Tool: gsc_get_search_analytics
+   */
+  static async gscGetSearchAnalytics(args: {
+    startDate: string;
+    endDate: string;
+    dimensions?: string[];
+    rowLimit?: number;
+    property?: string;
+  }) {
+    return await GscService.executeSearchAnalyticsQuery({
+      startDate: args.startDate,
+      endDate: args.endDate,
+      dimensions: args.dimensions || ['query'],
+      rowLimit: args.rowLimit || 100,
+      property: args.property
+    });
+  }
+
+  /**
+   * Tool: gsc_get_top_queries
+   */
+  static async gscGetTopQueries(args?: { dateRange?: '7d' | '28d' | '3m'; limit?: number }) {
+    return await GscService.getQueryComparison(args?.dateRange || '28d', args?.limit || 50);
+  }
+
+  /**
+   * Tool: gsc_get_top_pages
+   */
+  static async gscGetTopPages(args?: { limit?: number }) {
+    return await GscService.getTopPages(args?.limit || 25);
+  }
+
+  /**
+   * Tool: gsc_get_research_status
+   */
+  static async gscGetResearchStatus() {
+    const status = await GscService.getConnectionStatus();
+    const jobs = GscService.getJobs(5);
+    return {
+      connection: status,
+      recentJobs: jobs
+    };
+  }
+
+  /**
+   * Tool: gsc_run_research_sync
+   */
+  static async gscRunResearchSync(args?: { dateRange?: '28d' | '3m'; triggeredBy?: string }) {
+    return await GscService.runSyncJob(args?.triggeredBy || 'mcp-chatgpt', args?.dateRange || '28d');
+  }
+
+  /**
+   * Tool: gsc_get_research_job
+   */
+  static async gscGetResearchJob(args: { jobId: string }) {
+    if (!args.jobId) throw new Error('jobId parameter is required');
+    const job = GscService.getJobById(args.jobId);
+    if (!job) throw new Error(`Job not found with ID: ${args.jobId}`);
+    return job;
   }
 }

@@ -7,98 +7,18 @@ import {
   clearSeoConnection,
   getBlogs
 } from '../db.js';
+import {
+  GscService,
+  encryptPayload,
+  decryptPayload
+} from '../gscService.js';
+
+export { encryptPayload, decryptPayload };
 
 export const seoResearchRouter = Router();
 
-// Encryption helpers for token storage (AES-256-GCM)
-const ENCRYPTION_ALGO = 'aes-256-gcm';
-function getEncryptionKey(): Buffer {
-  const secret = process.env.SEO_RESEARCH_ENCRYPTION_KEY || process.env.ADMIN_PASSWORD_HASH || 'dawnexus-seo-secret-key-salt-32chars!!';
-  return crypto.createHash('sha256').update(secret).digest();
-}
-
-export function encryptPayload(text: string): string {
-  const iv = crypto.randomBytes(12);
-  const key = getEncryptionKey();
-  const cipher = crypto.createCipheriv(ENCRYPTION_ALGO, key, iv);
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
-}
-
-export function decryptPayload(cipherString: string): string | null {
-  try {
-    const parts = cipherString.split(':');
-    if (parts.length !== 3) return null;
-    const [ivHex, tagHex, encrypted] = parts;
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(tagHex, 'hex');
-    const key = getEncryptionKey();
-    const decipher = crypto.createDecipheriv(ENCRYPTION_ALGO, key, iv);
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (err) {
-    console.error('[SEO Research] Decryption failed:', err);
-    return null;
-  }
-}
-
 // In-memory state storage for OAuth CSRF protection (valid 10 minutes)
 const oauthStates = new Map<string, number>();
-
-// Refreshes Google OAuth access token if expired
-async function getValidAccessToken(tokens: any): Promise<string | null> {
-  if (!tokens) return null;
-  
-  // Test existing access token with lightweight request
-  try {
-    const testRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${tokens.access_token}` }
-    });
-    if (testRes.ok) {
-      return tokens.access_token;
-    }
-  } catch {
-    // Continue to refresh
-  }
-
-  // If expired and refresh_token exists, exchange with Google OAuth token endpoint
-  if (tokens.refresh_token && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    try {
-      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: process.env.GOOGLE_CLIENT_ID,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          refresh_token: tokens.refresh_token,
-          grant_type: 'refresh_token'
-        })
-      });
-
-      if (refreshRes.ok) {
-        const refreshedData = await refreshRes.json();
-        const updatedTokens = {
-          ...tokens,
-          access_token: refreshedData.access_token,
-          expires_in: refreshedData.expires_in
-        };
-        const conn = getSeoConnection();
-        if (conn && conn.google_email) {
-          saveSeoConnection(conn.google_email, encryptPayload(JSON.stringify(updatedTokens)), conn.selected_property || undefined);
-        }
-        return refreshedData.access_token;
-      }
-    } catch (err) {
-      console.error('[SEO Research] Token refresh failed:', err);
-    }
-  }
-
-  return tokens.access_token || null;
-}
 
 // Canonical internal services and assets for smart link injection
 const DAWNEXUS_CORE_PAGES = [
@@ -374,32 +294,22 @@ Now, write the complete, publication-ready article in markdown.`;
 // ----------------------------------------------------
 
 // GET /api/admin/seo-research/status
-// Returns current connection state, whether live credentials exist, and selected property
-seoResearchRouter.get('/status', (req, res) => {
+// Returns current connection state, whether live credentials exist, selected property, and telemetry
+seoResearchRouter.get('/status', async (req, res) => {
   try {
     const isFeatureEnabled = process.env.ENABLE_SEO_RESEARCH_V3 !== 'false';
-    const hasClientId = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-    const conn = getSeoConnection();
-
-    let isConnected = false;
-    let googleEmail: string | null = null;
-    let selectedProperty: string | null = null;
-
-    if (conn && conn.encrypted_tokens) {
-      const decrypted = decryptPayload(conn.encrypted_tokens);
-      if (decrypted) {
-        isConnected = true;
-        googleEmail = conn.google_email;
-        selectedProperty = conn.selected_property || 'https://dawnexus.in/';
-      }
-    }
+    const status = await GscService.getConnectionStatus();
 
     return res.json({
       featureEnabled: isFeatureEnabled,
-      hasGoogleCredentials: hasClientId,
-      isConnected,
-      googleEmail,
-      selectedProperty: selectedProperty || 'https://dawnexus.in/',
+      hasGoogleCredentials: status.hasCredentials,
+      isConnected: status.isConnected,
+      connectionStatus: status.connectionStatus,
+      googleEmail: status.googleEmail,
+      selectedProperty: status.selectedProperty,
+      lastSyncAt: status.lastSyncAt,
+      lastAttemptAt: status.lastAttemptAt,
+      lastError: status.lastError,
       redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || 'https://dawnexus.in/api/admin/seo-research/google/callback'
     });
   } catch (error) {
@@ -504,7 +414,6 @@ export async function handleGoogleOAuthCallback(req: any, res: any) {
         const sitesCheckData = await sitesCheckRes.json();
         const entries = (sitesCheckData.siteEntry || []) as Array<{ siteUrl: string; permissionLevel: string }>;
         if (entries.length > 0) {
-          // Check for domain property (sc-domain:dawnexus.in) or exact URL match
           const domainProp = entries.find(e => e.siteUrl.includes('dawnexus.in'));
           if (domainProp) {
             initialProperty = domainProp.siteUrl;
@@ -519,7 +428,10 @@ export async function handleGoogleOAuthCallback(req: any, res: any) {
 
     // Encrypt tokens before saving to database
     const encrypted = encryptPayload(JSON.stringify(tokenData));
-    saveSeoConnection(userEmail, encrypted, initialProperty);
+    saveSeoConnection(userEmail, encrypted, initialProperty, {
+      connection_status: 'Connected',
+      last_error: null
+    });
 
     return res.redirect('/admin?seo_connected=1');
   } catch (err) {
@@ -562,43 +474,77 @@ seoResearchRouter.post('/select-property', (req, res) => {
 // Lists available Search Console properties for the authorized user
 seoResearchRouter.get('/properties', async (req, res) => {
   try {
-    const conn = getSeoConnection();
-    if (!conn || !conn.encrypted_tokens) {
-      return res.json({
-        properties: [],
-        isConnected: false
-      });
-    }
-
-    const decrypted = decryptPayload(conn.encrypted_tokens);
-    if (!decrypted) {
-      return res.status(401).json({ error: 'Invalid token encryption. Reconnection required.' });
-    }
-
-    const tokens = JSON.parse(decrypted);
-    const accessToken = await getValidAccessToken(tokens);
-    if (!accessToken) {
-      return res.status(401).json({ error: 'Google session expired. Please reconnect your Google account.' });
-    }
-
-    const sitesRes = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-
-    if (!sitesRes.ok) {
-      const errText = await sitesRes.text();
-      console.error('[Google Search Console Sites Error]:', errText);
-      return res.status(sitesRes.status).json({ error: 'Failed to fetch sites from Google Search Console. Ensure the Google Search Console API is enabled in your Google Cloud Console.' });
-    }
-
-    const sitesData = await sitesRes.json();
-    return res.json({
-      properties: sitesData.siteEntry || [],
-      isConnected: true
-    });
+    const result = await GscService.listProperties();
+    return res.json(result);
   } catch (error) {
     console.error('[SEO Research Properties Error]:', error);
     return res.status(500).json({ error: 'Failed to list Search Console properties' });
+  }
+});
+
+// GET /api/admin/seo-research/timeline
+// Returns clicks, impressions, CTR, position over time for SVG charts with previous period comparison
+seoResearchRouter.get('/timeline', async (req, res) => {
+  try {
+    const dateRange = (req.query.dateRange as '7d' | '28d' | '3m') || '28d';
+    const result = await GscService.getTimelineMetrics(dateRange);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('[SEO Research Timeline Error]:', error);
+    return res.status(500).json({ error: error?.message || 'Failed to fetch timeline metrics' });
+  }
+});
+
+// GET /api/admin/seo-research/query-comparison
+// Returns queries with period-over-period comparison metrics
+seoResearchRouter.get('/query-comparison', async (req, res) => {
+  try {
+    const dateRange = (req.query.dateRange as '7d' | '28d' | '3m') || '28d';
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 100;
+    const result = await GscService.getQueryComparison(dateRange, limit);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('[SEO Research Query Comparison Error]:', error);
+    return res.status(500).json({ error: error?.message || 'Failed to compare search queries' });
+  }
+});
+
+// GET /api/admin/seo-research/top-pages
+// Returns top landing pages
+seoResearchRouter.get('/top-pages', async (req, res) => {
+  try {
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 25;
+    const result = await GscService.getTopPages(limit);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('[SEO Research Top Pages Error]:', error);
+    return res.status(500).json({ error: error?.message || 'Failed to fetch top pages' });
+  }
+});
+
+// POST /api/admin/seo-research/sync
+// Triggers an on-demand synchronization job
+seoResearchRouter.post('/sync', async (req, res) => {
+  try {
+    const { dateRange = '28d' } = req.body || {};
+    const result = await GscService.runSyncJob('admin-ui', dateRange);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('[SEO Research Sync Error]:', error);
+    return res.status(400).json({ error: error?.message || 'Failed to trigger synchronization' });
+  }
+});
+
+// GET /api/admin/seo-research/jobs
+// Returns job activity feed
+seoResearchRouter.get('/jobs', (req, res) => {
+  try {
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 15;
+    const jobs = GscService.getJobs(limit);
+    return res.json({ jobs });
+  } catch (error: any) {
+    console.error('[SEO Research Jobs Error]:', error);
+    return res.status(500).json({ error: 'Failed to fetch research jobs' });
   }
 });
 
@@ -607,29 +553,18 @@ seoResearchRouter.get('/properties', async (req, res) => {
 seoResearchRouter.post('/opportunities', async (req, res) => {
   try {
     const { dateRange = '28d', customQueryLimit = 50 } = req.body || {};
-    const conn = getSeoConnection();
+    const { accessToken, selectedProperty, error } = await GscService.getValidAccessToken();
 
-    if (!conn || !conn.encrypted_tokens) {
+    if (!accessToken) {
       return res.status(400).json({
-        error: 'Google Search Console is not connected yet. Please connect your Google account above to load live search queries.',
+        error: error || 'Google Search Console is not connected yet. Please connect your Google account above to load live search queries.',
         isConnected: false,
         opportunities: [],
         stats: null
       });
     }
 
-    const decrypted = decryptPayload(conn.encrypted_tokens);
-    if (!decrypted) {
-      return res.status(401).json({ error: 'Token decryption failed. Please reconnect your Google account.' });
-    }
-
-    const tokens = JSON.parse(decrypted);
-    const accessToken = await getValidAccessToken(tokens);
-    if (!accessToken) {
-      return res.status(401).json({ error: 'Google session expired. Please reconnect your Google account.' });
-    }
-
-    const property = encodeURIComponent(conn.selected_property || 'https://dawnexus.in/');
+    const property = encodeURIComponent(selectedProperty);
     
     // Calculate startDate and endDate
     const end = new Date();
