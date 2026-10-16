@@ -229,6 +229,18 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_ga4_cache_lookup ON ga4_analytics_cache(property_id, report_type, date_range);
   `);
 
+  // Table for durable, cross-serverless OAuth state parameters with single-use consumption
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_states (
+      state TEXT PRIMARY KEY,
+      admin_session_id TEXT DEFAULT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      used_at TEXT DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
+  `);
+
   // Table for Version 3.5.297: Our Work / Client Showcase
   db.exec(`
     CREATE TABLE IF NOT EXISTS clients (
@@ -1867,6 +1879,78 @@ export function reorderClients(orderedIds: number[]): boolean {
     updateStmt.run(i, now, orderedIds[i]);
   }
   return true;
+}
+
+// ----------------------------------------------------
+// DURABLE OAUTH STATE MANAGEMENT (CROSS-SERVERLESS & ATOMIC)
+// ----------------------------------------------------
+
+export function createOAuthState(state: string, adminSessionId: string | null = null, ttlMs: number = 10 * 60 * 1000): void {
+  const now = new Date().toISOString();
+  const expiresAt = Date.now() + ttlMs;
+  db.prepare(`
+    INSERT INTO oauth_states (state, admin_session_id, expires_at, created_at, used_at)
+    VALUES (?, ?, ?, ?, NULL)
+    ON CONFLICT(state) DO UPDATE SET
+      admin_session_id = excluded.admin_session_id,
+      expires_at = excluded.expires_at,
+      created_at = excluded.created_at,
+      used_at = NULL
+  `).run(state, adminSessionId, expiresAt, now);
+}
+
+export interface OAuthStateValidationResult {
+  valid: boolean;
+  reason: 'valid' | 'not_found' | 'expired' | 'already_used' | 'session_mismatch';
+}
+
+export function consumeOAuthState(state: string, expectedSessionId?: string | null): OAuthStateValidationResult {
+  if (!state || typeof state !== 'string') {
+    return { valid: false, reason: 'not_found' };
+  }
+
+  const row = db.prepare('SELECT state, admin_session_id, expires_at, used_at FROM oauth_states WHERE state = ?').get(state) as {
+    state: string;
+    admin_session_id: string | null;
+    expires_at: number;
+    used_at: string | null;
+  } | undefined;
+
+  if (!row) {
+    return { valid: false, reason: 'not_found' };
+  }
+
+  if (row.used_at) {
+    return { valid: false, reason: 'already_used' };
+  }
+
+  if (Date.now() > row.expires_at) {
+    return { valid: false, reason: 'expired' };
+  }
+
+  // If bound to a session ID and an expected session ID is provided, verify match
+  if (expectedSessionId && row.admin_session_id && row.admin_session_id !== expectedSessionId) {
+    return { valid: false, reason: 'session_mismatch' };
+  }
+
+  // Atomically mark state as used
+  const now = new Date().toISOString();
+  const updateRes = db.prepare('UPDATE oauth_states SET used_at = ? WHERE state = ? AND used_at IS NULL').run(now, state);
+  if (updateRes.changes === 0) {
+    // Concurrent attempt consumed it first
+    return { valid: false, reason: 'already_used' };
+  }
+
+  return { valid: true, reason: 'valid' };
+}
+
+export function cleanupExpiredOAuthStates(): void {
+  try {
+    const now = Date.now();
+    db.prepare('DELETE FROM oauth_states WHERE expires_at < ? OR used_at IS NOT NULL').run(now);
+  } catch {
+    // Non-fatal
+  }
 }
 
 // Call initialization

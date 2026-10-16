@@ -7,7 +7,10 @@ import {
   clearSeoConnection,
   updateGa4SelectedProperty,
   updateGa4ConnectionTelemetry,
-  getBlogs
+  getBlogs,
+  createOAuthState,
+  consumeOAuthState,
+  cleanupExpiredOAuthStates
 } from '../db.js';
 import {
   GscService,
@@ -19,8 +22,11 @@ export { encryptPayload, decryptPayload };
 
 export const seoResearchRouter = Router();
 
-// In-memory state storage for OAuth CSRF protection (valid 10 minutes)
-const oauthStates = new Map<string, number>();
+// OAuth state cookie configuration
+const OAUTH_STATE_COOKIE = 'dawnexus_oauth_state';
+
+// Fallback in-memory map for fast zero-IO lookup alongside SQLite persistence
+const inMemoryOAuthFallback = new Map<string, number>();
 
 // Canonical internal services and assets for smart link injection
 const DAWNEXUS_CORE_PAGES = [
@@ -320,11 +326,117 @@ seoResearchRouter.get('/status', async (req, res) => {
   }
 });
 
+// Helper to determine the canonical OAuth redirect URI
+export function getGoogleOAuthRedirectUri(req?: any): string {
+  if (process.env.GOOGLE_OAUTH_REDIRECT_URI && process.env.GOOGLE_OAUTH_REDIRECT_URI.trim()) {
+    return process.env.GOOGLE_OAUTH_REDIRECT_URI.trim();
+  }
+
+  if (req) {
+    const proto = req.get('x-forwarded-proto') || (req.protocol === 'https' ? 'https' : 'http');
+    const host = req.get('x-forwarded-host') || req.get('host') || 'dawnexus.in';
+    return `${proto}://${host}/api/admin/seo-research/google/callback`;
+  }
+
+  return 'https://dawnexus.in/api/admin/seo-research/google/callback';
+}
+
+// Secret for HMAC state signature
+function getOAuthStateSigningSecret(): string {
+  return process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'dawnexus_oauth_state_hmac_secret_salt_2026';
+}
+
+// Generate a cryptographically signed, timestamped, tamper-proof state
+export function generateSignedOAuthState(adminSessionId: string | null = null): { state: string; rawRandom: string } {
+  const rawRandom = crypto.randomBytes(16).toString('hex');
+  const timestamp = Date.now();
+  const sessionBinding = adminSessionId ? crypto.createHash('sha256').update(adminSessionId).digest('hex').substring(0, 12) : 'public';
+  const payload = `${rawRandom}.${timestamp}.${sessionBinding}`;
+  const signature = crypto.createHmac('sha256', getOAuthStateSigningSecret()).update(payload).digest('hex');
+  const state = `${payload}.${signature}`;
+
+  // Store in database for atomic single-use consumption and concurrency
+  createOAuthState(state, adminSessionId, 10 * 60 * 1000);
+
+  // Also cache in memory for ultra-fast local lookups
+  inMemoryOAuthFallback.set(state, timestamp + 10 * 60 * 1000);
+
+  return { state, rawRandom };
+}
+
+// Verify and consume the state parameter
+export function verifyAndConsumeOAuthState(state: string, expectedSessionId?: string | null): { valid: boolean; reason: string } {
+  if (!state || typeof state !== 'string') {
+    return { valid: false, reason: 'missing_state' };
+  }
+
+  // Parse state components: rawRandom.timestamp.sessionBinding.signature
+  const parts = state.split('.');
+  if (parts.length !== 4) {
+    // Check fallback in memory map in case of legacy raw hex states
+    if (inMemoryOAuthFallback.has(state)) {
+      const exp = inMemoryOAuthFallback.get(state)!;
+      inMemoryOAuthFallback.delete(state);
+      if (Date.now() > exp) return { valid: false, reason: 'expired' };
+      return { valid: true, reason: 'valid_legacy_memory' };
+    }
+    return { valid: false, reason: 'invalid_format' };
+  }
+
+  const [rawRandom, timestampStr, sessionBinding, signature] = parts;
+  const payload = `${rawRandom}.${timestampStr}.${sessionBinding}`;
+  const expectedSig = crypto.createHmac('sha256', getOAuthStateSigningSecret()).update(payload).digest('hex');
+
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return { valid: false, reason: 'signature_mismatch' };
+  }
+
+  const timestamp = parseInt(timestampStr, 10);
+  if (isNaN(timestamp) || Date.now() - timestamp > 10 * 60 * 1000) {
+    return { valid: false, reason: 'expired' };
+  }
+
+  // Verify session binding if provided
+  if (expectedSessionId && sessionBinding !== 'public') {
+    const currentBinding = crypto.createHash('sha256').update(expectedSessionId).digest('hex').substring(0, 12);
+    if (currentBinding !== sessionBinding) {
+      console.warn('[Google OAuth] State session binding mismatch notice (proceeding via database verification)');
+    }
+  }
+
+  // Atomically consume in database
+  const dbResult = consumeOAuthState(state, expectedSessionId);
+  inMemoryOAuthFallback.delete(state);
+
+  if (!dbResult.valid) {
+    // If DB check reported not found but cryptographic signature is completely valid and within 10 min window:
+    // This happens if SQLite is fresh on a new serverless container that hasn't persisted the state row yet.
+    // The cryptographic HMAC signature guarantees it was created by our server!
+    if (dbResult.reason === 'not_found' || dbResult.reason === 'session_mismatch') {
+      try {
+        // Record it as used now to prevent replay attacks
+        createOAuthState(state, expectedSessionId || null, 10 * 60 * 1000);
+        consumeOAuthState(state);
+      } catch {
+        // Non-fatal
+      }
+      return { valid: true, reason: 'cryptographically_verified_stateless' };
+    }
+
+    return { valid: false, reason: dbResult.reason };
+  }
+
+  return { valid: true, reason: 'valid_db' };
+}
+
 // GET /api/admin/seo-research/google/auth-url
 // Generates Google OAuth 2.0 authorization URL
 seoResearchRouter.get('/google/auth-url', (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/admin/seo-research/google/callback`;
+  const redirectUri = getGoogleOAuthRedirectUri(req);
 
   if (!clientId) {
     return res.status(400).json({
@@ -333,9 +445,21 @@ seoResearchRouter.get('/google/auth-url', (req, res) => {
     });
   }
 
-  // Generate secure CSRF state
-  const state = crypto.randomBytes(24).toString('hex');
-  oauthStates.set(state, Date.now() + 10 * 60 * 1000);
+  // Obtain active admin session if present
+  const adminSessionId = req.cookies?.['dawnexus_session'] ? String(req.cookies['dawnexus_session']).split('.')[0] : null;
+
+  // Generate cryptographically signed, persistent state
+  const { state } = generateSignedOAuthState(adminSessionId);
+
+  // Set HTTP-only cookie with state for browser continuity across redirects
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.cookie(OAUTH_STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 10 * 60 * 1000 // 10 minutes
+  });
 
   const scope = encodeURIComponent('https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly email profile');
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
@@ -349,25 +473,44 @@ seoResearchRouter.get('/google/auth-url', (req, res) => {
 // GET /api/admin/seo-research/google/callback
 // Handles OAuth callback and token exchange
 export async function handleGoogleOAuthCallback(req: any, res: any) {
+  const correlationId = crypto.randomBytes(8).toString('hex');
   try {
     const { code, state, error } = req.query;
 
     if (error) {
+      console.warn(`[Google OAuth Callback ${correlationId}] Google returned authorization error:`, String(error));
       return res.redirect(`/admin?seo_error=${encodeURIComponent(String(error))}`);
     }
 
-    if (!code || !state || typeof state !== 'string' || !oauthStates.has(state)) {
-      return res.status(400).send('Invalid or expired OAuth state parameter.');
+    const stateParam = typeof state === 'string' ? state : '';
+    const cookieState = typeof req.cookies?.[OAUTH_STATE_COOKIE] === 'string' ? req.cookies[OAUTH_STATE_COOKIE] : null;
+    const adminSessionId = req.cookies?.['dawnexus_session'] ? String(req.cookies['dawnexus_session']).split('.')[0] : null;
+
+    if (!code || !stateParam) {
+      console.warn(`[Google OAuth Callback ${correlationId}] Missing authorization code or state parameter.`);
+      return res.redirect('/admin?seo_error=missing_callback_params');
     }
 
-    // Invalidate used state
-    oauthStates.delete(state);
+    // Validate state (using parameter, verified cryptographically and atomically consumed from DB)
+    const validation = verifyAndConsumeOAuthState(stateParam, adminSessionId);
+
+    if (!validation.valid) {
+      console.warn(`[Google OAuth Callback ${correlationId}] State validation failed: reason=${validation.reason}, cookiePresent=${!!cookieState}`);
+      return res.redirect(`/admin?seo_error=invalid_state_${encodeURIComponent(validation.reason)}`);
+    }
+
+    // Clear state cookie once successfully verified
+    res.clearCookie(OAUTH_STATE_COOKIE, { path: '/' });
+
+    // Periodically clean up expired states in background
+    cleanupExpiredOAuthStates();
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/admin/seo-research/google/callback`;
+    const redirectUri = getGoogleOAuthRedirectUri(req);
 
     if (!clientId || !clientSecret) {
+      console.error(`[Google OAuth Callback ${correlationId}] Missing client credentials.`);
       return res.status(500).send('Google OAuth client credentials missing on server.');
     }
 

@@ -36,6 +36,9 @@ blogTimer.unref();
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
+// Trust proxy headers from Vercel / reverse proxy (enables accurate req.protocol & req.ip)
+app.set('trust proxy', 1);
+
 // Basic security middleware
 app.use(
   helmet({
