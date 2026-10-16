@@ -18,6 +18,7 @@ import {
 import {
   calculateSeoScore,
   normalizeSeoReport,
+  computeContentRevision,
   VALID_CATEGORIES,
   DAWNEXUS_CORE_URLS,
   SeoAuditReport,
@@ -452,7 +453,7 @@ export class McpService {
 
     // 5. Construct Clean Record
     const excerpt = (input.excerpt || '').trim() || input.content.slice(0, 160).replace(/[#*`_]/g, '').trim();
-    const canonicalUrl = input.canonical_url || `https://dawnexus.in/blog/${desiredSlug}`;
+    const canonicalUrl = input.canonical_url || `https://www.dawnexus.in/blog/${desiredSlug}`;
 
     const created = createBlog({
       title: input.title.trim(),
@@ -515,9 +516,22 @@ export class McpService {
           featured_image: created.featured_image,
           image_alt: created.image_alt
         },
-        publishedSlugs
+        publishedSlugs,
+        90,
+        created.id
       )
     );
+
+    const withSeo = updateBlog(created.id, {
+      seo_report: JSON.stringify(seoReport),
+      content_revision: seoReport.contentRevision
+    }) || created;
+
+    try {
+      await persistBlog(withSeo);
+    } catch {
+      // Non-fatal
+    }
 
     recordMcpAudit({
       tool: 'create_blog_draft',
@@ -530,10 +544,10 @@ export class McpService {
 
     return {
       success: true,
-      blog: created,
+      blog: withSeo,
       seoReport,
-      previewUrl: `https://dawnexus.in/blog/${created.slug}`,
-      adminReviewUrl: 'https://dawnexus.in/admin',
+      previewUrl: `https://www.dawnexus.in/blog/${created.slug}`,
+      adminReviewUrl: 'https://www.dawnexus.in/admin',
       message: `Draft #${created.id} saved successfully in Supabase as 'Draft'. Review and approve it in the Dawnexus Admin panel.`
     };
   }
@@ -661,9 +675,22 @@ export class McpService {
           featured_image: updated.featured_image,
           image_alt: updated.image_alt
         },
-        publishedSlugs
+        publishedSlugs,
+        90,
+        id
       )
     );
+
+    const withSeo = updateBlog(id, {
+      seo_report: JSON.stringify(seoReport),
+      content_revision: seoReport.contentRevision
+    }) || updated;
+
+    try {
+      await persistBlog(withSeo);
+    } catch {
+      // Non-fatal
+    }
 
     recordMcpAudit({
       tool: 'update_blog_draft',
@@ -676,7 +703,7 @@ export class McpService {
 
     return {
       success: true,
-      blog: updated,
+      blog: withSeo,
       seoReport,
       message: `Draft #${id} updated successfully.`
     };
@@ -1226,29 +1253,72 @@ export class McpService {
     // 4. Deterministic SEO Quality Check (>= 90 score required and no mandatory failures)
     const { items: allBlogs } = getBlogs({ limit: 100 });
     const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
-    const rawSeoReport = calculateSeoScore(
-      {
-        title: blog.title,
-        slug: blog.slug,
-        content: blog.content,
-        excerpt: blog.excerpt,
-        category: blog.category,
-        primary_keyword: blog.primary_keyword,
-        secondary_keywords: blog.secondary_keywords,
-        search_intent: blog.search_intent,
-        target_audience: blog.target_audience,
-        seo_title: blog.seo_title,
-        meta_description: blog.meta_description || blog.excerpt,
-        canonical_url: blog.canonical_url || (blog.slug ? `https://dawnexus.in/blog/${blog.slug}` : ''),
-        featured_image: blog.featured_image,
-        image_alt: blog.image_alt
-      },
-      publishedSlugs
-    );
+    const currentRevision = computeContentRevision(blog);
 
-    const seoReport = normalizeSeoReport(rawSeoReport);
+    let seoReport: SeoAuditReport;
+    if (blog.seo_report && blog.content_revision === currentRevision) {
+      try {
+        seoReport = normalizeSeoReport(JSON.parse(blog.seo_report));
+      } catch {
+        seoReport = normalizeSeoReport(
+          calculateSeoScore(
+            {
+              title: blog.title,
+              slug: blog.slug,
+              content: blog.content,
+              excerpt: blog.excerpt,
+              category: blog.category,
+              primary_keyword: blog.primary_keyword,
+              secondary_keywords: blog.secondary_keywords,
+              search_intent: blog.search_intent,
+              target_audience: blog.target_audience,
+              seo_title: blog.seo_title,
+              meta_description: blog.meta_description || blog.excerpt,
+              canonical_url: blog.canonical_url || (blog.slug ? `https://www.dawnexus.in/blog/${blog.slug}` : ''),
+              featured_image: blog.featured_image,
+              image_alt: blog.image_alt
+            },
+            publishedSlugs,
+            90,
+            blog.id
+          )
+        );
+        updateBlog(blog.id, {
+          seo_report: JSON.stringify(seoReport),
+          content_revision: seoReport.contentRevision
+        });
+      }
+    } else {
+      seoReport = normalizeSeoReport(
+        calculateSeoScore(
+          {
+            title: blog.title,
+            slug: blog.slug,
+            content: blog.content,
+            excerpt: blog.excerpt,
+            category: blog.category,
+            primary_keyword: blog.primary_keyword,
+            secondary_keywords: blog.secondary_keywords,
+            search_intent: blog.search_intent,
+            target_audience: blog.target_audience,
+            seo_title: blog.seo_title,
+            meta_description: blog.meta_description || blog.excerpt,
+            canonical_url: blog.canonical_url || (blog.slug ? `https://www.dawnexus.in/blog/${blog.slug}` : ''),
+            featured_image: blog.featured_image,
+            image_alt: blog.image_alt
+          },
+          publishedSlugs,
+          90,
+          blog.id
+        )
+      );
+      updateBlog(blog.id, {
+        seo_report: JSON.stringify(seoReport),
+        content_revision: seoReport.contentRevision
+      });
+    }
 
-    if (seoReport.totalScore < 90 || !seoReport.meetsThreshold) {
+    if (seoReport.totalScore < 90 || !seoReport.meetsThreshold || (Array.isArray(seoReport.mandatoryFailures) && seoReport.mandatoryFailures.length > 0)) {
       const mandatoryList = Array.isArray(seoReport.mandatoryFailures) ? seoReport.mandatoryFailures : [];
       const recList = Array.isArray(seoReport.recommendations) ? seoReport.recommendations : [];
 
@@ -1313,8 +1383,8 @@ export class McpService {
       scheduled_at: isoScheduledAt,
       scheduled_at_ist: formattedIst,
       seoScore: seoReport.totalScore,
-      previewUrl: `https://dawnexus.in/blog/${updated.slug}`,
-      calendarUrl: 'https://dawnexus.in/admin',
+      previewUrl: `https://www.dawnexus.in/blog/${updated.slug}`,
+      calendarUrl: 'https://www.dawnexus.in/admin',
       message: `Article #${input.id} ("${updated.title}") has been approved and successfully scheduled for publication on ${formattedIst}. It will be automatically published by the Dawnexus background scheduler.`
     };
   }
@@ -1323,10 +1393,10 @@ export class McpService {
    * Tool 8: run_seo_quality_check
    * Executes deterministic 100-point audit on draft or input object.
    */
-  static runSeoQualityCheck(
+  static async runSeoQualityCheck(
     input: { id?: number; draft?: BlogAuditInput },
     callerIp: string = 'mcp-client'
-  ): SeoAuditReport {
+  ): Promise<SeoAuditReport> {
     let auditData: BlogAuditInput;
 
     if (input.id) {
@@ -1359,7 +1429,22 @@ export class McpService {
     const { items: allBlogs } = getBlogs({ limit: 100 });
     const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
 
-    const report = normalizeSeoReport(calculateSeoScore(auditData, publishedSlugs));
+    const report = normalizeSeoReport(calculateSeoScore(auditData, publishedSlugs, 90, input.id));
+
+    if (input.id) {
+      updateBlog(input.id, {
+        seo_report: JSON.stringify(report),
+        content_revision: report.contentRevision
+      });
+      const persisted = getBlogById(input.id);
+      if (persisted) {
+        try {
+          await persistBlog(persisted);
+        } catch {
+          // Non-fatal
+        }
+      }
+    }
 
     recordMcpAudit({
       tool: 'run_seo_quality_check',

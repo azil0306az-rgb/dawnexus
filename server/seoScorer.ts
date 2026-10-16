@@ -5,6 +5,8 @@
  * Strict Code-Based Evaluation (No Generative AI API)
  */
 
+import crypto from 'node:crypto';
+
 export interface SeoCriterionScore {
   name: string;
   maxPoints: number;
@@ -14,6 +16,9 @@ export interface SeoCriterionScore {
 }
 
 export interface SeoAuditReport {
+  schemaVersion: 'v1.0';
+  draftId?: number;
+  contentRevision?: string;
   totalScore: number;
   maxScore: number;
   percentage: number;
@@ -39,6 +44,26 @@ export interface SeoAuditReport {
     categoryValid: boolean;
     slugValid: boolean;
   };
+}
+
+/**
+ * Computes a deterministic SHA-256 revision hash of article content and SEO fields.
+ */
+export function computeContentRevision(blog: Partial<BlogAuditInput> | any): string {
+  if (!blog || typeof blog !== 'object') return '';
+  const parts = [
+    String(blog.title || '').trim(),
+    String(blog.slug || '').trim(),
+    String(blog.content || '').trim(),
+    String(blog.category || '').trim(),
+    String(blog.primary_keyword || '').trim(),
+    String(blog.featured_image || '').trim(),
+    String(blog.image_alt || '').trim(),
+    String(blog.seo_title || '').trim(),
+    String(blog.meta_description || blog.excerpt || '').trim(),
+    String(blog.canonical_url || '').trim()
+  ];
+  return crypto.createHash('sha256').update(parts.join(':::')).digest('hex');
 }
 
 export interface BlogAuditInput {
@@ -71,19 +96,27 @@ export const VALID_CATEGORIES = [
 export const DEFAULT_SEO_THRESHOLD = 90;
 
 export const DAWNEXUS_CORE_URLS = [
+  'https://www.dawnexus.in/',
+  'https://www.dawnexus.in',
   'https://dawnexus.in/',
   'https://dawnexus.in',
   '/',
+  'https://www.dawnexus.in/services/website-design',
   'https://dawnexus.in/services/website-design',
   '/services/website-design',
+  'https://www.dawnexus.in/services/seo-services',
   'https://dawnexus.in/services/seo-services',
   '/services/seo-services',
+  'https://www.dawnexus.in/services/ai-video-creation',
   'https://dawnexus.in/services/ai-video-creation',
   '/services/ai-video-creation',
+  'https://www.dawnexus.in/services/digital-marketing',
   'https://dawnexus.in/services/digital-marketing',
   '/services/digital-marketing',
+  'https://www.dawnexus.in/website-cost-calculator',
   'https://dawnexus.in/website-cost-calculator',
   '/website-cost-calculator',
+  'https://www.dawnexus.in/blog',
   'https://dawnexus.in/blog',
   '/blog',
   '/services',
@@ -199,7 +232,8 @@ export function isValidDawnexusInternalLink(href: string, validSlugs: string[] =
 export function calculateSeoScore(
   blog: BlogAuditInput,
   existingSlugs: string[] = [],
-  threshold: number = DEFAULT_SEO_THRESHOLD
+  threshold: number = DEFAULT_SEO_THRESHOLD,
+  draftId?: number
 ): SeoAuditReport {
   const passedChecks: string[] = [];
   const failedChecks: string[] = [];
@@ -343,14 +377,19 @@ export function calculateSeoScore(
     warnings.push('Provide a compelling meta description.');
   }
 
-  // Canonical URL (defaults to official Dawnexus blog format https://dawnexus.in/blog/<slug>)
-  const canonicalUrl = (blog.canonical_url || (blog.slug ? `https://dawnexus.in/blog/${blog.slug}` : '')).trim();
-  if (canonicalUrl && (canonicalUrl.startsWith('https://dawnexus.in/blog/') || canonicalUrl.startsWith('/blog/'))) {
+  // Canonical URL (defaults to official Dawnexus blog format https://www.dawnexus.in/blog/<slug>)
+  const canonicalUrl = (blog.canonical_url || (blog.slug ? `https://www.dawnexus.in/blog/${blog.slug}` : '')).trim();
+  if (
+    canonicalUrl &&
+    (canonicalUrl.startsWith('https://www.dawnexus.in/blog/') ||
+     canonicalUrl.startsWith('https://dawnexus.in/blog/') ||
+     canonicalUrl.startsWith('/blog/'))
+  ) {
     metaScore += 3;
     passedChecks.push('Canonical URL follows official Dawnexus conventions.');
   } else {
     metaScore += 1;
-    warnings.push('Canonical URL should point to https://dawnexus.in/blog/<slug>.');
+    warnings.push('Canonical URL should point to https://www.dawnexus.in/blog/<slug>.');
   }
 
   // -------------------------------------------------------------
@@ -653,6 +692,9 @@ export function calculateSeoScore(
     warnings,
     requiredFixes,
     evaluatedAt: new Date().toISOString(),
+    schemaVersion: 'v1.0',
+    draftId,
+    contentRevision: computeContentRevision(blog),
     metadata: {
       wordCount,
       headingCount,
@@ -675,6 +717,9 @@ export function calculateSeoScore(
 export function normalizeSeoReport(report: any): SeoAuditReport {
   if (!report || typeof report !== 'object') {
     return {
+      schemaVersion: 'v1.0',
+      draftId: undefined,
+      contentRevision: undefined,
       totalScore: 0,
       maxScore: 100,
       percentage: 0,
@@ -739,6 +784,9 @@ export function normalizeSeoReport(report: any): SeoAuditReport {
     : (totalScore >= threshold && mandatoryFailures.length === 0);
 
   return {
+    schemaVersion: 'v1.0',
+    draftId: typeof report.draftId === 'number' ? report.draftId : undefined,
+    contentRevision: typeof report.contentRevision === 'string' ? report.contentRevision : undefined,
     totalScore,
     maxScore,
     percentage,

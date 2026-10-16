@@ -22,8 +22,8 @@ export const DigitalMarketingPage: React.FC = () => {
   usePageSeo({
     title: 'Digital Marketing & Paid Advertising | Dawnexus',
     description: 'Coordinated digital marketing, Google Ads management, Meta Ads advertising, audience targeting, local discovery, and continuous performance analytics.',
-    canonicalUrl: 'https://dawnexus.in/services/digital-marketing',
-    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    canonicalUrl: 'https://www.dawnexus.in/services/digital-marketing',
+    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: {
       '@context': 'https://schema.org',
       '@type': 'Service',
@@ -31,10 +31,10 @@ export const DigitalMarketingPage: React.FC = () => {
       'provider': {
         '@type': 'ProfessionalService',
         'name': 'Dawnexus',
-        'url': 'https://dawnexus.in/'
+        'url': 'https://www.dawnexus.in/'
       },
       'description': 'Integrated digital marketing combining paid advertising on Google and Meta, search optimization, and local map discovery.',
-      'url': 'https://dawnexus.in/services/digital-marketing'
+      'url': 'https://www.dawnexus.in/services/digital-marketing'
     }
   });
 

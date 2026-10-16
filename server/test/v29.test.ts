@@ -307,12 +307,12 @@ test('Sitemap: /sitemap.xml dynamically returns HTTP 200 with all published blog
   const xml = await res.text();
 
   // Canonical base domain
-  assert.ok(xml.includes('<loc>https://dawnexus.in/</loc>'));
-  assert.ok(xml.includes('<loc>https://dawnexus.in/services/website-design</loc>'));
-  assert.ok(xml.includes('<loc>https://dawnexus.in/services/seo-services</loc>'));
-  assert.ok(xml.includes('<loc>https://dawnexus.in/services/ai-video-creation</loc>'));
-  assert.ok(xml.includes('<loc>https://dawnexus.in/services/digital-marketing</loc>'));
-  assert.ok(xml.includes('<loc>https://dawnexus.in/blog</loc>'));
+  assert.ok(xml.includes('<loc>https://www.dawnexus.in/</loc>'));
+  assert.ok(xml.includes('<loc>https://www.dawnexus.in/services/website-design</loc>'));
+  assert.ok(xml.includes('<loc>https://www.dawnexus.in/services/seo-services</loc>'));
+  assert.ok(xml.includes('<loc>https://www.dawnexus.in/services/ai-video-creation</loc>'));
+  assert.ok(xml.includes('<loc>https://www.dawnexus.in/services/digital-marketing</loc>'));
+  assert.ok(xml.includes('<loc>https://www.dawnexus.in/blog</loc>'));
 
   // Confirmed published blog article MUST be present in dynamic sitemap
   createBlog({
@@ -325,7 +325,7 @@ test('Sitemap: /sitemap.xml dynamically returns HTTP 200 with all published blog
   const resWithBlog = await fetch(`${baseUrl}/sitemap.xml`);
   const xmlWithBlog = await resWithBlog.text();
   assert.ok(
-    xmlWithBlog.includes('<loc>https://dawnexus.in/blog/local-seo-google-maps-playbook</loc>'),
+    xmlWithBlog.includes('<loc>https://www.dawnexus.in/blog/local-seo-google-maps-playbook</loc>'),
     'Published blog canonical URL must be present in dynamic sitemap'
   );
 

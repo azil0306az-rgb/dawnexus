@@ -34,13 +34,13 @@ export const BlogListingPage: React.FC = () => {
   usePageSeo({
     title: 'Insights, Guides & Digital Strategy | Dawnexus',
     description: 'Transparent frameworks, pricing analyses, and strategic execution guides across web design, search engine optimization, and AI video production.',
-    canonicalUrl: 'https://dawnexus.in/blog',
-    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    canonicalUrl: 'https://www.dawnexus.in/blog',
+    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: {
       '@context': 'https://schema.org',
       '@type': 'Blog',
       'name': 'Dawnexus Perspectives & Playbooks',
-      'url': 'https://dawnexus.in/blog',
+      'url': 'https://www.dawnexus.in/blog',
       'description': 'Strategic playbooks on web architecture, SEO discoverability, and AI creative production.'
     }
   });

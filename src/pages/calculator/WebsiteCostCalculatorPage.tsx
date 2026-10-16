@@ -48,8 +48,8 @@ export const WebsiteCostCalculatorPage: React.FC = () => {
   usePageSeo({
     title: 'Website Cost Estimator | Instant Transparent Pricing | Dawnexus',
     description: 'Calculate an instant, transparent project cost estimate for your new website. Select website type, page count, and custom features in Indian Rupees (₹).',
-    canonicalUrl: 'https://dawnexus.in/website-cost-calculator',
-    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png'
+    canonicalUrl: 'https://www.dawnexus.in/website-cost-calculator',
+    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png'
   });
 
   // Steps: 1: Type, 2: Pages, 3: Features, 4: Design, 5: Estimate

@@ -371,7 +371,7 @@ export function createDawnexusMcpServer(): Server {
         }
 
         case 'run_seo_quality_check': {
-          result = McpService.runSeoQualityCheck(args as any, callerIp);
+          result = await McpService.runSeoQualityCheck(args as any, callerIp);
           break;
         }
 
@@ -981,7 +981,7 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           resultData = await McpService.scheduleBlogDraft(toolArgs, callerIp);
           break;
         case 'run_seo_quality_check':
-          resultData = McpService.runSeoQualityCheck(toolArgs, callerIp);
+          resultData = await McpService.runSeoQualityCheck(toolArgs, callerIp);
           break;
         case 'gsc_get_connection_status':
           resultData = await McpService.gscGetConnectionStatus();

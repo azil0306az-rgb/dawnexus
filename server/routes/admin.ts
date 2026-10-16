@@ -48,6 +48,7 @@ import {
   getEmailProviderStatus
 } from '../email.js';
 import { seoResearchRouter } from './seoResearch.js';
+import { calculateSeoScore, normalizeSeoReport, computeContentRevision } from '../seoScorer.js';
 import { getDatabaseHealthStats, performDatabaseHealthCheck } from '../dbHealth.js';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { getExpectedMcpKey, getMcpAuditTrail } from '../mcpAuth.js';
@@ -228,12 +229,38 @@ adminRouter.post('/blogs', async (req, res) => {
       published_at: typeof published_at === 'string' && published_at.trim() ? published_at.trim() : null,
       admin_notes: typeof admin_notes === 'string' ? admin_notes.trim() : ''
     });
-    await persistBlog(created);
+
+    const { items: allBlogs } = getBlogs({ limit: 100 });
+    const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
+    const seoReport = normalizeSeoReport(calculateSeoScore({
+      title: created.title,
+      slug: created.slug,
+      content: created.content,
+      excerpt: created.excerpt,
+      category: created.category,
+      primary_keyword: created.primary_keyword,
+      secondary_keywords: created.secondary_keywords,
+      search_intent: created.search_intent,
+      target_audience: created.target_audience,
+      seo_title: created.seo_title,
+      meta_description: created.meta_description,
+      canonical_url: created.canonical_url,
+      featured_image: created.featured_image,
+      image_alt: created.image_alt
+    }, publishedSlugs, 90, created.id));
+
+    const withSeo = updateBlog(created.id, {
+      seo_report: JSON.stringify(seoReport),
+      content_revision: seoReport.contentRevision
+    }) || created;
+
+    await persistBlog(withSeo);
 
     return res.status(201).json({
       success: true,
       message: 'Article created successfully',
-      blog: created
+      blog: withSeo,
+      seoReport
     });
   } catch (error) {
     console.error('[Admin Create Blog Error]:', error);
@@ -254,12 +281,38 @@ adminRouter.patch('/blogs/:id', async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: 'Blog not found' });
     }
-    await persistBlog(updated);
+
+    const { items: allBlogs } = getBlogs({ limit: 100 });
+    const publishedSlugs = allBlogs.filter(b => b.status === 'Published' && b.id !== id).map(b => b.slug);
+    const seoReport = normalizeSeoReport(calculateSeoScore({
+      title: updated.title,
+      slug: updated.slug,
+      content: updated.content,
+      excerpt: updated.excerpt,
+      category: updated.category,
+      primary_keyword: updated.primary_keyword,
+      secondary_keywords: updated.secondary_keywords,
+      search_intent: updated.search_intent,
+      target_audience: updated.target_audience,
+      seo_title: updated.seo_title,
+      meta_description: updated.meta_description,
+      canonical_url: updated.canonical_url,
+      featured_image: updated.featured_image,
+      image_alt: updated.image_alt
+    }, publishedSlugs, 90, updated.id));
+
+    const finalUpdated = updateBlog(id, {
+      seo_report: JSON.stringify(seoReport),
+      content_revision: seoReport.contentRevision
+    }) || updated;
+
+    await persistBlog(finalUpdated);
 
     return res.json({
       success: true,
       message: 'Article updated successfully',
-      blog: updated
+      blog: finalUpdated,
+      seoReport
     });
   } catch (error) {
     console.error('[Admin Update Blog Error]:', error);

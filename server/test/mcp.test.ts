@@ -128,7 +128,11 @@ test('MCP Tools: get_search_console_opportunities returns real status without fa
   const data = await res.json();
   assert.ok(['connected', 'diagnostic', 'error'].includes(data.status));
   assert.ok(typeof data.hasLiveMetrics === 'boolean');
-  assert.equal(data.property, 'https://dawnexus.in/');
+  assert.ok(
+    data.property === 'sc-domain:dawnexus.in' ||
+    data.property === 'https://dawnexus.in/' ||
+    data.property === 'https://www.dawnexus.in/'
+  );
   if (!data.hasLiveMetrics) {
     assert.ok(data.diagnosticMessage);
     assert.equal(data.opportunities.length, 0); // Must NOT fabricate fake metrics

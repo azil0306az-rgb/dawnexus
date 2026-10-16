@@ -21,8 +21,8 @@ export const SeoServicesPage: React.FC = () => {
   usePageSeo({
     title: 'SEO Services & Search Visibility | Dawnexus',
     description: 'Structured search engine optimization, technical SEO audits, on-page optimization, and Google Business Profile management for sustainable organic discovery.',
-    canonicalUrl: 'https://dawnexus.in/services/seo-services',
-    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    canonicalUrl: 'https://www.dawnexus.in/services/seo-services',
+    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: {
       '@context': 'https://schema.org',
       '@type': 'Service',
@@ -30,10 +30,10 @@ export const SeoServicesPage: React.FC = () => {
       'provider': {
         '@type': 'ProfessionalService',
         'name': 'Dawnexus',
-        'url': 'https://dawnexus.in/'
+        'url': 'https://www.dawnexus.in/'
       },
       'description': 'Improve your organic search visibility with technical SEO, keyword mapping, on-page structure, and Google Business Profile optimization.',
-      'url': 'https://dawnexus.in/services/seo-services'
+      'url': 'https://www.dawnexus.in/services/seo-services'
     }
   });
 

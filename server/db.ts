@@ -104,6 +104,8 @@ export function initDatabase() {
       published_at TEXT DEFAULT NULL,
       publication_error TEXT DEFAULT '',
       admin_notes TEXT DEFAULT '',
+      seo_report TEXT DEFAULT NULL,
+      content_revision TEXT DEFAULT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -234,6 +236,14 @@ export function initDatabase() {
   } catch {}
   try {
     db.exec(`ALTER TABLE enquiries ADD COLUMN estimate_data TEXT DEFAULT NULL;`);
+  } catch {}
+
+  // Safe migrations for blogs table
+  try {
+    db.exec(`ALTER TABLE blogs ADD COLUMN seo_report TEXT DEFAULT NULL;`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE blogs ADD COLUMN content_revision TEXT DEFAULT NULL;`);
   } catch {}
 
   // Table for Website Cost Estimator pricing configuration
@@ -542,6 +552,8 @@ export interface BlogRecord {
   published_at: string | null;
   publication_error: string;
   admin_notes: string;
+  seo_report?: string | null;
+  content_revision?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -569,6 +581,8 @@ export interface CreateBlogInput {
   scheduled_at?: string | null;
   published_at?: string | null;
   admin_notes?: string;
+  seo_report?: string | null;
+  content_revision?: string | null;
 }
 
 export function slugify(text: string): string {
@@ -608,13 +622,13 @@ export function createBlog(input: CreateBlogInput): BlogRecord {
       category, tags, primary_keyword, secondary_keywords, target_location,
       search_intent, target_audience, target_questions, seo_title,
       meta_description, canonical_url, status, scheduled_at, published_at,
-      publication_error, admin_notes, created_at, updated_at
+      publication_error, admin_notes, seo_report, content_revision, created_at, updated_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      '', ?, ?, ?
+      '', ?, ?, ?, ?, ?
     )
   `);
 
@@ -636,11 +650,13 @@ export function createBlog(input: CreateBlogInput): BlogRecord {
     JSON.stringify(input.target_questions || []),
     (input.seo_title || input.title).trim(),
     (input.meta_description || input.excerpt || '').trim(),
-    (input.canonical_url || `https://dawnexus.in/blog/${slug}`).trim(),
+    (input.canonical_url || `https://www.dawnexus.in/blog/${slug}`).trim(),
     status,
     input.scheduled_at || null,
     publishedAt,
     (input.admin_notes || '').trim(),
+    input.seo_report !== undefined ? (typeof input.seo_report === 'string' ? input.seo_report : JSON.stringify(input.seo_report)) : null,
+    input.content_revision || null,
     now,
     now
   );
@@ -800,6 +816,8 @@ export function updateBlog(id: number, updates: Partial<CreateBlogInput>): BlogR
       published_at = ?,
       publication_error = '',
       admin_notes = ?,
+      seo_report = ?,
+      content_revision = ?,
       updated_at = ?
     WHERE id = ?
   `);
@@ -822,11 +840,13 @@ export function updateBlog(id: number, updates: Partial<CreateBlogInput>): BlogR
     updates.target_questions !== undefined ? JSON.stringify(updates.target_questions) : current.target_questions,
     updates.seo_title !== undefined ? updates.seo_title.trim() : current.seo_title,
     updates.meta_description !== undefined ? updates.meta_description.trim() : current.meta_description,
-    updates.canonical_url !== undefined ? updates.canonical_url.trim() : (current.canonical_url || `https://dawnexus.in/blog/${slug}`),
+    updates.canonical_url !== undefined ? updates.canonical_url.trim() : (current.canonical_url || `https://www.dawnexus.in/blog/${slug}`),
     status,
     updates.scheduled_at !== undefined ? updates.scheduled_at : current.scheduled_at,
     publishedAt,
     updates.admin_notes !== undefined ? updates.admin_notes.trim() : current.admin_notes,
+    updates.seo_report !== undefined ? (typeof updates.seo_report === 'string' ? updates.seo_report : JSON.stringify(updates.seo_report)) : current.seo_report || null,
+    updates.content_revision !== undefined ? updates.content_revision : current.content_revision || null,
     now,
     id
   );
@@ -1002,7 +1022,7 @@ export async function persistCalculatorPricingConfig(config: CalculatorPricingCo
 }
 
 export function getPublishedBlogsForSitemap(): { slug: string; updated_at: string; published_at: string }[] {
-  const stmt = db.prepare("SELECT slug, updated_at, published_at FROM blogs WHERE status = 'Published' ORDER BY published_at DESC");
+  const stmt = db.prepare("SELECT slug, updated_at, published_at FROM blogs WHERE status = 'Published' AND slug IS NOT NULL AND TRIM(slug) != '' ORDER BY published_at DESC");
   return stmt.all() as { slug: string; updated_at: string; published_at: string }[];
 }
 

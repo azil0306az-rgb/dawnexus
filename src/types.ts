@@ -85,6 +85,8 @@ export interface BlogRecord {
   published_at: string | null;
   publication_error: string;
   admin_notes: string;
+  seo_report?: string | null;
+  content_revision?: string | null;
   created_at: string;
   updated_at: string;
 }

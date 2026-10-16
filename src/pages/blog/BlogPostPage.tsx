@@ -35,29 +35,29 @@ export const BlogPostPage: React.FC<BlogPostPageProps> = ({ slug: propSlug }) =>
   usePageSeo({
     title: blog ? `${blog.seo_title || blog.title} | Dawnexus` : 'Dawnexus Insights',
     description: blog ? (blog.meta_description || blog.excerpt) : 'Dawnexus digital marketing, web engineering and AI insights.',
-    canonicalUrl: `https://dawnexus.in/blog/${currentSlug}`,
-    ogImage: blog?.featured_image || 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    canonicalUrl: `https://www.dawnexus.in/blog/${currentSlug}`,
+    ogImage: blog?.featured_image || 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: blog ? {
       '@context': 'https://schema.org',
       '@type': 'BlogPosting',
       'mainEntityOfPage': {
         '@type': 'WebPage',
-        '@id': `https://dawnexus.in/blog/${blog.slug}`
+        '@id': `https://www.dawnexus.in/blog/${blog.slug}`
       },
       'headline': blog.title,
       'description': blog.meta_description || blog.excerpt,
-      'image': blog.featured_image || 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+      'image': blog.featured_image || 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
       'author': {
         '@type': 'Organization',
         'name': blog.author || 'Dawnexus Editorial',
-        'url': 'https://dawnexus.in/'
+        'url': 'https://www.dawnexus.in/'
       },
       'publisher': {
         '@type': 'Organization',
         'name': 'Dawnexus',
         'logo': {
           '@type': 'ImageObject',
-          'url': 'https://dawnexus.in/brand/dawnexus-logo-original.png'
+          'url': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png'
         }
       },
       'datePublished': blog.published_at || blog.created_at,

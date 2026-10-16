@@ -22,8 +22,8 @@ export const AiVideoCreationPage: React.FC = () => {
   usePageSeo({
     title: 'AI Video Creation & Visual Production | Dawnexus',
     description: 'Creative AI-assisted video production, social reels, promotional videos, product demos, and visual storytelling engineered for high-engagement brand campaigns.',
-    canonicalUrl: 'https://dawnexus.in/services/ai-video-creation',
-    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    canonicalUrl: 'https://www.dawnexus.in/services/ai-video-creation',
+    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: {
       '@context': 'https://schema.org',
       '@type': 'Service',
@@ -31,10 +31,10 @@ export const AiVideoCreationPage: React.FC = () => {
       'provider': {
         '@type': 'ProfessionalService',
         'name': 'Dawnexus',
-        'url': 'https://dawnexus.in/'
+        'url': 'https://www.dawnexus.in/'
       },
       'description': 'AI-assisted promotional videos, product showcases, social media reels, and business introduction videos.',
-      'url': 'https://dawnexus.in/services/ai-video-creation'
+      'url': 'https://www.dawnexus.in/services/ai-video-creation'
     }
   });
 

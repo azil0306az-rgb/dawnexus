@@ -21,8 +21,8 @@ export const WebsiteDesignPage: React.FC = () => {
   usePageSeo({
     title: 'Website Design & Development | Dawnexus',
     description: 'Custom, high-performance responsive website design and development engineered for brand credibility, lightning-fast speed, and conversion growth.',
-    canonicalUrl: 'https://dawnexus.in/services/website-design',
-    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    canonicalUrl: 'https://www.dawnexus.in/services/website-design',
+    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: {
       '@context': 'https://schema.org',
       '@type': 'Service',
@@ -30,10 +30,10 @@ export const WebsiteDesignPage: React.FC = () => {
       'provider': {
         '@type': 'ProfessionalService',
         'name': 'Dawnexus',
-        'url': 'https://dawnexus.in/'
+        'url': 'https://www.dawnexus.in/'
       },
       'description': 'Modern responsive websites designed around your brand, business goals, and customer conversion experience.',
-      'url': 'https://dawnexus.in/services/website-design'
+      'url': 'https://www.dawnexus.in/services/website-design'
     }
   });
 

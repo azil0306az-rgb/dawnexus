@@ -56,13 +56,13 @@ export async function syncFromSupabase(db: any): Promise<void> {
             category, tags, primary_keyword, secondary_keywords, target_location,
             search_intent, target_audience, target_questions, seo_title, meta_description,
             canonical_url, status, scheduled_at, published_at, publication_error,
-            admin_notes, created_at, updated_at
+            admin_notes, seo_report, content_revision, created_at, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
-            ?, ?, ?
+            ?, ?, ?, ?, ?
           )
           ON CONFLICT(slug) DO UPDATE SET
             title = excluded.title,
@@ -73,6 +73,8 @@ export async function syncFromSupabase(db: any): Promise<void> {
             status = excluded.status,
             scheduled_at = excluded.scheduled_at,
             published_at = excluded.published_at,
+            seo_report = excluded.seo_report,
+            content_revision = excluded.content_revision,
             updated_at = excluded.updated_at
         `).run(
           blog.id, blog.title, blog.slug, blog.excerpt || '', blog.content || '',
@@ -82,7 +84,8 @@ export async function syncFromSupabase(db: any): Promise<void> {
           blog.target_audience || '', blog.target_questions || '[]', blog.seo_title || '',
           blog.meta_description || '', blog.canonical_url || '', blog.status || 'Draft',
           blog.scheduled_at || null, blog.published_at || null, blog.publication_error || '',
-          blog.admin_notes || '', blog.created_at || new Date().toISOString(), blog.updated_at || new Date().toISOString()
+          blog.admin_notes || '', blog.seo_report || null, blog.content_revision || null,
+          blog.created_at || new Date().toISOString(), blog.updated_at || new Date().toISOString()
         );
       }
         db.exec('COMMIT');
@@ -308,35 +311,50 @@ export async function deleteEnquiryFromSupabase(id: number): Promise<void> {
 
 export async function pushBlogToSupabase(blog: any): Promise<void> {
   if (!supabase) throw new Error('Supabase is not configured for blog persistence.');
-  const { error } = await supabase.from('blogs').upsert({
-      id: blog.id,
-      title: blog.title,
-      slug: blog.slug,
-      excerpt: blog.excerpt || '',
-      content: blog.content || '',
-      featured_image: blog.featured_image || '',
-      image_alt: blog.image_alt || '',
-      author: blog.author || 'Dawnexus Editorial',
-      category: blog.category || 'Digital Strategy',
-      tags: typeof blog.tags === 'string' ? blog.tags : JSON.stringify(blog.tags || []),
-      primary_keyword: blog.primary_keyword || '',
-      secondary_keywords: typeof blog.secondary_keywords === 'string' ? blog.secondary_keywords : JSON.stringify(blog.secondary_keywords || []),
-      target_location: blog.target_location || '',
-      search_intent: blog.search_intent || 'Informational',
-      target_audience: blog.target_audience || '',
-      target_questions: typeof blog.target_questions === 'string' ? blog.target_questions : JSON.stringify(blog.target_questions || []),
-      seo_title: blog.seo_title || '',
-      meta_description: blog.meta_description || '',
-      canonical_url: blog.canonical_url || '',
-      status: blog.status || 'Draft',
-      scheduled_at: blog.scheduled_at || null,
-      published_at: blog.published_at || null,
-      publication_error: blog.publication_error || '',
-      admin_notes: blog.admin_notes || '',
-      created_at: blog.created_at,
-      updated_at: blog.updated_at
-    });
-  assertSupabaseSuccess(error, 'Blog persistence');
+  
+  const basePayload: any = {
+    id: blog.id,
+    title: blog.title,
+    slug: blog.slug,
+    excerpt: blog.excerpt || '',
+    content: blog.content || '',
+    featured_image: blog.featured_image || '',
+    image_alt: blog.image_alt || '',
+    author: blog.author || 'Dawnexus Editorial',
+    category: blog.category || 'Digital Strategy',
+    tags: typeof blog.tags === 'string' ? blog.tags : JSON.stringify(blog.tags || []),
+    primary_keyword: blog.primary_keyword || '',
+    secondary_keywords: typeof blog.secondary_keywords === 'string' ? blog.secondary_keywords : JSON.stringify(blog.secondary_keywords || []),
+    target_location: blog.target_location || '',
+    search_intent: blog.search_intent || 'Informational',
+    target_audience: blog.target_audience || '',
+    target_questions: typeof blog.target_questions === 'string' ? blog.target_questions : JSON.stringify(blog.target_questions || []),
+    seo_title: blog.seo_title || '',
+    meta_description: blog.meta_description || '',
+    canonical_url: blog.canonical_url || '',
+    status: blog.status || 'Draft',
+    scheduled_at: blog.scheduled_at || null,
+    published_at: blog.published_at || null,
+    publication_error: blog.publication_error || '',
+    admin_notes: blog.admin_notes || '',
+    created_at: blog.created_at,
+    updated_at: blog.updated_at
+  };
+
+  const extendedPayload = {
+    ...basePayload,
+    seo_report: blog.seo_report || null,
+    content_revision: blog.content_revision || null
+  };
+
+  const { error } = await supabase.from('blogs').upsert(extendedPayload);
+  if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+    // Column doesn't exist on remote PostgreSQL schema; fallback safely to base payload
+    const fallbackRes = await supabase.from('blogs').upsert(basePayload);
+    assertSupabaseSuccess(fallbackRes.error, 'Blog persistence');
+  } else {
+    assertSupabaseSuccess(error, 'Blog persistence');
+  }
 }
 
 export async function deleteBlogFromSupabase(id: number): Promise<void> {

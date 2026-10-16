@@ -291,8 +291,8 @@ test('Blog CMS Admin: Can create, schedule, auto-publish, and manage articles', 
   assert.equal(sitemapRes.status, 200);
   const sitemapText = await sitemapRes.text();
   assert.ok(sitemapText.includes('<?xml version="1.0" encoding="UTF-8"?>'));
-  assert.ok(sitemapText.includes('<loc>https://dawnexus.in/</loc>'));
-  assert.ok(sitemapText.includes('<loc>https://dawnexus.in/blog/automated-publishing-test-article</loc>'));
+  assert.ok(sitemapText.includes('<loc>https://www.dawnexus.in/</loc>'));
+  assert.ok(sitemapText.includes('<loc>https://www.dawnexus.in/blog/automated-publishing-test-article</loc>'));
 
   // 7. Duplicate article
   const dupRes = await fetch(`${baseUrl}/api/admin/blogs/${createdBlogId}/duplicate`, {

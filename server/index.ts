@@ -85,44 +85,45 @@ const handleSitemapRequest = async (req: express.Request, res: express.Response)
     const today = new Date().toISOString().split('T')[0];
     const publishedBlogs = getPublishedBlogsForSitemap();
 
+    const baseUrl = 'https://www.dawnexus.in';
     let urlsXml = `  <url>
-    <loc>https://dawnexus.in/</loc>
+    <loc>${baseUrl}/</loc>
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://dawnexus.in/services/website-design</loc>
+    <loc>${baseUrl}/services/website-design</loc>
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://dawnexus.in/services/seo-services</loc>
+    <loc>${baseUrl}/services/seo-services</loc>
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://dawnexus.in/services/ai-video-creation</loc>
+    <loc>${baseUrl}/services/ai-video-creation</loc>
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://dawnexus.in/services/digital-marketing</loc>
+    <loc>${baseUrl}/services/digital-marketing</loc>
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://dawnexus.in/website-cost-calculator</loc>
+    <loc>${baseUrl}/website-cost-calculator</loc>
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://dawnexus.in/blog</loc>
+    <loc>${baseUrl}/blog</loc>
     <lastmod>${today}</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
@@ -131,7 +132,7 @@ const handleSitemapRequest = async (req: express.Request, res: express.Response)
     for (const blog of publishedBlogs) {
       const lastModDate = (blog.updated_at || blog.published_at || today).split('T')[0];
       urlsXml += `\n  <url>
-    <loc>https://dawnexus.in/blog/${escapeXml(blog.slug)}</loc>
+    <loc>${baseUrl}/blog/${escapeXml(blog.slug)}</loc>
     <lastmod>${lastModDate}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
