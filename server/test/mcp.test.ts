@@ -5,7 +5,7 @@ import app from '../index.js';
 import { getExpectedMcpKey, getMcpAuditTrail } from '../mcpAuth.js';
 import { MCP_TOOLS } from '../mcpServer.js';
 import { McpService } from '../mcpService.js';
-import { calculateSeoScore, VALID_CATEGORIES } from '../seoScorer.js';
+import { calculateSeoScore, normalizeSeoReport, isValidDawnexusInternalLink, VALID_CATEGORIES } from '../seoScorer.js';
 import { getBlogById, deleteBlog, persistBlogDeletion, publishDueScheduledBlogsReliable } from '../db.js';
 
 let server: http.Server;
@@ -478,6 +478,10 @@ Selecting a premier web agency requires balancing technical rigor, creative inno
   assert.ok(goodReport.totalScore >= 90, `Expected score >= 90, got: ${goodReport.totalScore}`);
   assert.equal(goodReport.meetsThreshold, true);
   assert.equal(goodReport.failedChecks.length, 0);
+  assert.ok(Array.isArray(goodReport.mandatoryFailures));
+  assert.equal(goodReport.mandatoryFailures.length, 0);
+  assert.ok(Array.isArray(goodReport.recommendations));
+  assert.ok(typeof goodReport.evaluatedAt === 'string');
 
   // Bad draft with broken link and invalid category
   const badReport = calculateSeoScore({
@@ -492,6 +496,11 @@ Selecting a premier web agency requires balancing technical rigor, creative inno
   assert.equal(badReport.meetsThreshold, false);
   assert.ok(badReport.failedChecks.length >= 3);
   assert.ok(badReport.requiredFixes.length >= 2);
+  assert.ok(Array.isArray(badReport.mandatoryFailures));
+  assert.ok(badReport.mandatoryFailures.length >= 3);
+  assert.ok(badReport.mandatoryFailures.some(f => f.includes('Invalid category')));
+  assert.ok(badReport.mandatoryFailures.some(f => f.includes('Invalid slug')));
+  assert.ok(badReport.mandatoryFailures.some(f => f.includes('title is missing')));
 });
 
 // 13. Audit Trail Verification
@@ -786,4 +795,314 @@ test('OpenAPI: Specification contains all required new tool paths and single sec
   assert.equal(secSchemes.length, 1);
   assert.equal(secSchemes[0], 'ApiKeyAuth');
 });
+
+// 23. SEO Normalization & CMS Scheduling Bug Fix Regressions (15 Test Cases)
+
+// Scenario 1: Empty mandatoryFailures array
+test('SEO Normalizer: Preserves empty mandatoryFailures array', () => {
+  const normalized = normalizeSeoReport({
+    totalScore: 94,
+    meetsThreshold: true,
+    mandatoryFailures: []
+  });
+  assert.ok(Array.isArray(normalized.mandatoryFailures));
+  assert.equal(normalized.mandatoryFailures.length, 0);
+  assert.equal(normalized.meetsThreshold, true);
+});
+
+// Scenario 2: Report with mandatory failures
+test('SEO Normalizer: Correctly retains and formats mandatory failures', () => {
+  const normalized = normalizeSeoReport({
+    totalScore: 92,
+    mandatoryFailures: ['Broken internal links detected: /broken-link']
+  });
+  assert.ok(Array.isArray(normalized.mandatoryFailures));
+  assert.equal(normalized.mandatoryFailures.length, 1);
+  assert.equal(normalized.meetsThreshold, false);
+});
+
+// Scenario 3: Missing mandatoryFailures
+test('SEO Normalizer: Missing mandatoryFailures defaults to empty array without throwing', () => {
+  const normalized = normalizeSeoReport({
+    totalScore: 91
+  });
+  assert.ok(Array.isArray(normalized.mandatoryFailures));
+  assert.equal(normalized.mandatoryFailures.length, 0);
+  assert.ok(Array.isArray(normalized.recommendations));
+});
+
+// Scenario 4: null mandatoryFailures
+test('SEO Normalizer: null mandatoryFailures safely normalized to empty array', () => {
+  const normalized = normalizeSeoReport({
+    totalScore: 95,
+    mandatoryFailures: null
+  });
+  assert.ok(Array.isArray(normalized.mandatoryFailures));
+  assert.equal(normalized.mandatoryFailures.length, 0);
+});
+
+// Scenario 5: Unexpected type for mandatoryFailures (string or non-array)
+test('SEO Normalizer: String mandatoryFailures converted into string array', () => {
+  const normalized = normalizeSeoReport({
+    totalScore: 85,
+    mandatoryFailures: 'Invalid category: Non-existent'
+  });
+  assert.ok(Array.isArray(normalized.mandatoryFailures));
+  assert.equal(normalized.mandatoryFailures.length, 1);
+  assert.equal(normalized.mandatoryFailures[0], 'Invalid category: Non-existent');
+});
+
+// Scenario 6: Malformed / null seoReport
+test('SEO Normalizer: Completely null or non-object report safely handled with defaults', () => {
+  const fromNull = normalizeSeoReport(null);
+  assert.ok(Array.isArray(fromNull.mandatoryFailures));
+  assert.ok(Array.isArray(fromNull.recommendations));
+  assert.equal(fromNull.meetsThreshold, false);
+  assert.equal(fromNull.totalScore, 0);
+
+  const fromUndefined = normalizeSeoReport(undefined);
+  assert.ok(Array.isArray(fromUndefined.mandatoryFailures));
+  assert.equal(fromUndefined.totalScore, 0);
+});
+
+// Scenario 7: Score 92 with no failures (meets threshold)
+test('SEO Scorer: Score 92 with no mandatory failures meetsThreshold', () => {
+  const report = normalizeSeoReport({
+    totalScore: 92,
+    maxScore: 100,
+    mandatoryFailures: [],
+    threshold: 90
+  });
+  assert.equal(report.meetsThreshold, true);
+  assert.equal(report.totalScore, 92);
+  assert.equal(report.mandatoryFailures.length, 0);
+});
+
+// Scenario 8: Score 92 with a mandatory failure (fails threshold)
+test('SEO Scorer: Score 92 with a mandatory failure rejects meetsThreshold', () => {
+  const report = normalizeSeoReport({
+    totalScore: 92,
+    mandatoryFailures: ['Broken internal links detected: /broken-target'],
+    threshold: 90
+  });
+  assert.equal(report.meetsThreshold, false);
+  assert.equal(report.mandatoryFailures.length, 1);
+});
+
+// Scenario 9: Score < 90 (fails threshold)
+test('SEO Scorer: Score < 90 rejects meetsThreshold even with zero mandatory failures', () => {
+  const report = normalizeSeoReport({
+    totalScore: 84,
+    mandatoryFailures: [],
+    threshold: 90
+  });
+  assert.equal(report.meetsThreshold, false);
+  assert.equal(report.totalScore, 84);
+});
+
+// Scenario 10: Missing numerical score
+test('SEO Normalizer: Missing or NaN numerical score defaults to 0 safely', () => {
+  const report = normalizeSeoReport({
+    totalScore: NaN,
+    mandatoryFailures: []
+  });
+  assert.equal(report.totalScore, 0);
+  assert.equal(report.meetsThreshold, false);
+});
+
+// Scenario 11: Link normalization & valid URL variations
+test('Link Normalizer: Recognizes trailing slashes, core routes, and anchor links as valid internal links', () => {
+  assert.equal(isValidDawnexusInternalLink('https://dawnexus.in/services/website-design/'), true);
+  assert.equal(isValidDawnexusInternalLink('/services/website-design/'), true);
+  assert.equal(isValidDawnexusInternalLink('/services/seo-services'), true);
+  assert.equal(isValidDawnexusInternalLink('https://www.dawnexus.in/contact'), true);
+  assert.equal(isValidDawnexusInternalLink('/pricing'), true);
+  assert.equal(isValidDawnexusInternalLink('#contact'), true);
+  assert.equal(isValidDawnexusInternalLink('https://dawnexus.in/blog/valid-slug', ['valid-slug']), true);
+  assert.equal(isValidDawnexusInternalLink('/blog/non-existent-slug', ['other-slug']), false);
+});
+
+// Scenario 12: MCP Schedule Draft rejects score < 90 without throwing TypeError
+test('MCP Schedule Draft: Rejects draft with score < 90 without throwing TypeError', async () => {
+  // Create a draft with >500 chars and basic fields but low SEO score (<90)
+  const lowSeoContent = `
+## Basic Overview of Business Websites
+Business websites serve as digital portals for organizations across various industries.
+Having a simple landing page is often considered useful for sharing contact information and basic services.
+However, without structured headings, in-depth technical analysis, or internal service links, topical authority remains low.
+
+### General Observations
+Many companies simply put up a single page without researching search intent or user questions.
+This approach does not answer searcher questions thoroughly or deliver comprehensive guidance.
+More text is added here to ensure the draft easily clears the preliminary five hundred character threshold for scheduling validation.
+`;
+
+  const shortDraftRes = await fetch(`${baseUrl}/api/mcp/tools/drafts`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      title: `Low Score SEO Test ${Date.now()}`,
+      category: 'Website Design',
+      featured_image: 'https://susdqywigvzcijsvlksb.supabase.co/storage/v1/object/public/blog-images/low-seo.png',
+      image_alt: 'Low SEO Test Image',
+      primary_keyword: 'basic business websites',
+      content: lowSeoContent
+    })
+  });
+  assert.ok(shortDraftRes.status === 200 || shortDraftRes.status === 201);
+  const shortDraftData = await shortDraftRes.json();
+  const lowScoreDraftId = shortDraftData.blog.id;
+
+  try {
+    const res = await fetch(`${baseUrl}/api/mcp/tools/schedule`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${mcpToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: lowScoreDraftId,
+        scheduled_at: '2026-12-01T10:00:00+05:30',
+        approved: true
+      })
+    });
+
+    assert.equal(res.status, 400);
+    const data = await res.json();
+    assert.ok(data.error.includes('Quality check failed'));
+    assert.ok(data.error.includes('minimum 90/100 required'));
+    assert.ok(!data.error.includes('is not iterable'));
+  } finally {
+    deleteBlog(lowScoreDraftId);
+  }
+});
+
+// Scenario 13: MCP Schedule Draft rejects score >= 90 with mandatory failures cleanly distinguishing score from structural failure
+test('MCP Schedule Draft: Rejects draft with score >= 90 but mandatory failure with clean error message', async () => {
+  // Create a draft with great content (>500 chars) but with a broken internal link
+  const draftWithBrokenLinkRes = await fetch(`${baseUrl}/api/mcp/tools/drafts`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      title: `Mandatory Failure Test ${Date.now()}`,
+      category: 'Website Design',
+      featured_image: 'https://susdqywigvzcijsvlksb.supabase.co/storage/v1/object/public/blog-images/test.png',
+      image_alt: 'Test Alt',
+      search_intent: 'Informational',
+      target_audience: 'Business owners and executives',
+      primary_keyword: 'enterprise web solutions',
+      secondary_keywords: ['custom software', 'digital transformation'],
+      content: `## Modern Enterprise Solutions
+Enterprise web architecture demands robust security, scalable infrastructure, and maintainable frontends.
+
+### Key Architectural Pillars
+Modern organizations leverage distributed microfrontends and serverless APIs to maximize performance.
+Check our [broken internal resource](https://dawnexus.in/completely-invalid-nonexistent-path-987654).
+Also review [website design services](/services/website-design).
+
+### Operational Excellence
+Deploying updates reliably ensures maximum uptime and user trust across all digital touchpoints.
+Comprehensive testing frameworks prevent regressions and ensure seamless user experiences.
+
+### Conclusion and Next Steps
+In summary, enterprise systems succeed when performance, reliability, and security are built from day one.
+`
+    })
+  });
+  assert.ok(draftWithBrokenLinkRes.status === 200 || draftWithBrokenLinkRes.status === 201);
+  const draftData = await draftWithBrokenLinkRes.json();
+  const testDraftId = draftData.blog.id;
+
+  try {
+    const res = await fetch(`${baseUrl}/api/mcp/tools/schedule`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${mcpToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: testDraftId,
+        scheduled_at: '2026-12-05T10:00:00+05:30',
+        approved: true
+      })
+    });
+
+    assert.equal(res.status, 400);
+    const data = await res.json();
+    assert.ok(data.error.includes('Quality check failed'));
+    assert.ok(data.error.includes('mandatory structural failure') || data.error.includes('Broken internal link'));
+    assert.ok(!data.error.includes('is not iterable'));
+  } finally {
+    deleteBlog(testDraftId);
+  }
+});
+
+// Scenario 14: Draft consistency check: status remains Draft after failed scheduling attempt
+test('Draft Consistency: Failed scheduling attempt leaves draft in Draft status', async () => {
+  const draftRes = await fetch(`${baseUrl}/api/mcp/tools/drafts`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      title: `Consistency Test ${Date.now()}`,
+      category: 'Website Design',
+      content: 'Short test content.'
+    })
+  });
+  assert.ok(draftRes.status === 200 || draftRes.status === 201);
+  const data = await draftRes.json();
+  const testId = data.blog.id;
+
+  try {
+    // Attempt scheduling without approval
+    await fetch(`${baseUrl}/api/mcp/tools/schedule`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${mcpToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: testId,
+        scheduled_at: '2026-12-05T10:00:00+05:30',
+        approved: false
+      })
+    });
+
+    const inDb = getBlogById(testId);
+    assert.equal(inDb?.status, 'Draft', 'Status must remain Draft after rejected scheduling');
+    assert.equal(inDb?.scheduled_at, null);
+  } finally {
+    deleteBlog(testId);
+  }
+});
+
+// Scenario 15: Protection against scheduling an already published article
+test('MCP Protection: Rejects attempting to schedule an already published article', async () => {
+  // Blog #137 is Published
+  const res = await fetch(`${baseUrl}/api/mcp/tools/schedule`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcpToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      id: 137,
+      scheduled_at: '2026-12-10T10:00:00+05:30',
+      approved: true
+    })
+  });
+
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.ok(data.error.toLowerCase().includes('already published') || data.error.toLowerCase().includes('only drafts can be scheduled'));
+});
+
 

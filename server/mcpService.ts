@@ -17,6 +17,7 @@ import {
 } from './db.js';
 import {
   calculateSeoScore,
+  normalizeSeoReport,
   VALID_CATEGORIES,
   DAWNEXUS_CORE_URLS,
   SeoAuditReport,
@@ -528,24 +529,26 @@ export class McpService {
 
     // 7. Deterministic SEO Quality Check
     const publishedSlugs = existingBlogs.filter(b => b.status === 'Published').map(b => b.slug);
-    const seoReport = calculateSeoScore(
-      {
-        title: created.title,
-        slug: created.slug,
-        content: created.content,
-        excerpt: created.excerpt,
-        category: created.category,
-        primary_keyword: created.primary_keyword,
-        secondary_keywords: created.secondary_keywords,
-        search_intent: created.search_intent,
-        target_audience: created.target_audience,
-        seo_title: created.seo_title,
-        meta_description: created.meta_description,
-        canonical_url: created.canonical_url,
-        featured_image: created.featured_image,
-        image_alt: created.image_alt
-      },
-      publishedSlugs
+    const seoReport = normalizeSeoReport(
+      calculateSeoScore(
+        {
+          title: created.title,
+          slug: created.slug,
+          content: created.content,
+          excerpt: created.excerpt,
+          category: created.category,
+          primary_keyword: created.primary_keyword,
+          secondary_keywords: created.secondary_keywords,
+          search_intent: created.search_intent,
+          target_audience: created.target_audience,
+          seo_title: created.seo_title,
+          meta_description: created.meta_description,
+          canonical_url: created.canonical_url,
+          featured_image: created.featured_image,
+          image_alt: created.image_alt
+        },
+        publishedSlugs
+      )
     );
 
     recordMcpAudit({
@@ -672,24 +675,26 @@ export class McpService {
 
     const { items: allBlogs } = getBlogs({ limit: 100 });
     const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
-    const seoReport = calculateSeoScore(
-      {
-        title: updated.title,
-        slug: updated.slug,
-        content: updated.content,
-        excerpt: updated.excerpt,
-        category: updated.category,
-        primary_keyword: updated.primary_keyword,
-        secondary_keywords: updated.secondary_keywords,
-        search_intent: updated.search_intent,
-        target_audience: updated.target_audience,
-        seo_title: updated.seo_title,
-        meta_description: updated.meta_description,
-        canonical_url: updated.canonical_url,
-        featured_image: updated.featured_image,
-        image_alt: updated.image_alt
-      },
-      publishedSlugs
+    const seoReport = normalizeSeoReport(
+      calculateSeoScore(
+        {
+          title: updated.title,
+          slug: updated.slug,
+          content: updated.content,
+          excerpt: updated.excerpt,
+          category: updated.category,
+          primary_keyword: updated.primary_keyword,
+          secondary_keywords: updated.secondary_keywords,
+          search_intent: updated.search_intent,
+          target_audience: updated.target_audience,
+          seo_title: updated.seo_title,
+          meta_description: updated.meta_description,
+          canonical_url: updated.canonical_url,
+          featured_image: updated.featured_image,
+          image_alt: updated.image_alt
+        },
+        publishedSlugs
+      )
     );
 
     recordMcpAudit({
@@ -1250,10 +1255,10 @@ export class McpService {
       throw new Error(`Cannot schedule draft #${input.id}: Featured image alt text is missing.`);
     }
 
-    // 4. Deterministic SEO Quality Check (>= 90 score required)
+    // 4. Deterministic SEO Quality Check (>= 90 score required and no mandatory failures)
     const { items: allBlogs } = getBlogs({ limit: 100 });
     const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
-    const seoReport = calculateSeoScore(
+    const rawSeoReport = calculateSeoScore(
       {
         title: blog.title,
         slug: blog.slug,
@@ -1265,27 +1270,38 @@ export class McpService {
         search_intent: blog.search_intent,
         target_audience: blog.target_audience,
         seo_title: blog.seo_title,
-        meta_description: blog.meta_description,
-        canonical_url: blog.canonical_url,
+        meta_description: blog.meta_description || blog.excerpt,
+        canonical_url: blog.canonical_url || (blog.slug ? `https://dawnexus.in/blog/${blog.slug}` : ''),
         featured_image: blog.featured_image,
         image_alt: blog.image_alt
       },
       publishedSlugs
     );
 
+    const seoReport = normalizeSeoReport(rawSeoReport);
+
     if (seoReport.totalScore < 90 || !seoReport.meetsThreshold) {
-      const issues = [...seoReport.mandatoryFailures, ...seoReport.recommendations].slice(0, 3).join('; ');
+      const mandatoryList = Array.isArray(seoReport.mandatoryFailures) ? seoReport.mandatoryFailures : [];
+      const recList = Array.isArray(seoReport.recommendations) ? seoReport.recommendations : [];
+
+      let errorMessage: string;
+      if (mandatoryList.length > 0 && seoReport.totalScore >= 90) {
+        errorMessage = `Quality check failed: Article meets numerical score requirement (${seoReport.totalScore}/100), but has mandatory structural failure(s): ${mandatoryList.join('; ')}`;
+      } else if (mandatoryList.length > 0) {
+        errorMessage = `Quality check failed: Article SEO score is ${seoReport.totalScore}/100 (minimum 90/100 required for scheduling). Mandatory failures: ${mandatoryList.join('; ')}. Recommendations: ${recList.slice(0, 3).join('; ')}`;
+      } else {
+        errorMessage = `Quality check failed: Article SEO score is ${seoReport.totalScore}/100 (minimum 90/100 required for scheduling). Issues to resolve: ${recList.slice(0, 3).join('; ')}`;
+      }
+
       recordMcpAudit({
         tool: 'schedule_blog_draft',
         action: 'write',
         status: 'rejected',
         callerIp,
         targetId: input.id,
-        details: `Scheduling rejected: SEO score ${seoReport.totalScore}/100 is below 90 threshold. ${issues}`
+        details: `Scheduling rejected: ${errorMessage}`
       });
-      throw new Error(
-        `Quality check failed: Article SEO score is ${seoReport.totalScore}/100 (minimum 90/100 required for scheduling). Issues to resolve: ${issues}`
-      );
+      throw new Error(errorMessage);
     }
 
     // 5. Timezone & Schedule Date Validation (Asia/Kolkata convention)
@@ -1375,7 +1391,7 @@ export class McpService {
     const { items: allBlogs } = getBlogs({ limit: 100 });
     const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
 
-    const report = calculateSeoScore(auditData, publishedSlugs);
+    const report = normalizeSeoReport(calculateSeoScore(auditData, publishedSlugs));
 
     recordMcpAudit({
       tool: 'run_seo_quality_check',

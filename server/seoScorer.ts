@@ -22,8 +22,11 @@ export interface SeoAuditReport {
   criteria: Record<string, SeoCriterionScore>;
   passedChecks: string[];
   failedChecks: string[];
+  mandatoryFailures: string[];
+  recommendations: string[];
   warnings: string[];
   requiredFixes: string[];
+  evaluatedAt: string;
   metadata: {
     wordCount: number;
     headingCount: { h1: number; h2: number; h3: number };
@@ -82,7 +85,14 @@ export const DAWNEXUS_CORE_URLS = [
   'https://dawnexus.in/website-cost-calculator',
   '/website-cost-calculator',
   'https://dawnexus.in/blog',
-  '/blog'
+  '/blog',
+  '/services',
+  '/contact',
+  '/pricing',
+  '/about',
+  '/work',
+  '/portfolio',
+  '/admin'
 ];
 
 /**
@@ -109,29 +119,74 @@ export function extractLinks(content: string): { href: string; text: string }[] 
 }
 
 /**
- * Validates whether an internal link targets an authentic Dawnexus page
+ * Normalizes a URL or path for Dawnexus domain comparison
+ */
+export function normalizeDawnexusPath(href: string): string {
+  if (!href) return '';
+  const trimmed = href.trim();
+  if (trimmed.startsWith('#')) return trimmed;
+
+  let clean = trimmed.split('#')[0].split('?')[0];
+  clean = clean.replace(/^https?:\/\/(www\.)?dawnexus\.in/i, '');
+  clean = clean.replace(/^https?:\/\/localhost(:\d+)?/i, '');
+
+  if (!clean.startsWith('/')) {
+    clean = '/' + clean;
+  }
+
+  if (clean.length > 1 && clean.endsWith('/')) {
+    clean = clean.replace(/\/+$/, '');
+  }
+
+  return clean;
+}
+
+/**
+ * Validates whether an internal link targets an authentic Dawnexus page or published blog
  */
 export function isValidDawnexusInternalLink(href: string, validSlugs: string[] = []): boolean {
-  const clean = href.trim().split('#')[0].split('?')[0];
-  
-  // Check against static core pages
-  if (DAWNEXUS_CORE_URLS.includes(clean)) {
+  if (!href) return false;
+  const trimmed = href.trim();
+
+  // Anchor links on single-page sections (e.g. #contact, #pricing, #services)
+  if (trimmed.startsWith('#')) {
     return true;
   }
 
-  // Check blog format: /blog/slug or https://dawnexus.in/blog/slug
-  const blogPrefix = 'https://dawnexus.in/blog/';
-  if (clean.startsWith(blogPrefix)) {
-    const slug = clean.substring(blogPrefix.length).replace(/\/$/, '');
-    if (slug && (validSlugs.length === 0 || validSlugs.includes(slug))) {
-      return true;
-    }
+  const clean = normalizeDawnexusPath(trimmed);
+  if (clean === '/' || clean === '') {
+    return true;
   }
 
+  const validStaticPaths = [
+    '/',
+    '/blog',
+    '/website-cost-calculator',
+    '/services/website-design',
+    '/services/seo-services',
+    '/services/ai-video-creation',
+    '/services/digital-marketing',
+    '/services',
+    '/contact',
+    '/pricing',
+    '/about',
+    '/work',
+    '/portfolio',
+    '/admin'
+  ];
+
+  if (validStaticPaths.includes(clean.toLowerCase())) {
+    return true;
+  }
+
+  // Check blog slug format: /blog/<slug>
   if (clean.startsWith('/blog/')) {
-    const slug = clean.substring('/blog/'.length).replace(/\/$/, '');
-    if (slug && (validSlugs.length === 0 || validSlugs.includes(slug))) {
-      return true;
+    const slug = clean.substring('/blog/'.length).replace(/\/+$/, '');
+    if (slug) {
+      if (validSlugs.length === 0 || validSlugs.includes(slug)) {
+        return true;
+      }
+      return validSlugs.includes(slug);
     }
   }
 
@@ -237,11 +292,11 @@ export function calculateSeoScore(
     requiredFixes.push(`Change category to an official Dawnexus category.`);
   }
 
-  if (blog.target_audience && blog.target_audience.trim().length >= 10) {
+  if (blog.target_audience && blog.target_audience.trim().length >= 5) {
     intentScore += 5;
     passedChecks.push('Target audience clearly identified.');
   } else {
-    intentScore += 2;
+    intentScore += 3;
     warnings.push('Provide a more descriptive target audience to sharpen topical focus.');
   }
 
@@ -274,8 +329,9 @@ export function calculateSeoScore(
     requiredFixes.push('Generate a clean lowercase kebab-case slug.');
   }
 
-  // Meta description: 120-160 characters
-  const metaDescLen = (blog.meta_description || '').trim().length;
+  // Meta description: 110-165 characters (falls back to excerpt if meta_description is not explicitly provided)
+  const metaDesc = (blog.meta_description || blog.excerpt || '').trim();
+  const metaDescLen = metaDesc.length;
   if (metaDescLen >= 110 && metaDescLen <= 165) {
     metaScore += 4;
     passedChecks.push(`Meta description length (${metaDescLen} chars) fits standard search snippets.`);
@@ -287,8 +343,9 @@ export function calculateSeoScore(
     warnings.push('Provide a compelling meta description.');
   }
 
-  // Canonical URL
-  if (blog.canonical_url && blog.canonical_url.startsWith('https://dawnexus.in/blog/')) {
+  // Canonical URL (defaults to official Dawnexus blog format https://dawnexus.in/blog/<slug>)
+  const canonicalUrl = (blog.canonical_url || (blog.slug ? `https://dawnexus.in/blog/${blog.slug}` : '')).trim();
+  if (canonicalUrl && (canonicalUrl.startsWith('https://dawnexus.in/blog/') || canonicalUrl.startsWith('/blog/'))) {
     metaScore += 3;
     passedChecks.push('Canonical URL follows official Dawnexus conventions.');
   } else {
@@ -491,14 +548,39 @@ export function calculateSeoScore(
   const percentage = Math.round((totalScore / 100) * 100);
 
   // Mandatory check enforcement
-  const hasMandatoryFailures = 
-    !categoryValid ||
-    !slugValid ||
-    (blog.title || '').trim().length === 0 ||
-    wordCount < 150 ||
-    brokenInternalLinks.length > 0;
+  const mandatoryFailures: string[] = [];
 
+  if (!categoryValid) {
+    mandatoryFailures.push(
+      `Invalid category '${blog.category}'. Category must be one of: ${VALID_CATEGORIES.join(', ')}.`
+    );
+  }
+
+  if (!slugValid) {
+    mandatoryFailures.push(
+      `Invalid slug '${blog.slug}'. Slug must be non-empty lowercase kebab-case (e.g. 'how-to-optimize-seo').`
+    );
+  }
+
+  if ((blog.title || '').trim().length === 0) {
+    mandatoryFailures.push('Article title is missing or empty.');
+  }
+
+  if (wordCount < 150) {
+    mandatoryFailures.push(
+      `Content length is insufficient (${wordCount} words). Minimum 150 words required for indexing.`
+    );
+  }
+
+  if (brokenInternalLinks.length > 0) {
+    mandatoryFailures.push(
+      `Broken internal link(s) detected: ${brokenInternalLinks.join(', ')}. Internal links must point to valid Dawnexus pages or published blog posts.`
+    );
+  }
+
+  const hasMandatoryFailures = mandatoryFailures.length > 0;
   const meetsThreshold = totalScore >= threshold && !hasMandatoryFailures;
+  const recommendations: string[] = Array.from(new Set([...requiredFixes, ...warnings]));
 
   return {
     totalScore,
@@ -566,8 +648,11 @@ export function calculateSeoScore(
     },
     passedChecks,
     failedChecks,
+    mandatoryFailures,
+    recommendations,
     warnings,
     requiredFixes,
+    evaluatedAt: new Date().toISOString(),
     metadata: {
       wordCount,
       headingCount,
@@ -579,6 +664,109 @@ export function calculateSeoScore(
       hasImageAlt,
       categoryValid,
       slugValid
+    }
+  };
+}
+
+/**
+ * Normalizes any SEO audit report or external input into a guaranteed, fully typed SeoAuditReport
+ * with iterable arrays for mandatoryFailures, recommendations, warnings, and requiredFixes.
+ */
+export function normalizeSeoReport(report: any): SeoAuditReport {
+  if (!report || typeof report !== 'object') {
+    return {
+      totalScore: 0,
+      maxScore: 100,
+      percentage: 0,
+      meetsThreshold: false,
+      threshold: DEFAULT_SEO_THRESHOLD,
+      criteria: {},
+      passedChecks: [],
+      failedChecks: ['No valid SEO report provided.'],
+      mandatoryFailures: ['Missing or malformed SEO audit report.'],
+      recommendations: ['Perform a full SEO quality audit before scheduling.'],
+      warnings: [],
+      requiredFixes: ['Perform a full SEO quality audit before scheduling.'],
+      evaluatedAt: new Date().toISOString(),
+      metadata: {
+        wordCount: 0,
+        headingCount: { h1: 0, h2: 0, h3: 0 },
+        internalLinksCount: 0,
+        externalLinksCount: 0,
+        keywordOccurrences: 0,
+        keywordDensity: 0,
+        hasFeaturedImage: false,
+        hasImageAlt: false,
+        categoryValid: false,
+        slugValid: false
+      }
+    };
+  }
+
+  const totalScore = typeof report.totalScore === 'number' && !isNaN(report.totalScore)
+    ? report.totalScore
+    : (typeof report.score === 'number' && !isNaN(report.score) ? report.score : 0);
+
+  const maxScore = typeof report.maxScore === 'number' ? report.maxScore : 100;
+  const percentage = typeof report.percentage === 'number' ? report.percentage : Math.round((totalScore / maxScore) * 100);
+  const threshold = typeof report.threshold === 'number' ? report.threshold : DEFAULT_SEO_THRESHOLD;
+
+  const passedChecks = Array.isArray(report.passedChecks) ? report.passedChecks.map(String) : [];
+  const failedChecks = Array.isArray(report.failedChecks) ? report.failedChecks.map(String) : [];
+  const warnings = Array.isArray(report.warnings) ? report.warnings.map(String) : [];
+  const requiredFixes = Array.isArray(report.requiredFixes) ? report.requiredFixes.map(String) : [];
+
+  let mandatoryFailures: string[] = [];
+  if (Array.isArray(report.mandatoryFailures)) {
+    mandatoryFailures = report.mandatoryFailures.map(String);
+  } else if (typeof report.mandatoryFailures === 'string' && report.mandatoryFailures.trim()) {
+    mandatoryFailures = [report.mandatoryFailures.trim()];
+  } else if (report.hasMandatoryFailures && failedChecks.length > 0) {
+    mandatoryFailures = [...failedChecks];
+  }
+
+  let recommendations: string[] = [];
+  if (Array.isArray(report.recommendations)) {
+    recommendations = report.recommendations.map(String);
+  } else if (typeof report.recommendations === 'string' && report.recommendations.trim()) {
+    recommendations = [report.recommendations.trim()];
+  } else {
+    recommendations = Array.from(new Set([...requiredFixes, ...warnings]));
+  }
+
+  const meetsThreshold = typeof report.meetsThreshold === 'boolean'
+    ? report.meetsThreshold
+    : (totalScore >= threshold && mandatoryFailures.length === 0);
+
+  return {
+    totalScore,
+    maxScore,
+    percentage,
+    meetsThreshold,
+    threshold,
+    criteria: report.criteria && typeof report.criteria === 'object' ? report.criteria : {},
+    passedChecks,
+    failedChecks,
+    mandatoryFailures,
+    recommendations,
+    warnings,
+    requiredFixes,
+    evaluatedAt: typeof report.evaluatedAt === 'string' ? report.evaluatedAt : new Date().toISOString(),
+    metadata: {
+      wordCount: Number(report.metadata?.wordCount) || 0,
+      headingCount: {
+        h1: Number(report.metadata?.headingCount?.h1) || 0,
+        h2: Number(report.metadata?.headingCount?.h2) || 0,
+        h3: Number(report.metadata?.headingCount?.h3) || 0
+      },
+      internalLinksCount: Number(report.metadata?.internalLinksCount) || 0,
+      externalLinksCount: Number(report.metadata?.externalLinksCount) || 0,
+      keywordOccurrences: Number(report.metadata?.keywordOccurrences) || 0,
+      keywordDensity: Number(report.metadata?.keywordDensity) || 0,
+      hasFeaturedImage: Boolean(report.metadata?.hasFeaturedImage),
+      hasImageAlt: Boolean(report.metadata?.hasImageAlt),
+      categoryValid: Boolean(report.metadata?.categoryValid),
+      slugValid: Boolean(report.metadata?.slugValid)
     }
   };
 }
