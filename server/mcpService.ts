@@ -27,6 +27,8 @@ import {
 import { recordMcpAudit } from './mcpAuth.js';
 import { GscService, decryptPayload } from './gscService.js';
 import { Ga4Service } from './ga4Service.js';
+import { AnalyticsService } from './analyticsService.js';
+import { WebsiteContentService, DEFAULT_SERVICE_PAGES } from './websiteContent.js';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 export interface CategoryInfo {
@@ -261,6 +263,11 @@ export class McpService {
     searchConsoleStatus: {
       hasLiveMetrics: boolean;
       property: string;
+      diagnostic?: string;
+    };
+    googleAnalyticsStatus?: {
+      isConnected: boolean;
+      selectedProperty?: string | null;
       diagnostic?: string;
     };
     contentGuidelines: {
@@ -1671,6 +1678,278 @@ export class McpService {
       jobStats: stats,
       recentJobs
     };
+  }
+
+  // ==========================================
+  // VERSION 6.1.3: VISITOR ANALYTICS TOOLS
+  // ==========================================
+
+  /**
+   * Tool: analytics_get_overview
+   */
+  static async analyticsGetOverview(args?: { days?: number; dateRange?: '7d' | '28d' | '90d' | 'today' }) {
+    const range = args?.dateRange || (args?.days === 7 ? '7d' : args?.days === 90 ? '90d' : '28d');
+    return AnalyticsService.getOverview(range);
+  }
+
+  /**
+   * Tool: analytics_get_conversion_funnel
+   */
+  static async analyticsGetConversionFunnel(args?: { days?: number; dateRange?: '7d' | '28d' | '90d' }) {
+    const range = args?.dateRange || (args?.days === 7 ? '7d' : args?.days === 90 ? '90d' : '28d');
+    return AnalyticsService.getConversionFunnel(range);
+  }
+
+  /**
+   * Tool: analytics_get_page_performance
+   */
+  static async analyticsGetPagePerformance(args?: { pageUrl?: string; device?: 'all' | 'desktop' | 'mobile' }) {
+    const pageUrl = args?.pageUrl || '/';
+    const heatmap = AnalyticsService.getHeatmapData(pageUrl, args?.device || 'all');
+    return {
+      pageUrl: heatmap.pagePath,
+      totalClicks: heatmap.totalClicks,
+      clickPoints: heatmap.clickPoints,
+      scrollMilestones: heatmap.scrollMilestones,
+      totalSessionsObserved: heatmap.totalSessionsObserved
+    };
+  }
+
+  /**
+   * Tool: analytics_get_visitor_journeys
+   */
+  static async analyticsGetVisitorJourneys(args?: { limit?: number }) {
+    const journeys = AnalyticsService.getVisitorJourneys(args?.limit || 25);
+    return { journeys };
+  }
+
+  /**
+   * Tool: analytics_get_exit_analysis
+   */
+  static async analyticsGetExitAnalysis(args?: { limit?: number }) {
+    const journeys = AnalyticsService.getVisitorJourneys(args?.limit || 50);
+    const exitCounts: Record<string, number> = {};
+    for (const j of journeys) {
+      const lastEvent = j.pathSequence[j.pathSequence.length - 1];
+      const exitPage = lastEvent ? lastEvent.pagePath : 'unknown';
+      exitCounts[exitPage] = (exitCounts[exitPage] || 0) + 1;
+    }
+    const exitBreakdown = Object.entries(exitCounts)
+      .map(([page, count]) => ({
+        page,
+        exits: count,
+        percentage: Math.round((count / (journeys.length || 1)) * 100)
+      }))
+      .sort((a, b) => b.exits - a.exits);
+
+    return {
+      totalAnalyzedJourneys: journeys.length,
+      exitBreakdown
+    };
+  }
+
+  /**
+   * Tool: analytics_get_click_heatmap
+   */
+  static async analyticsGetClickHeatmap(args: { pageUrl: string; device?: 'all' | 'desktop' | 'mobile' }) {
+    const data = AnalyticsService.getHeatmapData(args.pageUrl, args.device || 'all');
+    return {
+      pageUrl: data.pagePath,
+      totalClicks: data.totalClicks,
+      clickPoints: data.clickPoints
+    };
+  }
+
+  /**
+   * Tool: analytics_get_scroll_depth
+   */
+  static async analyticsGetScrollDepth(args: { pageUrl: string; device?: 'all' | 'desktop' | 'mobile' }) {
+    const data = AnalyticsService.getHeatmapData(args.pageUrl, args.device || 'all');
+    return {
+      pageUrl: data.pagePath,
+      scrollMilestones: data.scrollMilestones
+    };
+  }
+
+  /**
+   * Tool: analytics_get_form_abandonment
+   */
+  static async analyticsGetFormAbandonment(args?: { dateRange?: '7d' | '28d' | '90d'; days?: number }) {
+    const range = args?.dateRange || (args?.days === 7 ? '7d' : args?.days === 90 ? '90d' : '28d');
+    return AnalyticsService.getFormAbandonment(range);
+  }
+
+  /**
+   * Tool: analytics_get_session_replay_summary
+   */
+  static async analyticsGetSessionReplaySummary(args: { sessionId: string }) {
+    return AnalyticsService.getSessionReplay(args.sessionId);
+  }
+
+  /**
+   * Tool: analytics_get_bot_filter_stats
+   */
+  static async analyticsGetBotFilterStats() {
+    return AnalyticsService.getBotFilterStats();
+  }
+
+  /**
+   * Tool: analytics_get_tracking_health
+   */
+  static async analyticsGetTrackingHealth() {
+    return AnalyticsService.getTrackingHealth();
+  }
+
+  // ==========================================
+  // VERSION 6.1.3: WEBSITE CONTENT TOOLS
+  // ==========================================
+
+  /**
+   * Tool: website_list_editable_pages
+   */
+  static async websiteListEditablePages() {
+    return WebsiteContentService.listAllPages();
+  }
+
+  /**
+   * Tool: website_get_page_content
+   */
+  static async websiteGetPageContent(args: { slug: string }) {
+    const page = WebsiteContentService.getPage(args.slug);
+    if (!page) throw new Error(`Page not found: ${args.slug}`);
+    return page;
+  }
+
+  /**
+   * Tool: website_get_page_metadata
+   */
+  static async websiteGetPageMetadata(args: { slug: string }) {
+    const page = WebsiteContentService.getPage(args.slug);
+    if (!page) throw new Error(`Page not found: ${args.slug}`);
+    return {
+      slug: page.slug,
+      title: page.title,
+      canonical_url: page.canonical_url,
+      meta_title: page.meta_title,
+      meta_description: page.meta_description,
+      og_image: page.og_image
+    };
+  }
+
+  /**
+   * Tool: website_get_content_version_history
+   */
+  static async websiteGetContentVersionHistory(args: { slug: string }) {
+    return WebsiteContentService.getVersions(args.slug);
+  }
+
+  /**
+   * Tool: website_create_optimization_draft
+   */
+  static async websiteCreateOptimizationDraft(args: {
+    slug: string;
+    targetSection: string;
+    proposedChanges: any;
+    reason: string;
+    createdBy?: string;
+  }) {
+    const current = WebsiteContentService.getPage(args.slug);
+    if (!current) throw new Error(`Target page not found: ${args.slug}`);
+
+    const updatedContent = { ...current };
+    if (args.targetSection === 'hero') {
+      if (typeof args.proposedChanges === 'object') {
+        Object.assign(updatedContent, args.proposedChanges);
+      }
+    } else if (args.targetSection === 'capabilities') {
+      if (Array.isArray(args.proposedChanges)) {
+        updatedContent.capabilities = args.proposedChanges;
+      }
+    } else if (args.targetSection === 'faqs') {
+      if (Array.isArray(args.proposedChanges)) {
+        updatedContent.faqs = args.proposedChanges;
+      }
+    } else if (args.targetSection === 'cta') {
+      if (typeof args.proposedChanges === 'object') {
+        updatedContent.cta_section = args.proposedChanges;
+      }
+    }
+
+    const draft = await WebsiteContentService.saveDraft(
+      args.slug,
+      updatedContent,
+      args.reason || 'AI Optimization Draft',
+      args.createdBy || 'mcp-agent'
+    );
+
+    return {
+      success: true,
+      slug: args.slug,
+      targetSection: args.targetSection,
+      draftContent: draft,
+      message: 'Draft registered. Requires human review in Admin Panel before publishing.'
+    };
+  }
+
+  /**
+   * Tool: website_preview_optimization_draft
+   */
+  static async websitePreviewOptimizationDraft(args: { slug: string; versionNumber?: number }) {
+    const live = WebsiteContentService.getPage(args.slug);
+    const versions = WebsiteContentService.getVersions(args.slug);
+    const targetVersion = args.versionNumber
+      ? versions.find(v => v.version_number === args.versionNumber)
+      : versions[0];
+
+    return {
+      slug: args.slug,
+      liveContent: live,
+      previewContent: targetVersion ? targetVersion.content_json : live,
+      versionNumber: targetVersion ? targetVersion.version_number : 1,
+      isPublished: targetVersion ? targetVersion.is_published : true
+    };
+  }
+
+  /**
+   * Tool: website_get_approval_status
+   */
+  static async websiteGetApprovalStatus(args?: { proposalId?: number; slug?: string }) {
+    const proposals = await AnalyticsService.generateOptimizationProposals();
+    if (args?.proposalId) {
+      const match = proposals.find(p => p.id === String(args.proposalId));
+      return { proposal: match || null };
+    }
+    if (args?.slug) {
+      return { proposals: proposals.filter(p => p.pageSlug === args.slug) };
+    }
+    return { proposals };
+  }
+
+  /**
+   * Tool: website_publish_approved_changes
+   */
+  static async websitePublishApprovedChanges(args: { proposalId: number | string; approvedBy: string }) {
+    const result = await AnalyticsService.approveAndPublishProposal(
+      String(args.proposalId),
+      args.approvedBy || 'mcp-admin'
+    );
+    return result;
+  }
+
+  /**
+   * Tool: website_rollback_content_version
+   */
+  static async websiteRollbackContentVersion(args: {
+    slug: string;
+    versionNumber: number;
+    reason?: string;
+  }) {
+    const result = await WebsiteContentService.rollbackVersion(
+      args.slug,
+      args.versionNumber,
+      args.reason || 'MCP requested rollback'
+    );
+    return result;
   }
 }
 

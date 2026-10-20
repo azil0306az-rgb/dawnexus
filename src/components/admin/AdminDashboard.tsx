@@ -35,13 +35,16 @@ import { DatabaseHealthDashboard } from './DatabaseHealthDashboard';
 import { CalculatorSettings } from './CalculatorSettings';
 import { GscDashboard } from './GscDashboard';
 import { Ga4Dashboard } from './Ga4Dashboard';
+import { BehaviourAnalyticsDashboard } from './BehaviourAnalyticsDashboard';
+import { ContentEditor } from './ContentEditor';
+import { AiOptimizationStudio } from './AiOptimizationStudio';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'analytics' | 'calculator' | 'notifications' | 'db-health'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'ai-optimization' | 'calculator' | 'notifications' | 'db-health'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -356,6 +359,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
+              onClick={() => setActiveTab('behaviour')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'behaviour'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Activity className="w-4 h-4" />
+                <span>Visitor Behaviour</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                v6.1.3
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('content-editor')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'content-editor'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="w-4 h-4" />
+                <span>Website Content</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                CMS
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ai-optimization')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'ai-optimization'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-4 h-4" />
+                <span>AI Optimization</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                AI
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('calculator')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'calculator'
@@ -438,6 +492,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <GscDashboard />
         ) : activeTab === 'analytics' ? (
           <Ga4Dashboard />
+        ) : activeTab === 'behaviour' ? (
+          <BehaviourAnalyticsDashboard />
+        ) : activeTab === 'content-editor' ? (
+          <ContentEditor />
+        ) : activeTab === 'ai-optimization' ? (
+          <AiOptimizationStudio />
         ) : activeTab === 'calculator' ? (
           <CalculatorSettings />
         ) : activeTab === 'notifications' ? (

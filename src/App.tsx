@@ -10,6 +10,7 @@ import { ContactForm } from './components/public/ContactForm';
 import { Footer } from './components/public/Footer';
 import { PrivacyModal } from './components/public/PrivacyModal';
 import { usePageSeo } from './utils/seo';
+import { tracker } from './utils/tracker';
 import { Loader2 } from 'lucide-react';
 
 // Code-split route components to minimize initial homepage JavaScript payload
@@ -63,10 +64,17 @@ export const App: React.FC = () => {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
+  // Initialize first-party visitor behaviour tracking
+  useEffect(() => {
+    tracker.init();
+  }, []);
+
   // Check URL changes (e.g. browser back/forward buttons, pushState)
   useEffect(() => {
     const handleLocationChange = () => {
-      setCurrentPath(window.location.pathname);
+      const newPath = window.location.pathname;
+      setCurrentPath(newPath);
+      tracker.trackPageView(newPath);
     };
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);

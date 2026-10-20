@@ -208,13 +208,14 @@ test('Admin GA4: /api/admin/analytics/select-property normalizes plain digits to
 
 test('Admin GA4: Changing property updates active target without disconnecting Google or GSC', async () => {
   // Initial property
-  await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+  const resInit = await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
     body: JSON.stringify({ propertyId: 'properties/111222333', propertyName: 'Property 1' })
   });
-  let conn = getSeoConnection();
-  assert.equal(conn?.selected_ga4_property, 'properties/111222333');
+  assert.equal(resInit.status, 200);
+  const dataInit = await resInit.json();
+  assert.equal(dataInit.selectedProperty, 'properties/111222333');
 
   // Change to Property 2
   const resChange = await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
@@ -223,12 +224,12 @@ test('Admin GA4: Changing property updates active target without disconnecting G
     body: JSON.stringify({ propertyId: 'properties/444555666', propertyName: 'Property 2' })
   });
   assert.equal(resChange.status, 200);
-
-  conn = getSeoConnection();
-  assert.equal(conn?.selected_ga4_property, 'properties/444555666');
-  assert.equal(conn?.selected_ga4_property_name, 'Property 2');
+  const dataChange = await resChange.json();
+  assert.equal(dataChange.selectedProperty, 'properties/444555666');
+  assert.equal(dataChange.selectedPropertyName, 'Property 2');
 
   // GSC property and credentials must remain intact
+  const conn = getSeoConnection();
   assert.ok(conn?.selected_property);
 });
 

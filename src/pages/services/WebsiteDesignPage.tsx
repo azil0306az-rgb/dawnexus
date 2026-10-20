@@ -16,70 +16,52 @@ import {
 } from 'lucide-react';
 import { usePageSeo } from '../../utils/seo';
 import { navigateTo } from '../../utils/navigation';
+import { usePageContent, ServicePageContent } from '../../utils/usePageContent';
+import { getIconComponent } from '../../utils/iconMap';
+import { tracker } from '../../utils/tracker';
 
-export const WebsiteDesignPage: React.FC = () => {
-  usePageSeo({
-    title: 'Website Design & Development | Dawnexus',
-    description: 'Custom, high-performance responsive website design and development engineered for brand credibility, lightning-fast speed, and conversion growth.',
-    canonicalUrl: 'https://www.dawnexus.in/services/website-design',
-    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
-    schema: {
-      '@context': 'https://schema.org',
-      '@type': 'Service',
-      'name': 'Website Design & Development',
-      'provider': {
-        '@type': 'ProfessionalService',
-        'name': 'Dawnexus',
-        'url': 'https://www.dawnexus.in/'
-      },
-      'description': 'Modern responsive websites designed around your brand, business goals, and customer conversion experience.',
-      'url': 'https://www.dawnexus.in/services/website-design'
-    }
-  });
-
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
-
-  const handleCtaClick = () => {
-    navigateTo('/#contact');
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('select-service', { detail: 'Website Design & Development' }));
-    }, 150);
-  };
-
-  const capabilities = [
+const DEFAULT_CONTENT: ServicePageContent = {
+  slug: 'website-design',
+  title: 'Website Design & Development',
+  canonical_url: 'https://www.dawnexus.in/services/website-design',
+  hero_badge: 'CAPABILITIES // WEB DESIGN & DEVELOPMENT',
+  hero_subtitle: 'Websites Designed to Move Your Business Forward.',
+  hero_description: 'Your website is the center of your digital credibility. We craft high-performance, conversion-focused websites engineered around your brand identity, business objectives, and customer journey.',
+  hero_primary_cta: 'Start Your Project',
+  hero_secondary_cta: 'Explore Capabilities',
+  capabilities: [
     {
-      icon: Layout,
+      icon: 'Layout',
       title: 'Responsive Business Websites',
       desc: 'Fluid, cross-device layouts that deliver an intuitive and polished experience on smartphones, tablets, laptops, and ultra-wide desktops.'
     },
     {
-      icon: Gauge,
+      icon: 'Gauge',
       title: 'Conversion-Focused Landing Pages',
       desc: 'Targeted single-page funnels designed with deliberate visual hierarchy, persuasive copywriting structure, and friction-free user flows.'
     },
     {
-      icon: Code2,
+      icon: 'Code2',
       title: 'Modern Front-End Engineering',
       desc: 'Built with clean semantic markup, modular component architecture, and modern frameworks that ensure rapid loading and long-term maintainability.'
     },
     {
-      icon: Sparkles,
+      icon: 'Sparkles',
       title: 'Brand Visual Modernization',
       desc: 'Complete redesigns for outdated websites, transitioning legacy sites into contemporary, credible brand assets that build immediate trust.'
     },
     {
-      icon: ShieldCheck,
+      icon: 'ShieldCheck',
       title: 'Technical Foundation & SEO Ready',
       desc: 'Engineered with clean metadata, Core Web Vitals optimization, accessible semantic tags, and schema readiness out of the box.'
     },
     {
-      icon: Layers,
+      icon: 'Layers',
       title: 'Intuitive Content Architecture',
       desc: 'Clear navigation hierarchies and thoughtful content layout that guide visitors smoothly toward taking decisive commercial action.'
     }
-  ];
-
-  const processSteps = [
+  ],
+  process_steps: [
     {
       step: '01',
       title: 'Discovery & Wireframing',
@@ -100,26 +82,71 @@ export const WebsiteDesignPage: React.FC = () => {
       title: 'Quality Assurance & Launch',
       desc: 'Rigorous testing of forms, analytics tracking, mobile layouts, and SSL security followed by smooth deployment.'
     }
-  ];
-
-  const faqs = [
+  ],
+  packages: [],
+  faqs: [
     {
-      q: 'How long does a website project typically take?',
-      a: 'A focused landing page or business website typically requires 2 to 4 weeks from discovery to deployment, depending on content availability, scope complexity, and feedback cycles.'
+      question: 'How long does a website project typically take?',
+      answer: 'A focused landing page or business website typically requires 2 to 4 weeks from discovery to deployment, depending on content availability, scope complexity, and feedback cycles.'
     },
     {
-      q: 'Will my website be mobile-friendly and fast?',
-      a: 'Yes. Every website we build is mobile-first, responsive across all screen dimensions, and tested for swift load times and clean Core Web Vitals.'
+      question: 'Will my website be mobile-friendly and fast?',
+      answer: 'Yes. Every website we build is mobile-first, responsive across all screen dimensions, and tested for swift load times and clean Core Web Vitals.'
     },
     {
-      q: 'Can you redesign our existing company website?',
-      a: 'Absolutely. We regularly audit and modernize outdated web platforms, preserving valuable SEO equity while dramatically elevating design quality, user flow, and conversion rates.'
+      question: 'Can you redesign our existing company website?',
+      answer: 'Absolutely. We regularly audit and modernize outdated web platforms, preserving valuable SEO equity while dramatically elevating design quality, user flow, and conversion rates.'
     },
     {
-      q: 'Do you build on custom code or templates?',
-      a: 'We avoid generic, bloated commercial themes. We build tailored, modern front-ends using clean frameworks and modular CSS to ensure high performance and bespoke brand alignment.'
+      question: 'Do you build on custom code or templates?',
+      answer: 'We avoid generic, bloated commercial themes. We build tailored, modern front-ends using clean frameworks and modular CSS to ensure high performance and bespoke brand alignment.'
     }
-  ];
+  ],
+  cta_section: {
+    title: 'Ready to build a website that delivers results?',
+    desc: 'Tell us about your brand goals and timeline. We\'ll outline a tailored roadmap and transparent proposal for your next stage of growth.',
+    buttonText: 'Request a Consultation'
+  },
+  meta_title: 'Website Design & Development | Dawnexus',
+  meta_description: 'Custom, high-performance responsive website design and development engineered for brand credibility, lightning-fast speed, and conversion growth.',
+  og_image: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png'
+};
+
+export const WebsiteDesignPage: React.FC = () => {
+  const { content } = usePageContent('website-design', DEFAULT_CONTENT);
+
+  usePageSeo({
+    title: content.meta_title || DEFAULT_CONTENT.meta_title,
+    description: content.meta_description || DEFAULT_CONTENT.meta_description,
+    canonicalUrl: DEFAULT_CONTENT.canonical_url,
+    ogImage: content.og_image || DEFAULT_CONTENT.og_image,
+    schema: {
+      '@context': 'https://schema.org',
+      '@type': 'Service',
+      'name': DEFAULT_CONTENT.title,
+      'provider': {
+        '@type': 'ProfessionalService',
+        'name': 'Dawnexus',
+        'url': 'https://www.dawnexus.in/'
+      },
+      'description': content.meta_description || DEFAULT_CONTENT.meta_description,
+      'url': DEFAULT_CONTENT.canonical_url
+    }
+  });
+
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  const handleCtaClick = () => {
+    tracker.trackCtaClick('cta-hero-request-proposal', 'hero', content.hero_primary_cta);
+    navigateTo('/#contact');
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('select-service', { detail: 'Website Design & Development' }));
+    }, 150);
+  };
+
+  const capabilities = content.capabilities || DEFAULT_CONTENT.capabilities;
+  const processSteps = content.process_steps || DEFAULT_CONTENT.process_steps;
+  const faqs = content.faqs || DEFAULT_CONTENT.faqs;
 
   return (
     <div className="bg-[#050505] text-[#FFFFFF] min-h-screen pt-28 pb-20">
@@ -142,34 +169,37 @@ export const WebsiteDesignPage: React.FC = () => {
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0B0B0B] border border-[#252525] text-xs font-semibold tracking-wider text-[#C7FF4D] uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-[#C7FF4D]" />
-              <span>CAPABILITIES // WEB DESIGN & DEVELOPMENT</span>
+              <span>{content.hero_badge || 'CAPABILITIES // WEB DESIGN & DEVELOPMENT'}</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.15]">
-              Websites Designed to Move Your Business Forward.
+              {content.hero_subtitle || 'Websites Designed to Move Your Business Forward.'}
             </h1>
 
             <p className="text-lg text-[#A5A5A5] leading-relaxed max-w-2xl font-normal">
-              Your website is the center of your digital credibility. We craft high-performance, conversion-focused websites engineered around your brand identity, business objectives, and customer journey.
+              {content.hero_description || 'Your website is the center of your digital credibility. We craft high-performance, conversion-focused websites engineered around your brand identity, business objectives, and customer journey.'}
             </p>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-4">
               <button
                 onClick={handleCtaClick}
+                data-analytics-id="cta-hero-primary"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-[#C7FF4D] text-[#050505] font-bold text-sm hover:bg-[#d4ff70] active:scale-[0.98] transition-all glow-lime-hover shadow-lg"
               >
-                <span>Start Your Project</span>
+                <span>{content.hero_primary_cta || 'Start Your Project'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               
               <button
                 onClick={() => {
+                  tracker.trackCtaClick('cta-hero-secondary', 'hero', content.hero_secondary_cta);
                   const el = document.getElementById('capabilities');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
+                data-analytics-id="cta-hero-secondary"
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-[#0B0B0B] text-white hover:text-[#C7FF4D] border border-[#252525] hover:border-[#C7FF4D]/40 text-sm font-medium transition-all"
               >
-                <span>Explore Capabilities</span>
+                <span>{content.hero_secondary_cta || 'Explore Capabilities'}</span>
               </button>
             </div>
           </div>
@@ -281,7 +311,7 @@ export const WebsiteDesignPage: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {capabilities.map((c, i) => {
-            const Icon = c.icon;
+            const Icon = typeof c.icon === 'string' ? getIconComponent(c.icon) : c.icon || Layout;
             return (
               <div key={i} className="p-7 rounded-2xl bg-[#0B0B0B] border border-[#252525] hover:border-[#C7FF4D]/40 transition-colors">
                 <div className="w-10 h-10 rounded-xl bg-[#050505] border border-[#252525] flex items-center justify-center text-[#C7FF4D] mb-5">
@@ -334,18 +364,18 @@ export const WebsiteDesignPage: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          {faqs.map((faq, i) => (
+          {faqs.map((faq: any, i: number) => (
             <div key={i} className="rounded-xl bg-[#0B0B0B] border border-[#252525] overflow-hidden">
               <button
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 className="w-full p-5 text-left flex items-center justify-between text-sm font-semibold text-white hover:text-[#C7FF4D] transition-colors"
               >
-                <span>{faq.q}</span>
+                <span>{faq.question || faq.q}</span>
                 {openFaq === i ? <ChevronUp className="w-4 h-4 text-[#C7FF4D]" /> : <ChevronDown className="w-4 h-4 text-[#A5A5A5]" />}
               </button>
               {openFaq === i && (
                 <div className="px-5 pb-5 text-xs text-[#A5A5A5] leading-relaxed border-t border-[#252525]/50 pt-3">
-                  {faq.a}
+                  {faq.answer || faq.a}
                 </div>
               )}
             </div>
@@ -383,18 +413,19 @@ export const WebsiteDesignPage: React.FC = () => {
         <div className="p-10 sm:p-14 rounded-2xl bg-gradient-to-br from-[#0B0B0B] via-[#0e0e0e] to-[#050505] border border-[#252525] relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="space-y-3 max-w-2xl">
             <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Ready to build a website that delivers results?
+              {content.cta_section?.title || 'Ready to build a website that delivers results?'}
             </h3>
             <p className="text-sm text-[#A5A5A5] leading-relaxed">
-              Tell us about your brand goals and timeline. We'll outline a tailored roadmap and transparent proposal for your next stage of growth.
+              {content.cta_section?.desc || 'Tell us about your brand goals and timeline. We\'ll outline a tailored roadmap and transparent proposal for your next stage of growth.'}
             </p>
           </div>
 
           <button
             onClick={handleCtaClick}
+            data-analytics-id="cta-bottom-banner"
             className="shrink-0 inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-[#C7FF4D] text-[#050505] font-bold text-sm hover:bg-[#d4ff70] active:scale-[0.98] transition-all glow-lime-hover shadow-lg"
           >
-            <span>Request a Consultation</span>
+            <span>{content.cta_section?.buttonText || 'Request a Consultation'}</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </div>

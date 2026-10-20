@@ -17,70 +17,52 @@ import {
 } from 'lucide-react';
 import { usePageSeo } from '../../utils/seo';
 import { navigateTo } from '../../utils/navigation';
+import { usePageContent, ServicePageContent } from '../../utils/usePageContent';
+import { getIconComponent } from '../../utils/iconMap';
+import { tracker } from '../../utils/tracker';
 
-export const AiVideoCreationPage: React.FC = () => {
-  usePageSeo({
-    title: 'AI Video Creation & Visual Production | Dawnexus',
-    description: 'Creative AI-assisted video production, social reels, promotional videos, product demos, and visual storytelling engineered for high-engagement brand campaigns.',
-    canonicalUrl: 'https://www.dawnexus.in/services/ai-video-creation',
-    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
-    schema: {
-      '@context': 'https://schema.org',
-      '@type': 'Service',
-      'name': 'AI Video Creation',
-      'provider': {
-        '@type': 'ProfessionalService',
-        'name': 'Dawnexus',
-        'url': 'https://www.dawnexus.in/'
-      },
-      'description': 'AI-assisted promotional videos, product showcases, social media reels, and business introduction videos.',
-      'url': 'https://www.dawnexus.in/services/ai-video-creation'
-    }
-  });
-
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
-
-  const handleCtaClick = () => {
-    navigateTo('/#contact');
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('select-service', { detail: 'AI Video Creation' }));
-    }, 150);
-  };
-
-  const capabilities = [
+const DEFAULT_CONTENT: ServicePageContent = {
+  slug: 'ai-video-creation',
+  title: 'AI Video Creation & Creative Production',
+  canonical_url: 'https://www.dawnexus.in/services/ai-video-creation',
+  hero_badge: 'CAPABILITIES // AI CREATIVE PRODUCTION',
+  hero_subtitle: 'Turn Your Ideas Into Powerful Visual Stories.',
+  hero_description: 'Video is the most compelling medium on the internet, but traditional video production is often slow and expensive. We unite cutting-edge AI creative pipelines with human directorial craft to produce high-impact videos at modern commercial speed.',
+  hero_primary_cta: 'Plan Your Video Project',
+  hero_secondary_cta: 'Explore Formats',
+  capabilities: [
     {
-      icon: Film,
+      icon: 'Film',
       title: 'Promotional & Brand Videos',
       desc: 'High-impact introduction videos that articulate your brand mission, service value, and competitive edge in 30 to 90 seconds.'
     },
     {
-      icon: Clapperboard,
+      icon: 'Clapperboard',
       title: 'Short-Form Social Reels & Shorts',
       desc: 'Vertical video assets engineered specifically for Instagram Reels, TikTok, and YouTube Shorts to capture fleeting attention spans.'
     },
     {
-      icon: Sliders,
+      icon: 'Sliders',
       title: 'Product Walkthroughs & Feature Demos',
       desc: 'Crisp visual explanations of software features, hardware products, or service offerings that clarify complex workflows.'
     },
     {
-      icon: Sparkles,
+      icon: 'Sparkles',
       title: 'AI-Accelerated Storyboarding',
       desc: 'Rapid conceptualization and multi-style visual treatments generated with AI assistance, reducing creative ideation bottlenecks.'
     },
     {
-      icon: Zap,
+      icon: 'Zap',
       title: 'Rapid Creative Variation Testing',
       desc: 'Produce multiple hook variations, aspect ratios, and visual pacing options to test which creative drives the highest advertising response.'
     },
     {
-      icon: Layers,
+      icon: 'Layers',
       title: 'Sound Design & Dynamic Typography',
       desc: 'Cinematic audio mixing, royalty-free licensing, voice synthesis or voiceover integration, and rhythmic motion typography.'
     }
-  ];
-
-  const processSteps = [
+  ],
+  process_steps: [
     {
       step: '01',
       title: 'Creative Brief & Concept',
@@ -101,47 +83,92 @@ export const AiVideoCreationPage: React.FC = () => {
       title: 'Multi-Format Delivery',
       desc: 'Rendering final deliverables in 16:9 widescreen, 9:16 vertical, and 1:1 square formats optimized for all distribution channels.'
     }
-  ];
-
-  const sampleFormats = [
+  ],
+  packages: [],
+  faqs: [
     {
-      title: 'Brand Anthem Video',
-      format: '16:9 Widescreen / 60s',
-      aspect: 'Website Hero & YouTube',
-      desc: 'Cinematic company overview communicating vision, technological capability, and value proposition.'
+      question: 'Does AI replace human video directors and editors?',
+      answer: 'No. AI acts as an accelerator for concept rendering, motion assets, and rapid iteration. Every video is conceptualized, scripted, curated, edited, and sound-designed by human creative directors to ensure coherent storytelling and high brand standards.'
     },
     {
-      title: 'Paid Social Hook Variations',
-      format: '9:16 Vertical / 15s-30s',
-      aspect: 'Meta Ads & TikTok',
-      desc: 'High-energy hook variations designed to halt user scroll and drive immediate landing page clicks.'
+      question: 'What types of businesses benefit most from AI video creation?',
+      answer: 'B2B technology brands, eCommerce companies, luxury retail, professional services, and startups seeking high-frequency creative output without large-scale on-location film shoot budgets.'
     },
     {
-      title: 'Interactive Feature Demo',
-      format: '16:9 / 45s-90s',
-      aspect: 'Product Pages & Sales Decks',
-      desc: 'Clean UI animation and highlighted user journeys showcasing product strengths clearly.'
+      question: 'How fast can a video deliverable be produced?',
+      answer: 'Because our pipeline uses AI-assisted visualization and rapid prototyping, focused social reels and promotional videos can be delivered in as little as 5 to 10 business days from approved script.'
+    },
+    {
+      question: 'What formats and resolutions do you deliver?',
+      answer: 'We deliver in crisp 1080p and 4K resolution across all required aspect ratios: 16:9 (web and desktop), 9:16 (Instagram Reels, TikTok, YouTube Shorts), and 1:1 (feed posts).'
     }
-  ];
+  ],
+  cta_section: {
+    title: 'Ready to elevate your visual marketing?',
+    desc: 'Share your concept or target campaign. We\'ll formulate a creative storyboard and production estimate tailored to your goals.',
+    buttonText: 'Start Video Project'
+  },
+  meta_title: 'AI Video Creation & Visual Production | Dawnexus',
+  meta_description: 'Creative AI-assisted video production, social reels, promotional videos, product demos, and visual storytelling engineered for high-engagement brand campaigns.',
+  og_image: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png'
+};
 
-  const faqs = [
-    {
-      q: 'Does AI replace human video directors and editors?',
-      a: 'No. AI acts as an accelerator for concept rendering, motion assets, and rapid iteration. Every video is conceptualized, scripted, curated, edited, and sound-designed by human creative directors to ensure coherent storytelling and high brand standards.'
-    },
-    {
-      q: 'What types of businesses benefit most from AI video creation?',
-      a: 'B2B technology brands, eCommerce companies, luxury retail, professional services, and startups seeking high-frequency creative output without large-scale on-location film shoot budgets.'
-    },
-    {
-      q: 'How fast can a video deliverable be produced?',
-      a: 'Because our pipeline uses AI-assisted visualization and rapid prototyping, focused social reels and promotional videos can be delivered in as little as 5 to 10 business days from approved script.'
-    },
-    {
-      q: 'What formats and resolutions do you deliver?',
-      a: 'We deliver in crisp 1080p and 4K resolution across all required aspect ratios: 16:9 (web and desktop), 9:16 (Instagram Reels, TikTok, YouTube Shorts), and 1:1 (feed posts).'
+const sampleFormats = [
+  {
+    title: 'Brand Anthem Video',
+    format: '16:9 Widescreen / 60s',
+    aspect: 'Website Hero & YouTube',
+    desc: 'Cinematic company overview communicating vision, technological capability, and value proposition.'
+  },
+  {
+    title: 'Social Video Ad / Reel',
+    format: '9:16 Vertical / 15-30s',
+    aspect: 'Instagram Reels & TikTok',
+    desc: 'Fast-paced, hook-driven short-form video designed for thumb-stopping feed retention and immediate conversion.'
+  },
+  {
+    title: 'Product Feature Spotlight',
+    format: '16:9 or 1:1 / 45s',
+    aspect: 'SaaS Walkthroughs & eCommerce',
+    desc: 'Highlighting UI interactions, product textures, or workflows in motion with synchronized voice and captions.'
+  }
+];
+
+export const AiVideoCreationPage: React.FC = () => {
+  const { content } = usePageContent('ai-video-creation', DEFAULT_CONTENT);
+
+  usePageSeo({
+    title: content.meta_title || DEFAULT_CONTENT.meta_title,
+    description: content.meta_description || DEFAULT_CONTENT.meta_description,
+    canonicalUrl: DEFAULT_CONTENT.canonical_url,
+    ogImage: content.og_image || DEFAULT_CONTENT.og_image,
+    schema: {
+      '@context': 'https://schema.org',
+      '@type': 'Service',
+      'name': DEFAULT_CONTENT.title,
+      'provider': {
+        '@type': 'ProfessionalService',
+        'name': 'Dawnexus',
+        'url': 'https://www.dawnexus.in/'
+      },
+      'description': content.meta_description || DEFAULT_CONTENT.meta_description,
+      'url': DEFAULT_CONTENT.canonical_url
     }
-  ];
+  });
+
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  const handleCtaClick = () => {
+    tracker.trackCtaClick('cta-hero-plan-video', 'hero', content.hero_primary_cta);
+    navigateTo('/#contact');
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('select-service', { detail: 'AI Video Creation' }));
+    }, 150);
+  };
+
+  const capabilities = content.capabilities || DEFAULT_CONTENT.capabilities;
+  const processSteps = content.process_steps || DEFAULT_CONTENT.process_steps;
+  const faqs = content.faqs || DEFAULT_CONTENT.faqs;
 
   return (
     <div className="bg-[#050505] text-[#FFFFFF] min-h-screen pt-28 pb-20">
@@ -164,34 +191,37 @@ export const AiVideoCreationPage: React.FC = () => {
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0B0B0B] border border-[#252525] text-xs font-semibold tracking-wider text-[#C7FF4D] uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-[#C7FF4D]" />
-              <span>CAPABILITIES // AI CREATIVE PRODUCTION</span>
+              <span>{content.hero_badge || 'CAPABILITIES // AI CREATIVE PRODUCTION'}</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.15]">
-              Turn Your Ideas Into Powerful Visual Stories.
+              {content.hero_subtitle || 'Turn Your Ideas Into Powerful Visual Stories.'}
             </h1>
 
             <p className="text-lg text-[#A5A5A5] leading-relaxed max-w-2xl font-normal">
-              Video is the most compelling medium on the internet, but traditional video production is often slow and expensive. We unite cutting-edge AI creative pipelines with human directorial craft to produce high-impact videos at modern commercial speed.
+              {content.hero_description || 'Video is the most compelling medium on the internet, but traditional video production is often slow and expensive. We unite cutting-edge AI creative pipelines with human directorial craft to produce high-impact videos at modern commercial speed.'}
             </p>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-4">
               <button
                 onClick={handleCtaClick}
+                data-analytics-id="cta-video-hero-primary"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-[#C7FF4D] text-[#050505] font-bold text-sm hover:bg-[#d4ff70] active:scale-[0.98] transition-all glow-lime-hover shadow-lg"
               >
-                <span>Plan Your Video Project</span>
+                <span>{content.hero_primary_cta || 'Plan Your Video Project'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               
               <button
                 onClick={() => {
+                  tracker.trackCtaClick('cta-video-hero-secondary', 'hero', content.hero_secondary_cta);
                   const el = document.getElementById('formats');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
+                data-analytics-id="cta-video-hero-secondary"
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-[#0B0B0B] text-white hover:text-[#C7FF4D] border border-[#252525] hover:border-[#C7FF4D]/40 text-sm font-medium transition-all"
               >
-                <span>Explore Formats</span>
+                <span>{content.hero_secondary_cta || 'Explore Formats'}</span>
               </button>
             </div>
           </div>
@@ -333,7 +363,7 @@ export const AiVideoCreationPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {capabilities.map((c, i) => {
-              const Icon = c.icon;
+              const Icon = typeof c.icon === 'string' ? getIconComponent(c.icon) : (c.icon || Film);
               return (
                 <div key={i} className="p-7 rounded-2xl bg-[#050505] border border-[#252525] hover:border-[#C7FF4D]/40 transition-colors">
                   <div className="w-10 h-10 rounded-xl bg-[#0B0B0B] border border-[#252525] flex items-center justify-center text-[#C7FF4D] mb-5">
@@ -382,22 +412,26 @@ export const AiVideoCreationPage: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          {faqs.map((faq, i) => (
-            <div key={i} className="rounded-xl bg-[#0B0B0B] border border-[#252525] overflow-hidden">
-              <button
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="w-full p-5 text-left flex items-center justify-between text-sm font-semibold text-white hover:text-[#C7FF4D] transition-colors"
-              >
-                <span>{faq.q}</span>
-                {openFaq === i ? <ChevronUp className="w-4 h-4 text-[#C7FF4D]" /> : <ChevronDown className="w-4 h-4 text-[#A5A5A5]" />}
-              </button>
-              {openFaq === i && (
-                <div className="px-5 pb-5 text-xs text-[#A5A5A5] leading-relaxed border-t border-[#252525]/50 pt-3">
-                  {faq.a}
-                </div>
-              )}
-            </div>
-          ))}
+          {faqs.map((faq, i) => {
+            const question = faq.question || (faq as any).q;
+            const answer = faq.answer || (faq as any).a;
+            return (
+              <div key={i} className="rounded-xl bg-[#0B0B0B] border border-[#252525] overflow-hidden">
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full p-5 text-left flex items-center justify-between text-sm font-semibold text-white hover:text-[#C7FF4D] transition-colors"
+                >
+                  <span>{question}</span>
+                  {openFaq === i ? <ChevronUp className="w-4 h-4 text-[#C7FF4D]" /> : <ChevronDown className="w-4 h-4 text-[#A5A5A5]" />}
+                </button>
+                {openFaq === i && (
+                  <div className="px-5 pb-5 text-xs text-[#A5A5A5] leading-relaxed border-t border-[#252525]/50 pt-3">
+                    {answer}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -406,18 +440,21 @@ export const AiVideoCreationPage: React.FC = () => {
         <div className="p-10 sm:p-14 rounded-2xl bg-gradient-to-br from-[#0B0B0B] via-[#0e0e0e] to-[#050505] border border-[#252525] relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="space-y-3 max-w-2xl">
             <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Ready to elevate your visual marketing?
+              {content.cta_section?.title || 'Ready to elevate your visual marketing?'}
             </h3>
             <p className="text-sm text-[#A5A5A5] leading-relaxed">
-              Share your concept or target campaign. We'll formulate a creative storyboard and production estimate tailored to your goals.
+              {content.cta_section?.desc || 'Share your concept or target campaign. We\'ll formulate a creative storyboard and production estimate tailored to your goals.'}
             </p>
           </div>
 
           <button
-            onClick={handleCtaClick}
+            onClick={() => {
+              tracker.trackCtaClick('cta-video-bottom', 'bottom-cta', content.cta_section?.buttonText || 'Start Video Project');
+              handleCtaClick();
+            }}
             className="shrink-0 inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-[#C7FF4D] text-[#050505] font-bold text-sm hover:bg-[#d4ff70] active:scale-[0.98] transition-all glow-lime-hover shadow-lg"
           >
-            <span>Start Video Project</span>
+            <span>{content.cta_section?.buttonText || 'Start Video Project'}</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </div>

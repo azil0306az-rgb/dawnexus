@@ -19,6 +19,7 @@ import {
   CalculatorPricingConfig,
   DEFAULT_PRICING_CONFIG
 } from './calculatorPricing.js';
+import { DEFAULT_SERVICE_PAGES } from './websiteContent.js';
 
 // Define the DB path
 const defaultDbPath = process.env.VERCEL
@@ -41,6 +42,10 @@ try {
   db.exec('PRAGMA busy_timeout = 5000;');
 } catch {
   // Pragma failure is non-fatal
+}
+
+export function getDb() {
+  return db;
 }
 
 // Initialize schema
@@ -318,6 +323,213 @@ export function initDatabase() {
     }
   } catch (err) {
     console.warn('[Calculator Config Seed Notice]:', err);
+  }
+
+  // ----------------------------------------------------
+  // VERSION 6.1.3: DYNAMIC WEBSITE CONTENT & VISITOR BEHAVIOUR INTELLIGENCE
+  // ----------------------------------------------------
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS website_pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      canonical_url TEXT NOT NULL,
+      hero_badge TEXT,
+      hero_subtitle TEXT,
+      hero_description TEXT,
+      hero_primary_cta TEXT,
+      hero_secondary_cta TEXT,
+      capabilities_json TEXT DEFAULT '[]',
+      process_steps_json TEXT DEFAULT '[]',
+      packages_json TEXT DEFAULT '[]',
+      faqs_json TEXT DEFAULT '[]',
+      cta_section_json TEXT DEFAULT '{}',
+      meta_title TEXT,
+      meta_description TEXT,
+      og_image TEXT,
+      status TEXT DEFAULT 'published',
+      version INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS website_content_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      page_slug TEXT NOT NULL,
+      version_number INTEGER NOT NULL,
+      content_json TEXT NOT NULL,
+      change_summary TEXT,
+      created_by TEXT NOT NULL,
+      is_published INTEGER DEFAULT 0,
+      published_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_website_versions_slug ON website_content_versions(page_slug, version_number);
+
+    CREATE TABLE IF NOT EXISTS ai_optimization_proposals (
+      id TEXT PRIMARY KEY,
+      page_slug TEXT NOT NULL,
+      problem_statement TEXT NOT NULL,
+      evidence_json TEXT NOT NULL,
+      hypothesis TEXT NOT NULL,
+      proposed_changes_json TEXT NOT NULL,
+      risk_assessment TEXT NOT NULL,
+      confidence_score REAL NOT NULL,
+      status TEXT DEFAULT 'pending',
+      approved_by TEXT,
+      published_version_id INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_proposals_status ON ai_optimization_proposals(status, page_slug);
+
+    CREATE TABLE IF NOT EXISTS optimization_experiments (
+      id TEXT PRIMARY KEY,
+      proposal_id TEXT,
+      page_slug TEXT NOT NULL,
+      hypothesis TEXT NOT NULL,
+      variant_json TEXT NOT NULL,
+      primary_metric TEXT NOT NULL,
+      status TEXT DEFAULT 'draft',
+      start_date TEXT,
+      end_date TEXT,
+      baseline_metrics_json TEXT,
+      variant_metrics_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS analytics_sessions (
+      session_id TEXT PRIMARY KEY,
+      visitor_id TEXT NOT NULL,
+      first_page TEXT NOT NULL,
+      last_page TEXT NOT NULL,
+      referrer TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      device_type TEXT DEFAULT 'desktop',
+      browser TEXT,
+      os TEXT,
+      country TEXT,
+      is_bot INTEGER DEFAULT 0,
+      bot_reason TEXT,
+      started_at TEXT NOT NULL,
+      last_active_at TEXT NOT NULL,
+      duration_seconds INTEGER DEFAULT 0,
+      page_count INTEGER DEFAULT 1,
+      is_bounce INTEGER DEFAULT 0,
+      has_converted INTEGER DEFAULT 0,
+      enquiry_ref_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_analytics_sessions_started ON analytics_sessions(started_at);
+    CREATE INDEX IF NOT EXISTS idx_analytics_sessions_visitor ON analytics_sessions(visitor_id);
+    CREATE INDEX IF NOT EXISTS idx_analytics_sessions_bot ON analytics_sessions(is_bot);
+
+    CREATE TABLE IF NOT EXISTS analytics_events (
+      event_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      visitor_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      page_path TEXT NOT NULL,
+      element_id TEXT,
+      section_id TEXT,
+      scroll_depth INTEGER,
+      viewport_width INTEGER,
+      viewport_height INTEGER,
+      x_pos REAL,
+      y_pos REAL,
+      properties_json TEXT DEFAULT '{}',
+      is_bot INTEGER DEFAULT 0,
+      timestamp TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_session ON analytics_events(session_id);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_path_type ON analytics_events(page_path, event_type);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_time ON analytics_events(timestamp);
+
+    CREATE TABLE IF NOT EXISTS analytics_replay_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      events_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_replay_session ON analytics_replay_chunks(session_id, chunk_index);
+
+    CREATE TABLE IF NOT EXISTS analytics_aggregates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      page_path TEXT NOT NULL,
+      device_type TEXT NOT NULL,
+      views INTEGER DEFAULT 0,
+      unique_visitors INTEGER DEFAULT 0,
+      sessions INTEGER DEFAULT 0,
+      bounces INTEGER DEFAULT 0,
+      conversions INTEGER DEFAULT 0,
+      avg_scroll_depth REAL DEFAULT 0,
+      avg_duration_seconds REAL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      UNIQUE(date, page_path, device_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_analytics_agg_date ON analytics_aggregates(date);
+
+    CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      details_json TEXT,
+      ip_hash TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON admin_audit_logs(action, created_at);
+  `);
+
+  // Seed default service pages if missing
+  try {
+    const pageCount = (db.prepare('SELECT COUNT(*) as c FROM website_pages').get() as { c: number })?.c || 0;
+    if (pageCount === 0) {
+      const now = new Date().toISOString();
+      for (const [slug, page] of Object.entries(DEFAULT_SERVICE_PAGES)) {
+        db.prepare(`
+          INSERT INTO website_pages (
+            slug, title, canonical_url, hero_badge, hero_subtitle, hero_description,
+            hero_primary_cta, hero_secondary_cta, capabilities_json, process_steps_json,
+            packages_json, faqs_json, cta_section_json, meta_title, meta_description,
+            og_image, status, version, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', 1, ?, ?)
+        `).run(
+          page.slug,
+          page.title,
+          page.canonical_url,
+          page.hero_badge,
+          page.hero_subtitle,
+          page.hero_description,
+          page.hero_primary_cta,
+          page.hero_secondary_cta,
+          JSON.stringify(page.capabilities),
+          JSON.stringify(page.process_steps),
+          JSON.stringify(page.packages),
+          JSON.stringify(page.faqs),
+          JSON.stringify(page.cta_section),
+          page.meta_title,
+          page.meta_description,
+          page.og_image,
+          now,
+          now
+        );
+
+        db.prepare(`
+          INSERT INTO website_content_versions (
+            page_slug, version_number, content_json, change_summary, created_by, is_published, published_at, created_at
+          ) VALUES (?, 1, ?, 'Initial authoritative version', 'system_init', 1, ?, ?)
+        `).run(slug, JSON.stringify(page), now, now);
+      }
+    }
+  } catch (seedErr) {
+    console.warn('[Website Pages Seed Notice]:', seedErr);
   }
 
   console.log(`[Database] SQLite initialized successfully at: ${path.resolve(dbPath)}`);

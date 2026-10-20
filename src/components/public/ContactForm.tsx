@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Send, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import type { EnquiryFormData } from '../../types';
+import { tracker } from '../../utils/tracker';
 
 const availableServices = [
   'Website Design & Development',
@@ -62,6 +63,14 @@ export const ContactForm: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [hasStartedForm, setHasStartedForm] = useState(false);
+
+  const notifyFormStart = () => {
+    if (!hasStartedForm) {
+      setHasStartedForm(true);
+      tracker.trackFormStart('contact_form');
+    }
+  };
 
   // Restore draft from sessionStorage if available
   useEffect(() => {
@@ -156,7 +165,12 @@ export const ContactForm: React.FC = () => {
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    if (!isValid) {
+      const firstError = Object.keys(newErrors)[0];
+      tracker.trackFormError(firstError, 'contact_form');
+    }
+    return isValid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -190,10 +204,12 @@ export const ContactForm: React.FC = () => {
         if (data.details) {
           setErrors(data.details);
         }
+        tracker.trackFormError('server_validation', 'contact_form');
         throw new Error(data.error || 'Failed to submit enquiry. Please check your information.');
       }
 
-      // Success
+      // Success - Record verified conversion without any PII in tracker
+      tracker.trackFormSubmit(data.enquiryId ? String(data.enquiryId) : undefined, 'contact_form');
       setSubmitSuccess(true);
       sessionStorage.removeItem('dawnexus_contact_draft');
       // Reset form
@@ -296,7 +312,7 @@ export const ContactForm: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+                <form onSubmit={handleSubmit} onFocus={notifyFormStart} className="space-y-6" noValidate>
                   
                   {serverError && (
                     <div className="p-4 rounded-xl bg-red-950/40 border border-red-500/40 text-red-300 text-sm flex items-start gap-3">

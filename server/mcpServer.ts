@@ -388,6 +388,236 @@ export const MCP_TOOLS: Tool[] = [
         limit: { type: 'number', description: 'Max recent jobs to return (default 15)' }
       }
     }
+  },
+
+  // ==========================================
+  // VERSION 6.1.3: VISITOR ANALYTICS TOOLS
+  // ==========================================
+  {
+    name: 'analytics_get_overview',
+    description: 'Retrieve high-level visitor behaviour intelligence (visitors, sessions, human/bot ratio, bounce rate, average scroll depth, form abandonment rate).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days of data to analyze (default 30)' },
+        excludeBots: { type: 'boolean', description: 'Whether to exclude identified search crawlers and bots (default true)' }
+      }
+    }
+  },
+  {
+    name: 'analytics_get_conversion_funnel',
+    description: 'Retrieve the 7-step commercial conversion funnel with step drop-offs (visit -> service -> pricing -> cta -> form start -> form step -> enquiry).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to analyze (default 30)' },
+        excludeBots: { type: 'boolean', description: 'Exclude bots (default true)' }
+      }
+    }
+  },
+  {
+    name: 'analytics_get_page_performance',
+    description: 'Retrieve page-level engagement, click hotzones, and scroll milestone completions for a given path.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pageUrl: { type: 'string', description: 'Target path (e.g. /services/website-design or /)' },
+        days: { type: 'number', description: 'Days of data to analyze (default 30)' }
+      }
+    }
+  },
+  {
+    name: 'analytics_get_visitor_journeys',
+    description: 'Retrieve anonymous path sequences and journey progressions across pages leading to exit or conversion.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days of data to analyze (default 30)' },
+        limit: { type: 'number', description: 'Max journeys to return (default 20)' },
+        excludeBots: { type: 'boolean', description: 'Exclude bots (default true)' }
+      }
+    }
+  },
+  {
+    name: 'analytics_get_exit_analysis',
+    description: 'Analyze top exit pages and drop-off patterns where visitors leave the website.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to analyze (default 30)' }
+      }
+    }
+  },
+  {
+    name: 'analytics_get_click_heatmap',
+    description: 'Retrieve aggregated click coordinate hotzones and target elements on a specific URL.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pageUrl: { type: 'string', description: 'Page path to inspect' },
+        days: { type: 'number', description: 'Days of data to aggregate (default 30)' }
+      },
+      required: ['pageUrl']
+    }
+  },
+  {
+    name: 'analytics_get_scroll_depth',
+    description: 'Retrieve percentage of visitors reaching 25%, 50%, 75%, and 100% scroll depth on a given page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pageUrl: { type: 'string', description: 'Target page path' },
+        days: { type: 'number', description: 'Days of data (default 30)' }
+      },
+      required: ['pageUrl']
+    }
+  },
+  {
+    name: 'analytics_get_form_abandonment',
+    description: 'Inspect enquiry form engagement, starts, submissions, drop-off fields, and input errors.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to inspect (default 30)' }
+      }
+    }
+  },
+  {
+    name: 'analytics_get_session_replay_summary',
+    description: 'Retrieve privacy-masked cursor and scroll interaction timeline for a specific visitor session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', description: 'Pseudonymous session ID' }
+      },
+      required: ['sessionId']
+    }
+  },
+  {
+    name: 'analytics_get_bot_filter_stats',
+    description: 'Inspect crawler classification statistics and verified bot signatures.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to analyze (default 30)' }
+      }
+    }
+  },
+  {
+    name: 'analytics_get_tracking_health',
+    description: 'Check first-party ingestion latency, queue health, and 90-day retention status.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+
+  // ==========================================
+  // VERSION 6.1.3: WEBSITE CONTENT TOOLS
+  // ==========================================
+  {
+    name: 'website_list_editable_pages',
+    description: 'List all database-backed service pages and editable content pages in Dawnexus.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'website_get_page_content',
+    description: 'Retrieve complete structured content for a service page (hero, capabilities, FAQs, CTA, meta).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Page slug (e.g. website-design, seo-services, ai-video-creation, digital-marketing)' }
+      },
+      required: ['slug']
+    }
+  },
+  {
+    name: 'website_get_page_metadata',
+    description: 'Retrieve SEO meta title, description, canonical URL, and OpenGraph tags for a page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Page slug' }
+      },
+      required: ['slug']
+    }
+  },
+  {
+    name: 'website_get_content_version_history',
+    description: 'Retrieve revision history for a website page with rollback checkpoints.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Page slug' },
+        limit: { type: 'number', description: 'Max revisions to retrieve (default 20)' }
+      },
+      required: ['slug']
+    }
+  },
+  {
+    name: 'website_create_optimization_draft',
+    description: 'Create an evidence-backed optimization draft for human review. Never publishes immediately.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Target page slug' },
+        targetSection: { type: 'string', description: 'Target section (hero, capabilities, faqs, cta)' },
+        proposedChanges: { type: 'object', description: 'Proposed section content' },
+        reason: { type: 'string', description: 'Evidence-backed rationale for the change' }
+      },
+      required: ['slug', 'targetSection', 'proposedChanges', 'reason']
+    }
+  },
+  {
+    name: 'website_preview_optimization_draft',
+    description: 'Preview an optimization draft side-by-side with current live content.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Page slug' },
+        versionNumber: { type: 'number', description: 'Specific draft version to preview' }
+      },
+      required: ['slug']
+    }
+  },
+  {
+    name: 'website_get_approval_status',
+    description: 'Check the review/approval status of AI optimization proposals.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        proposalId: { type: 'number', description: 'Optional proposal ID' },
+        slug: { type: 'string', description: 'Optional page slug' }
+      }
+    }
+  },
+  {
+    name: 'website_publish_approved_changes',
+    description: 'Publish an approved optimization proposal live to the website without code redeploy.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        proposalId: { type: 'number', description: 'Proposal ID that has been approved' },
+        approvedBy: { type: 'string', description: 'Administrator name or identifier' }
+      },
+      required: ['proposalId', 'approvedBy']
+    }
+  },
+  {
+    name: 'website_rollback_content_version',
+    description: 'Immediately restore a previous version of a website page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Page slug' },
+        versionNumber: { type: 'number', description: 'Target version number to restore' },
+        reason: { type: 'string', description: 'Reason for rollback' }
+      },
+      required: ['slug', 'versionNumber']
+    }
   }
 ];
 
@@ -567,6 +797,108 @@ export function createDawnexusMcpServer(): Server {
 
         case 'ga4_get_analytics_status': {
           result = await McpService.ga4GetAnalyticsStatus(args as any);
+          break;
+        }
+
+        // --- VERSION 6.1.3: VISITOR ANALYTICS ---
+        case 'analytics_get_overview': {
+          result = await McpService.analyticsGetOverview(args as any);
+          break;
+        }
+
+        case 'analytics_get_conversion_funnel': {
+          result = await McpService.analyticsGetConversionFunnel(args as any);
+          break;
+        }
+
+        case 'analytics_get_page_performance': {
+          result = await McpService.analyticsGetPagePerformance(args as any);
+          break;
+        }
+
+        case 'analytics_get_visitor_journeys': {
+          result = await McpService.analyticsGetVisitorJourneys(args as any);
+          break;
+        }
+
+        case 'analytics_get_exit_analysis': {
+          result = await McpService.analyticsGetExitAnalysis(args as any);
+          break;
+        }
+
+        case 'analytics_get_click_heatmap': {
+          result = await McpService.analyticsGetClickHeatmap(args as any);
+          break;
+        }
+
+        case 'analytics_get_scroll_depth': {
+          result = await McpService.analyticsGetScrollDepth(args as any);
+          break;
+        }
+
+        case 'analytics_get_form_abandonment': {
+          result = await McpService.analyticsGetFormAbandonment(args as any);
+          break;
+        }
+
+        case 'analytics_get_session_replay_summary': {
+          result = await McpService.analyticsGetSessionReplaySummary(args as any);
+          break;
+        }
+
+        case 'analytics_get_bot_filter_stats': {
+          result = await McpService.analyticsGetBotFilterStats();
+          break;
+        }
+
+        case 'analytics_get_tracking_health': {
+          result = await McpService.analyticsGetTrackingHealth();
+          break;
+        }
+
+        // --- VERSION 6.1.3: WEBSITE CONTENT ---
+        case 'website_list_editable_pages': {
+          result = await McpService.websiteListEditablePages();
+          break;
+        }
+
+        case 'website_get_page_content': {
+          result = await McpService.websiteGetPageContent(args as any);
+          break;
+        }
+
+        case 'website_get_page_metadata': {
+          result = await McpService.websiteGetPageMetadata(args as any);
+          break;
+        }
+
+        case 'website_get_content_version_history': {
+          result = await McpService.websiteGetContentVersionHistory(args as any);
+          break;
+        }
+
+        case 'website_create_optimization_draft': {
+          result = await McpService.websiteCreateOptimizationDraft(args as any);
+          break;
+        }
+
+        case 'website_preview_optimization_draft': {
+          result = await McpService.websitePreviewOptimizationDraft(args as any);
+          break;
+        }
+
+        case 'website_get_approval_status': {
+          result = await McpService.websiteGetApprovalStatus(args as any);
+          break;
+        }
+
+        case 'website_publish_approved_changes': {
+          result = await McpService.websitePublishApprovedChanges(args as any);
+          break;
+        }
+
+        case 'website_rollback_content_version': {
+          result = await McpService.websiteRollbackContentVersion(args as any);
           break;
         }
 
@@ -1294,6 +1626,66 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
         case 'ga4_get_analytics_status':
           resultData = await McpService.ga4GetAnalyticsStatus(toolArgs);
           break;
+        case 'analytics_get_overview':
+          resultData = await McpService.analyticsGetOverview(toolArgs);
+          break;
+        case 'analytics_get_conversion_funnel':
+          resultData = await McpService.analyticsGetConversionFunnel(toolArgs);
+          break;
+        case 'analytics_get_page_performance':
+          resultData = await McpService.analyticsGetPagePerformance(toolArgs);
+          break;
+        case 'analytics_get_visitor_journeys':
+          resultData = await McpService.analyticsGetVisitorJourneys(toolArgs);
+          break;
+        case 'analytics_get_exit_analysis':
+          resultData = await McpService.analyticsGetExitAnalysis(toolArgs);
+          break;
+        case 'analytics_get_click_heatmap':
+          resultData = await McpService.analyticsGetClickHeatmap(toolArgs);
+          break;
+        case 'analytics_get_scroll_depth':
+          resultData = await McpService.analyticsGetScrollDepth(toolArgs);
+          break;
+        case 'analytics_get_form_abandonment':
+          resultData = await McpService.analyticsGetFormAbandonment(toolArgs);
+          break;
+        case 'analytics_get_session_replay_summary':
+          resultData = await McpService.analyticsGetSessionReplaySummary(toolArgs);
+          break;
+        case 'analytics_get_bot_filter_stats':
+          resultData = await McpService.analyticsGetBotFilterStats();
+          break;
+        case 'analytics_get_tracking_health':
+          resultData = await McpService.analyticsGetTrackingHealth();
+          break;
+        case 'website_list_editable_pages':
+          resultData = await McpService.websiteListEditablePages();
+          break;
+        case 'website_get_page_content':
+          resultData = await McpService.websiteGetPageContent(toolArgs);
+          break;
+        case 'website_get_page_metadata':
+          resultData = await McpService.websiteGetPageMetadata(toolArgs);
+          break;
+        case 'website_get_content_version_history':
+          resultData = await McpService.websiteGetContentVersionHistory(toolArgs);
+          break;
+        case 'website_create_optimization_draft':
+          resultData = await McpService.websiteCreateOptimizationDraft(toolArgs);
+          break;
+        case 'website_preview_optimization_draft':
+          resultData = await McpService.websitePreviewOptimizationDraft(toolArgs);
+          break;
+        case 'website_get_approval_status':
+          resultData = await McpService.websiteGetApprovalStatus(toolArgs);
+          break;
+        case 'website_publish_approved_changes':
+          resultData = await McpService.websitePublishApprovedChanges(toolArgs);
+          break;
+        case 'website_rollback_content_version':
+          resultData = await McpService.websiteRollbackContentVersion(toolArgs);
+          break;
         default:
           return res.status(404).json({
             jsonrpc: '2.0',
@@ -1364,7 +1756,7 @@ mcpRouter.post('/tools/drafts', async (req: Request, res: Response) => {
 
 mcpRouter.patch('/tools/drafts/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
     const result = await McpService.updateBlogDraft(id, req.body, callerIp);
     res.json(result);
@@ -1395,7 +1787,7 @@ mcpRouter.post('/tools/attach-image', async (req: Request, res: Response) => {
 
 mcpRouter.get('/tools/verify-image/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
     const result = await McpService.verifyBlogImage(id, callerIp);
     if (!result.accessible) {
@@ -1409,7 +1801,7 @@ mcpRouter.get('/tools/verify-image/:id', async (req: Request, res: Response) => 
 
 mcpRouter.patch('/tools/image-metadata/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
     const result = await McpService.updateBlogImageMetadata({ id, ...req.body }, callerIp);
     res.json(result);
@@ -1508,7 +1900,7 @@ mcpRouter.post('/tools/gsc/sync', async (req: Request, res: Response) => {
 
 mcpRouter.get('/tools/gsc/jobs/:jobId', async (req: Request, res: Response) => {
   try {
-    const result = await McpService.gscGetResearchJob({ jobId: req.params.jobId });
+    const result = await McpService.gscGetResearchJob({ jobId: String(req.params.jobId) });
     res.json(result);
   } catch (err: any) {
     res.status(404).json({ error: err?.message || 'Job not found' });

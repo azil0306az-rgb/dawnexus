@@ -279,6 +279,71 @@ export async function syncFromSupabase(db: any): Promise<void> {
       console.warn('[Supabase Sync SEO Notice]:', seoErr);
     }
 
+    // 7. Sync Website Pages (Version 6.1.3 authoritative content)
+    try {
+      const { data: pages } = await supabase
+        .from('website_pages')
+        .select('*');
+
+      if (pages && Array.isArray(pages) && pages.length > 0) {
+        const stmt = db.prepare(`
+          INSERT INTO website_pages (
+            slug, title, canonical_url, hero_badge, hero_subtitle, hero_description,
+            hero_primary_cta, hero_secondary_cta, capabilities_json, process_steps_json,
+            packages_json, faqs_json, cta_section_json, meta_title, meta_description,
+            og_image, status, version, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(slug) DO UPDATE SET
+            title = excluded.title,
+            canonical_url = excluded.canonical_url,
+            hero_badge = excluded.hero_badge,
+            hero_subtitle = excluded.hero_subtitle,
+            hero_description = excluded.hero_description,
+            hero_primary_cta = excluded.hero_primary_cta,
+            hero_secondary_cta = excluded.hero_secondary_cta,
+            capabilities_json = excluded.capabilities_json,
+            process_steps_json = excluded.process_steps_json,
+            packages_json = excluded.packages_json,
+            faqs_json = excluded.faqs_json,
+            cta_section_json = excluded.cta_section_json,
+            meta_title = excluded.meta_title,
+            meta_description = excluded.meta_description,
+            og_image = excluded.og_image,
+            status = excluded.status,
+            version = excluded.version,
+            updated_at = excluded.updated_at
+        `);
+
+        for (const p of pages) {
+          stmt.run(
+            p.slug,
+            p.title,
+            p.canonical_url,
+            p.hero_badge,
+            p.hero_subtitle,
+            p.hero_description,
+            p.hero_primary_cta,
+            p.hero_secondary_cta,
+            typeof p.capabilities_json === 'string' ? p.capabilities_json : JSON.stringify(p.capabilities_json || []),
+            typeof p.process_steps_json === 'string' ? p.process_steps_json : JSON.stringify(p.process_steps_json || []),
+            typeof p.packages_json === 'string' ? p.packages_json : JSON.stringify(p.packages_json || []),
+            typeof p.faqs_json === 'string' ? p.faqs_json : JSON.stringify(p.faqs_json || []),
+            typeof p.cta_section_json === 'string' ? p.cta_section_json : JSON.stringify(p.cta_section_json || {}),
+            p.meta_title,
+            p.meta_description,
+            p.og_image,
+            p.status || 'published',
+            p.version || 1,
+            p.created_at || new Date().toISOString(),
+            p.updated_at || new Date().toISOString()
+          );
+        }
+        console.log(`[Supabase Sync] Hydrated ${pages.length} website pages.`);
+      }
+    } catch (pageErr) {
+      console.warn('[Supabase Sync Pages Notice]:', pageErr);
+    }
+
     console.log('[Supabase Sync] Local database is fully synchronized with Supabase.');
   } catch (err) {
     console.warn('[Supabase Sync Error]:', err);
@@ -476,5 +541,66 @@ export async function pushCalculatorPricingConfigToSupabase(config: any): Promis
     }
   } catch (err) {
     console.warn('[Supabase pushCalculatorPricingConfig Error]:', err);
+  }
+}
+
+export async function pushWebsitePageToSupabase(page: any): Promise<void> {
+  if (!supabase) return;
+  try {
+    const payload = {
+      slug: page.slug,
+      title: page.title,
+      canonical_url: page.canonical_url,
+      hero_badge: page.hero_badge,
+      hero_subtitle: page.hero_subtitle,
+      hero_description: page.hero_description,
+      hero_primary_cta: page.hero_primary_cta,
+      hero_secondary_cta: page.hero_secondary_cta,
+      capabilities_json: typeof page.capabilities_json === 'string' ? JSON.parse(page.capabilities_json) : (page.capabilities || page.capabilities_json || []),
+      process_steps_json: typeof page.process_steps_json === 'string' ? JSON.parse(page.process_steps_json) : (page.process_steps || page.process_steps_json || []),
+      packages_json: typeof page.packages_json === 'string' ? JSON.parse(page.packages_json) : (page.packages || page.packages_json || []),
+      faqs_json: typeof page.faqs_json === 'string' ? JSON.parse(page.faqs_json) : (page.faqs || page.faqs_json || []),
+      cta_section_json: typeof page.cta_section_json === 'string' ? JSON.parse(page.cta_section_json) : (page.cta_section || page.cta_section_json || {}),
+      meta_title: page.meta_title,
+      meta_description: page.meta_description,
+      og_image: page.og_image,
+      status: page.status || 'published',
+      version: page.version || 1,
+      updated_at: page.updated_at || new Date().toISOString()
+    };
+
+    const { error } = await supabase.from('website_pages').upsert(payload, { onConflict: 'slug' });
+    if (error) {
+      console.warn('[Supabase pushWebsitePage Notice]:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase pushWebsitePage Error]:', err);
+  }
+}
+
+export async function pushOptimizationProposalToSupabase(prop: any): Promise<void> {
+  if (!supabase) return;
+  try {
+    const payload = {
+      id: prop.id,
+      page_slug: prop.page_slug || prop.pageSlug,
+      problem_statement: prop.problem_statement || prop.problemStatement,
+      evidence_json: typeof prop.evidence_json === 'string' ? JSON.parse(prop.evidence_json) : (prop.evidence || {}),
+      hypothesis: prop.hypothesis,
+      proposed_changes_json: typeof prop.proposed_changes_json === 'string' ? JSON.parse(prop.proposed_changes_json) : (prop.proposedChanges || {}),
+      risk_assessment: prop.risk_assessment || prop.riskAssessment,
+      confidence_score: prop.confidence_score || prop.confidenceScore,
+      status: prop.status || 'pending',
+      approved_by: prop.approved_by || prop.approvedBy || null,
+      published_version_id: prop.published_version_id || prop.publishedVersionId || null,
+      updated_at: prop.updated_at || new Date().toISOString()
+    };
+
+    const { error } = await supabase.from('ai_optimization_proposals').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('[Supabase pushOptimizationProposal Notice]:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase pushOptimizationProposal Error]:', err);
   }
 }

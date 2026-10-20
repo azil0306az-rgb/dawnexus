@@ -17,8 +17,18 @@ import {
   calculateWebsiteCost,
   validateCalculatorSelections
 } from '../calculatorPricing.js';
+import { WebsiteContentService } from '../websiteContent.js';
+import { AnalyticsService } from '../analyticsService.js';
 
 export const publicRouter = Router();
+
+const analyticsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120, // 120 batch posts / min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many analytics events. Please slow down.' }
+});
 
 // ==========================================
 // CRON / AUTOMATED PUBLISHING ENDPOINT
@@ -512,6 +522,34 @@ publicRouter.post('/calculator/enquiry', enquiryLimiter, async (req, res) => {
   } catch (error) {
     console.error('[Calculator Enquiry Submission Error]:', error);
     return res.status(500).json({ error: 'An unexpected error occurred while saving your estimate enquiry.' });
+  }
+});
+
+// GET /api/content/pages/:slug - Get published service page content
+publicRouter.get('/content/pages/:slug', async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    const page = WebsiteContentService.getPage(slug);
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
+    return res.json(page);
+  } catch (err: any) {
+    return res.status(404).json({ error: err.message || 'Page not found' });
+  }
+});
+
+// POST /api/analytics/collect - Ingest first-party visitor behaviour events
+publicRouter.post('/analytics/collect', analyticsLimiter, async (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || !payload.sessionId || !payload.visitorId) {
+      return res.status(400).json({ error: 'sessionId and visitorId are required.' });
+    }
+
+    const result = await AnalyticsService.recordBatch(payload, req.headers);
+    return res.status(200).json(result);
+  } catch (err: any) {
+    console.error('[Analytics Ingestion Error]:', err);
+    return res.status(500).json({ error: 'Failed to record analytics events.' });
   }
 });
 

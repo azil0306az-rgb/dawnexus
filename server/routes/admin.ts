@@ -47,6 +47,8 @@ import {
   sendOtpVerificationEmail,
   getEmailProviderStatus
 } from '../email.js';
+import { WebsiteContentService } from '../websiteContent.js';
+import { AnalyticsService } from '../analyticsService.js';
 import { seoResearchRouter } from './seoResearch.js';
 import { analyticsRouter } from './analytics.js';
 import { calculateSeoScore, normalizeSeoReport, computeContentRevision } from '../seoScorer.js';
@@ -1200,6 +1202,224 @@ adminRouter.get('/mcp/settings', (req, res) => {
     })),
     recentAuditTrail: getMcpAuditTrail().slice(0, 30)
   });
+});
+
+// ==========================================
+// VERSION 6.1.3: WEBSITE CONTENT MANAGEMENT
+// ==========================================
+
+// GET /api/admin/content/pages - List all editable service pages
+adminRouter.get('/content/pages', (req, res) => {
+  try {
+    const pages = WebsiteContentService.listAllPages();
+    return res.json({ pages });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to list pages' });
+  }
+});
+
+// GET /api/admin/content/pages/:slug - Get specific page content
+adminRouter.get('/content/pages/:slug', (req, res) => {
+  try {
+    const page = WebsiteContentService.getPage(req.params.slug);
+    return res.json(page);
+  } catch (err: any) {
+    return res.status(404).json({ error: err.message || 'Page not found' });
+  }
+});
+
+// POST /api/admin/content/pages/:slug/draft - Save draft changes
+adminRouter.post('/content/pages/:slug/draft', async (req, res) => {
+  try {
+    const { updates, summary } = req.body;
+    const page = await WebsiteContentService.saveDraft(req.params.slug, updates || {}, summary, 'admin');
+    return res.json({ success: true, page });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to save draft' });
+  }
+});
+
+// POST /api/admin/content/pages/:slug/publish - Immediately publish approved changes
+adminRouter.post('/content/pages/:slug/publish', async (req, res) => {
+  try {
+    const { updates, summary } = req.body;
+    const page = await WebsiteContentService.publishPage(req.params.slug, updates, summary, 'admin');
+    return res.json({ success: true, page, message: 'Changes published successfully to live website.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to publish content' });
+  }
+});
+
+// GET /api/admin/content/pages/:slug/versions - Get version history
+adminRouter.get('/content/pages/:slug/versions', (req, res) => {
+  try {
+    const versions = WebsiteContentService.getVersions(req.params.slug);
+    return res.json({ versions });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to get versions' });
+  }
+});
+
+// POST /api/admin/content/pages/:slug/rollback - Revert to prior version
+adminRouter.post('/content/pages/:slug/rollback', async (req, res) => {
+  try {
+    const { versionNumber } = req.body;
+    if (!versionNumber) return res.status(400).json({ error: 'versionNumber is required' });
+    const page = await WebsiteContentService.rollbackVersion(req.params.slug, Number(versionNumber), 'admin');
+    return res.json({ success: true, page, message: `Reverted to version ${versionNumber} successfully.` });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to rollback version' });
+  }
+});
+
+// ==========================================
+// VERSION 6.1.3: VISITOR BEHAVIOUR ANALYTICS
+// ==========================================
+
+// GET /api/admin/analytics/behaviour/overview
+adminRouter.get('/analytics/behaviour/overview', (req, res) => {
+  try {
+    const dateRange = (req.query.dateRange as any) || '28d';
+    const data = AnalyticsService.getOverview(dateRange);
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load behaviour overview' });
+  }
+});
+
+// GET /api/admin/analytics/behaviour/funnel
+adminRouter.get('/analytics/behaviour/funnel', (req, res) => {
+  try {
+    const dateRange = (req.query.dateRange as any) || '28d';
+    const data = AnalyticsService.getConversionFunnel(dateRange);
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load conversion funnel' });
+  }
+});
+
+// GET /api/admin/analytics/behaviour/journeys
+adminRouter.get('/analytics/behaviour/journeys', (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit || 25), 100);
+    const data = AnalyticsService.getVisitorJourneys(limit);
+    return res.json({ journeys: data });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load visitor journeys' });
+  }
+});
+
+// GET /api/admin/analytics/behaviour/heatmap
+adminRouter.get('/analytics/behaviour/heatmap', (req, res) => {
+  try {
+    const page = (req.query.page as string) || '/';
+    const device = (req.query.device as any) || 'all';
+    const data = AnalyticsService.getHeatmapData(page, device);
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load heatmap data' });
+  }
+});
+
+// GET /api/admin/analytics/behaviour/replay/:sessionId
+adminRouter.get('/analytics/behaviour/replay/:sessionId', (req, res) => {
+  try {
+    const replay = AnalyticsService.getSessionReplay(req.params.sessionId);
+    if (!replay) return res.status(404).json({ error: 'Session replay not found or expired.' });
+    return res.json(replay);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load replay' });
+  }
+});
+
+// GET /api/admin/analytics/behaviour/form-abandonment
+adminRouter.get('/analytics/behaviour/form-abandonment', (req, res) => {
+  try {
+    const dateRange = (req.query.dateRange as any) || '28d';
+    const data = AnalyticsService.getFormAbandonment(dateRange);
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load form abandonment data' });
+  }
+});
+
+// GET /api/admin/analytics/behaviour/bot-stats
+adminRouter.get('/analytics/behaviour/bot-stats', (req, res) => {
+  try {
+    const data = AnalyticsService.getBotFilterStats();
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load bot filter stats' });
+  }
+});
+
+// GET /api/admin/analytics/behaviour/health
+adminRouter.get('/analytics/behaviour/health', (req, res) => {
+  try {
+    const data = AnalyticsService.getTrackingHealth();
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load tracking health' });
+  }
+});
+
+// POST /api/admin/analytics/behaviour/cleanup
+adminRouter.post('/analytics/behaviour/cleanup', (req, res) => {
+  try {
+    const days = Math.max(30, Number(req.body.days || 90));
+    const result = AnalyticsService.cleanupRetention(days);
+    return res.json({ success: true, ...result, message: `Retention cleanup purged data older than ${days} days.` });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to run retention cleanup' });
+  }
+});
+
+// ==========================================
+// VERSION 6.1.3: AI OPTIMIZATION STUDIO
+// ==========================================
+
+// GET /api/admin/ai-optimization/proposals
+adminRouter.get('/ai-optimization/proposals', async (req, res) => {
+  try {
+    const proposals = await AnalyticsService.generateOptimizationProposals();
+    return res.json({ proposals });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to load proposals' });
+  }
+});
+
+// POST /api/admin/ai-optimization/generate
+adminRouter.post('/ai-optimization/generate', async (req, res) => {
+  try {
+    const proposals = await AnalyticsService.generateOptimizationProposals();
+    return res.json({ success: true, proposals });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to generate proposals' });
+  }
+});
+
+// POST /api/admin/ai-optimization/proposals/:id/approve - Approve and immediately publish to live site
+adminRouter.post('/ai-optimization/proposals/:id/approve', async (req, res) => {
+  try {
+    const result = await AnalyticsService.approveAndPublishProposal(req.params.id, 'admin');
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    return res.json({ ...result, message: 'Proposal approved and published live immediately.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to approve proposal' });
+  }
+});
+
+// POST /api/admin/ai-optimization/proposals/:id/reject
+adminRouter.post('/ai-optimization/proposals/:id/reject', (req, res) => {
+  try {
+    const success = AnalyticsService.rejectProposal(req.params.id, 'admin');
+    if (!success) return res.status(404).json({ error: 'Proposal not found' });
+    return res.json({ success: true, message: 'Proposal rejected.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to reject proposal' });
+  }
 });
 
 

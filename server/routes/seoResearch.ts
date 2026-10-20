@@ -774,7 +774,7 @@ seoResearchRouter.post('/opportunities', async (req, res) => {
         // Fallback
       }
       return res.status(gscRes.status).json({
-        error: `Search Console error: ${errMsg}. Ensure "${conn.selected_property || 'https://dawnexus.in/'}" is verified in Google Search Console for this Google account.`,
+        error: `Search Console error: ${errMsg}. Ensure "${selectedProperty || 'https://dawnexus.in/'}" is verified in Google Search Console for this Google account.`,
         isConnected: true
       });
     }
