@@ -1076,6 +1076,39 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
       { ApiKeyAuth: [] }
     ],
     paths: {
+      '/tools/call': {
+        post: {
+          operationId: 'execute_mcp_tool',
+          summary: 'Execute any Dawnexus MCP tool',
+          description: 'Universal execution endpoint to run any visitor telemetry, website optimization, or SEO tool by name.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['name'],
+                  properties: {
+                    name: {
+                      type: 'string',
+                      description: 'Name of the MCP tool to execute'
+                    },
+                    arguments: {
+                      type: 'object',
+                      description: 'Arguments for the tool'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            '200': { description: 'Tool execution result' },
+            '400': { description: 'Execution failed' },
+            '404': { description: 'Tool not found' }
+          }
+        }
+      },
       '/tools/categories': {
         get: {
           operationId: 'get_blog_categories',
@@ -1719,6 +1752,175 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
       id,
       error: { code: -32000, message: err?.message || 'Server error during RPC handling.' }
     });
+  }
+});
+
+// 5b. Direct tool execution endpoint for ChatGPT Custom GPT Actions
+mcpRouter.post('/tools/call', async (req: Request, res: Response) => {
+  const toolName = req.body?.name || req.body?.tool;
+  const toolArgs = req.body?.arguments || req.body?.args || {};
+  const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest-direct';
+
+  if (!toolName) {
+    return res.status(400).json({ error: 'Missing tool name in request body.' });
+  }
+
+  try {
+    let resultData: any;
+    switch (toolName) {
+      case 'get_blog_categories':
+        resultData = McpService.getBlogCategories();
+        break;
+      case 'get_existing_articles':
+        resultData = await McpService.getExistingArticles();
+        break;
+      case 'get_search_console_opportunities':
+        resultData = await McpService.getSearchConsoleOpportunities();
+        break;
+      case 'get_weekly_content_context':
+        resultData = await McpService.getWeeklyContentContext();
+        break;
+      case 'create_blog_draft':
+        resultData = await McpService.createBlogDraft(toolArgs, callerIp);
+        break;
+      case 'update_blog_draft':
+        resultData = await McpService.updateBlogDraft(Number(toolArgs.id), toolArgs, callerIp);
+        break;
+      case 'upload_blog_image':
+        resultData = await McpService.uploadBlogImage(toolArgs, callerIp);
+        break;
+      case 'attach_blog_image':
+        resultData = await McpService.attachBlogImage(toolArgs, callerIp);
+        break;
+      case 'verify_blog_image':
+        resultData = await McpService.verifyBlogImage(Number(toolArgs.id), callerIp);
+        break;
+      case 'update_blog_image_metadata':
+        resultData = await McpService.updateBlogImageMetadata(toolArgs, callerIp);
+        break;
+      case 'schedule_blog_draft':
+        resultData = await McpService.scheduleBlogDraft(toolArgs, callerIp);
+        break;
+      case 'run_seo_quality_check':
+        resultData = await McpService.runSeoQualityCheck(toolArgs, callerIp);
+        break;
+      case 'gsc_get_connection_status':
+        resultData = await McpService.gscGetConnectionStatus();
+        break;
+      case 'gsc_list_properties':
+        resultData = await McpService.gscListProperties();
+        break;
+      case 'gsc_get_search_analytics':
+        resultData = await McpService.gscGetSearchAnalytics(toolArgs);
+        break;
+      case 'gsc_get_top_queries':
+        resultData = await McpService.gscGetTopQueries(toolArgs);
+        break;
+      case 'gsc_get_top_pages':
+        resultData = await McpService.gscGetTopPages(toolArgs);
+        break;
+      case 'gsc_get_research_status':
+        resultData = await McpService.gscGetResearchStatus();
+        break;
+      case 'gsc_run_research_sync':
+        resultData = await McpService.gscRunResearchSync(toolArgs);
+        break;
+      case 'gsc_get_research_job':
+        resultData = await McpService.gscGetResearchJob(toolArgs);
+        break;
+      case 'ga4_get_connection_status':
+        resultData = await McpService.ga4GetConnectionStatus();
+        break;
+      case 'ga4_list_properties':
+        resultData = await McpService.ga4ListProperties();
+        break;
+      case 'ga4_get_overview':
+        resultData = await McpService.ga4GetOverview(toolArgs);
+        break;
+      case 'ga4_get_traffic_acquisition':
+        resultData = await McpService.ga4GetTrafficAcquisition(toolArgs);
+        break;
+      case 'ga4_get_landing_pages':
+        resultData = await McpService.ga4GetLandingPages(toolArgs);
+        break;
+      case 'ga4_get_page_performance':
+        resultData = await McpService.ga4GetPagePerformance(toolArgs);
+        break;
+      case 'ga4_get_realtime':
+        resultData = await McpService.ga4GetRealtime();
+        break;
+      case 'ga4_get_report':
+        resultData = await McpService.ga4GetReport(toolArgs);
+        break;
+      case 'ga4_get_analytics_status':
+        resultData = await McpService.ga4GetAnalyticsStatus(toolArgs);
+        break;
+      case 'analytics_get_overview':
+        resultData = await McpService.analyticsGetOverview(toolArgs);
+        break;
+      case 'analytics_get_conversion_funnel':
+        resultData = await McpService.analyticsGetConversionFunnel(toolArgs);
+        break;
+      case 'analytics_get_page_performance':
+        resultData = await McpService.analyticsGetPagePerformance(toolArgs);
+        break;
+      case 'analytics_get_visitor_journeys':
+        resultData = await McpService.analyticsGetVisitorJourneys(toolArgs);
+        break;
+      case 'analytics_get_exit_analysis':
+        resultData = await McpService.analyticsGetExitAnalysis(toolArgs);
+        break;
+      case 'analytics_get_click_heatmap':
+        resultData = await McpService.analyticsGetClickHeatmap(toolArgs);
+        break;
+      case 'analytics_get_scroll_depth':
+        resultData = await McpService.analyticsGetScrollDepth(toolArgs);
+        break;
+      case 'analytics_get_form_abandonment':
+        resultData = await McpService.analyticsGetFormAbandonment(toolArgs);
+        break;
+      case 'analytics_get_session_replay_summary':
+        resultData = await McpService.analyticsGetSessionReplaySummary(toolArgs);
+        break;
+      case 'analytics_get_bot_filter_stats':
+        resultData = await McpService.analyticsGetBotFilterStats();
+        break;
+      case 'analytics_get_tracking_health':
+        resultData = await McpService.analyticsGetTrackingHealth();
+        break;
+      case 'website_list_editable_pages':
+        resultData = await McpService.websiteListEditablePages();
+        break;
+      case 'website_get_page_content':
+        resultData = await McpService.websiteGetPageContent(toolArgs);
+        break;
+      case 'website_get_page_metadata':
+        resultData = await McpService.websiteGetPageMetadata(toolArgs);
+        break;
+      case 'website_get_content_version_history':
+        resultData = await McpService.websiteGetContentVersionHistory(toolArgs);
+        break;
+      case 'website_create_optimization_draft':
+        resultData = await McpService.websiteCreateOptimizationDraft(toolArgs);
+        break;
+      case 'website_preview_optimization_draft':
+        resultData = await McpService.websitePreviewOptimizationDraft(toolArgs);
+        break;
+      case 'website_get_approval_status':
+        resultData = await McpService.websiteGetApprovalStatus(toolArgs);
+        break;
+      case 'website_publish_approved_changes':
+        resultData = await McpService.websitePublishApprovedChanges(toolArgs);
+        break;
+      case 'website_rollback_content_version':
+        resultData = await McpService.websiteRollbackContentVersion(toolArgs);
+        break;
+      default:
+        return res.status(404).json({ error: `Tool '${toolName}' not found.` });
+    }
+    return res.json(resultData);
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || 'Failed to execute tool' });
   }
 });
 
