@@ -32,7 +32,7 @@ export function getMcpAuditTrail(): McpAuditEntry[] {
   return [...auditLog];
 }
 
-export const DOCUMENTED_MCP_KEY = 'dawnexus_mcp_sec_8f92a10b4c73e891d456bc9102ef784a';
+export const DOCUMENTED_MCP_KEY = 'dawnexus_mcp_sec_dd4261fa4c111e447e53e7774bab3965';
 
 /**
  * Derives or retrieves the expected MCP API Key
