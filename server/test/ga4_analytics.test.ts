@@ -9,6 +9,7 @@ import { GscService } from '../gscService.js';
 import {
   getSeoConnection,
   updateGa4SelectedProperty,
+  persistGa4SelectedProperty,
   updateGa4ConnectionTelemetry,
   createGa4Job,
   getGa4Jobs,
@@ -21,8 +22,13 @@ let server: http.Server;
 let baseUrl: string;
 let sessionCookie = '';
 let mcpToken: string;
+let originalGa4Property: string | null = null;
+let originalGa4Name: string | null = null;
 
 test.before(async () => {
+  const initialConn = getSeoConnection();
+  originalGa4Property = initialConn?.selected_ga4_property || null;
+  originalGa4Name = initialConn?.selected_ga4_property_name || null;
   await new Promise<void>((resolve) => {
     server = http.createServer(app);
     server.listen(0, '127.0.0.1', () => {
@@ -50,6 +56,13 @@ test.before(async () => {
 });
 
 test.after(async () => {
+  if (originalGa4Property) {
+    try {
+      await persistGa4SelectedProperty(originalGa4Property, originalGa4Name || undefined);
+    } catch (e) {
+      console.warn('Failed to restore original GA4 property in test teardown:', e);
+    }
+  }
   if (server) {
     server.closeAllConnections?.();
     await new Promise<void>((resolve) => server.close(() => resolve()));

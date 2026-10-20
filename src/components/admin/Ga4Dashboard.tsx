@@ -567,9 +567,8 @@ export const Ga4Dashboard: React.FC = () => {
         )}
 
         {/* Persistent Property Management Card / Bar */}
-        {(status?.googleEmail || status?.isConnected || status?.selectedProperty || status?.connectionStatus !== 'Disconnected') && (
-          <div className="mt-4 pt-4 border-t border-[#202020] space-y-3">
-            {/* Success Banner */}
+        <div className="mt-4 pt-4 border-t border-[#202020] space-y-3">
+          {/* Success Banner */}
             {propertySuccess && (
               <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
                 <span className="flex items-center gap-2">
@@ -721,7 +720,6 @@ export const Ga4Dashboard: React.FC = () => {
               </div>
             )}
           </div>
-        )}
       </div>
 
       {/* Empty State when No Property is Configured */}
