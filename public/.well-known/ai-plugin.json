@@ -1,0 +1,19 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Dawnexus SEO Studio",
+  "name_for_model": "dawnexus_seo_studio",
+  "description_for_human": "Research SEO search queries, inspect website visitor performance, and draft blog articles for Dawnexus.",
+  "description_for_model": "Plugin interface for Dawnexus to access first-party visitor telemetry, Google Search Console performance data, Google Analytics 4 reports, website content editing, and SEO blog drafting. All content creation saves as drafts requiring human approval.",
+  "auth": {
+    "type": "service_http",
+    "authorization_type": "bearer",
+    "verification_tokens": {}
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://www.dawnexus.in/api/mcp/openapi.json"
+  },
+  "logo_url": "https://www.dawnexus.in/brand/dawnexus-logo-original.png",
+  "contact_email": "ops-admin@dawnexus.in",
+  "legal_info_url": "https://www.dawnexus.in/"
+}
