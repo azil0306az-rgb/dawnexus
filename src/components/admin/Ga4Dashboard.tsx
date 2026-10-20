@@ -20,12 +20,17 @@ import {
   FileText,
   Radio,
   Calendar,
-  Check
+  Check,
+  Edit3,
+  Trash2,
+  HelpCircle,
+  X
 } from 'lucide-react';
 
 interface Ga4Status {
   featureEnabled: boolean;
   hasGoogleCredentials: boolean;
+  hasGoogleAuth?: boolean;
   isConnected: boolean;
   hasGa4Scope: boolean;
   connectionStatus: 'Connected' | 'Missing GA4 Scope' | 'Disconnected' | 'Error';
@@ -157,6 +162,12 @@ export const Ga4Dashboard: React.FC = () => {
   const [activeReportTab, setActiveReportTab] = useState<'traffic' | 'landing' | 'pages' | 'devices' | 'realtime' | 'activity'>('traffic');
   const [searchFilter, setSearchFilter] = useState('');
 
+  const [isEditingProperty, setIsEditingProperty] = useState(false);
+  const [isSavingProperty, setIsSavingProperty] = useState(false);
+  const [isDisconnectingProperty, setIsDisconnectingProperty] = useState(false);
+  const [propertyError, setPropertyError] = useState<string | null>(null);
+  const [propertySuccess, setPropertySuccess] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -276,18 +287,60 @@ export const Ga4Dashboard: React.FC = () => {
 
   // Property Selection
   const handleSelectProperty = async (propId: string, name?: string) => {
+    setPropertyError(null);
+    setPropertySuccess(null);
+    setIsSavingProperty(true);
     try {
       const res = await fetch('/api/admin/analytics/select-property', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ propertyId: propId, propertyName: name })
       });
-      if (res.ok) {
-        await fetchStatus();
-        fetchReports(true);
+      const data = await res.json();
+      if (!res.ok) {
+        setPropertyError(data.error || 'Failed to select property.');
+        return;
       }
-    } catch (err) {
-      console.error('Failed to select property:', err);
+      setPropertySuccess(`Property set to ${data.selectedPropertyName || data.selectedProperty}`);
+      setIsEditingProperty(false);
+      await fetchStatus();
+      fetchReports(true);
+    } catch (err: any) {
+      setPropertyError(err.message || 'Network error while selecting property.');
+    } finally {
+      setIsSavingProperty(false);
+    }
+  };
+
+  // Disconnect GA4 Property
+  const handleDisconnectProperty = async () => {
+    if (!window.confirm('Disconnect this Google Analytics 4 property? Google Search Console and OAuth tokens will remain intact.')) {
+      return;
+    }
+    setIsDisconnectingProperty(true);
+    setPropertyError(null);
+    try {
+      const res = await fetch('/api/admin/analytics/disconnect', { method: 'POST' });
+      if (res.ok) {
+        setPropertySuccess('Google Analytics property disconnected.');
+        setOverview(null);
+        setChannels([]);
+        setLandingPages([]);
+        setPages([]);
+        setDevices([]);
+        setCountries([]);
+        setRealtime(null);
+        setManualPropertyInput('');
+        setIsEditingProperty(true);
+        await fetchStatus();
+      } else {
+        const data = await res.json();
+        setPropertyError(data.error || 'Failed to disconnect property.');
+      }
+    } catch (err: any) {
+      setPropertyError(err.message || 'Error disconnecting property.');
+    } finally {
+      setIsDisconnectingProperty(false);
     }
   };
 
@@ -454,6 +507,10 @@ export const Ga4Dashboard: React.FC = () => {
               className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                 status?.connectionStatus === 'Connected'
                   ? 'bg-[#181818] text-[#A5A5A5] border border-[#2B2B2B] hover:text-white'
+                  : status?.connectionStatus === 'Missing GA4 Scope'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                  : status?.googleEmail
+                  ? 'bg-[#181818] text-rose-300 border border-rose-800/40 hover:text-white'
                   : 'bg-[#C7FF4D] text-black hover:bg-[#B5EB38] shadow-lg shadow-[#C7FF4D]/20'
               }`}
             >
@@ -462,6 +519,8 @@ export const Ga4Dashboard: React.FC = () => {
                 ? 'Reconnect Google'
                 : status?.connectionStatus === 'Missing GA4 Scope'
                 ? 'Authorize GA4 Scope'
+                : status?.googleEmail
+                ? 'Reconnect Google (Fix Auth)'
                 : 'Connect Google Account'}
             </button>
           </div>
@@ -476,6 +535,17 @@ export const Ga4Dashboard: React.FC = () => {
               <p>
                 Your Google account is currently authenticated for Search Console only. To enable GA4 traffic reporting, click <strong>"Authorize GA4 Scope"</strong> above to grant read-only analytics permission.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Diagnostic Error Message */}
+        {status?.diagnosticMessage && status?.connectionStatus === 'Error' && (
+          <div className="mt-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold text-white">Authentication Diagnostic</p>
+              <p>{status.diagnosticMessage}</p>
             </div>
           </div>
         )}
@@ -496,52 +566,178 @@ export const Ga4Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Property Selector Bar */}
-        {status?.isConnected && (
-          <div className="mt-4 pt-4 border-t border-[#202020] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3 text-xs text-[#A5A5A5]">
-              <Target className="w-4 h-4 text-[#C7FF4D]" />
-              <span>Target Property:</span>
-              {availableProps.length > 0 ? (
-                <select
-                  value={status?.selectedProperty || ''}
-                  onChange={e => {
-                    const sel = availableProps.find(p => p.propertyId === e.target.value);
-                    handleSelectProperty(e.target.value, sel?.displayName);
-                  }}
-                  className="bg-[#141414] border border-[#333] text-white rounded-lg px-3 py-1.5 focus:border-[#C7FF4D] outline-none text-xs"
-                >
-                  <option value="">-- Choose Discovered Property --</option>
-                  {availableProps.map(p => (
-                    <option key={p.propertyId} value={p.propertyId}>
-                      {p.displayName} ({p.propertyId})
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="text-gray-500 italic">No properties auto-discovered via Admin API</span>
-              )}
-            </div>
+        {/* Persistent Property Management Card / Bar */}
+        {(status?.googleEmail || status?.isConnected || status?.selectedProperty || status?.connectionStatus !== 'Disconnected') && (
+          <div className="mt-4 pt-4 border-t border-[#202020] space-y-3">
+            {/* Success Banner */}
+            {propertySuccess && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  {propertySuccess}
+                </span>
+                <button onClick={() => setPropertySuccess(null)} className="text-gray-400 hover:text-white">
+                  ✕
+                </button>
+              </div>
+            )}
 
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Manual Property ID (e.g. properties/123456789)"
-                value={manualPropertyInput}
-                onChange={e => setManualPropertyInput(e.target.value)}
-                className="bg-[#141414] border border-[#333] text-white text-xs rounded-lg px-3 py-1.5 focus:border-[#C7FF4D] outline-none w-72"
-              />
-              <button
-                onClick={() => handleSelectProperty(manualPropertyInput.trim())}
-                disabled={!manualPropertyInput.trim()}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#222] hover:bg-[#333] text-white border border-[#444] transition disabled:opacity-40"
-              >
-                Set Property
-              </button>
-            </div>
+            {/* Error Banner */}
+            {propertyError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  {propertyError}
+                </span>
+                <button onClick={() => setPropertyError(null)} className="text-gray-400 hover:text-white">
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {status?.selectedProperty && !isEditingProperty ? (
+              // Current Saved Property Display
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#141414] border border-[#262626]">
+                <div className="flex items-center gap-3 text-xs">
+                  <div className="p-1.5 rounded-lg bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                    <Target className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[#888]">Active Property: </span>
+                    <strong className="text-white font-medium ml-1">
+                      {status.selectedPropertyName || status.selectedProperty}
+                    </strong>
+                    <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-mono bg-[#1E1E1E] text-[#C7FF4D] border border-[#333]">
+                      {status.selectedProperty}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setIsEditingProperty(true);
+                      setPropertyError(null);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1C1C1C] hover:bg-[#282828] text-white border border-[#333] transition flex items-center gap-1.5"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-[#C7FF4D]" />
+                    Change Property
+                  </button>
+
+                  <button
+                    onClick={handleDisconnectProperty}
+                    disabled={isDisconnectingProperty}
+                    title="Disconnect GA4 property (preserves Google Search Console)"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1C1C1C] hover:bg-rose-950/40 text-gray-400 hover:text-rose-300 border border-[#333] hover:border-rose-800/40 transition flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {isDisconnectingProperty ? 'Disconnecting...' : 'Disconnect'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // Property Editor Form
+              <div className="p-4 rounded-xl bg-[#141414] border border-[#2B2B2B] space-y-3">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs text-[#C7FF4D] font-semibold">
+                    <Target className="w-4 h-4 shrink-0" />
+                    <span>{status?.selectedProperty ? 'Change Google Analytics Property' : 'Select Target GA4 Property'}</span>
+                  </div>
+
+                  {status?.selectedProperty && (
+                    <button
+                      onClick={() => {
+                        setIsEditingProperty(false);
+                        setPropertyError(null);
+                      }}
+                      className="text-xs text-gray-400 hover:text-white flex items-center gap-1 self-end md:self-auto"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Cancel
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                  {availableProps.length > 0 && (
+                    <div className="flex-1">
+                      <select
+                        defaultValue=""
+                        onChange={e => {
+                          if (e.target.value) {
+                            const sel = availableProps.find(p => p.propertyId === e.target.value);
+                            handleSelectProperty(e.target.value, sel?.displayName);
+                          }
+                        }}
+                        disabled={isSavingProperty}
+                        className="w-full bg-[#0D0D0D] border border-[#333] text-white rounded-lg px-3 py-2 text-xs focus:border-[#C7FF4D] outline-none disabled:opacity-50"
+                      >
+                        <option value="">-- Or Choose Auto-Discovered Property --</option>
+                        {availableProps.map(p => (
+                          <option key={p.propertyId} value={p.propertyId}>
+                            {p.displayName} ({p.propertyId})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="flex-1 flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. 123456789 or properties/123456789"
+                      value={manualPropertyInput}
+                      onChange={e => setManualPropertyInput(e.target.value)}
+                      disabled={isSavingProperty}
+                      className="flex-1 bg-[#0D0D0D] border border-[#333] text-white text-xs rounded-lg px-3 py-2 focus:border-[#C7FF4D] outline-none disabled:opacity-50 font-mono"
+                    />
+                    <button
+                      onClick={() => handleSelectProperty(manualPropertyInput.trim())}
+                      disabled={!manualPropertyInput.trim() || isSavingProperty}
+                      className="px-4 py-2 rounded-lg text-xs font-bold bg-[#C7FF4D] text-black hover:bg-[#B5EB38] transition disabled:opacity-40 shrink-0 flex items-center gap-1.5 shadow-sm"
+                    >
+                      {isSavingProperty ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          Validating...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          Set Property
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
+                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span>
+                    Enter your <strong>9-digit numeric GA4 Property ID</strong> (found in Google Analytics under <em>Admin &gt; Property Settings</em>). Do not enter Measurement ID (<code>G-XXXXXX</code>).
+                  </span>
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Empty State when No Property is Configured */}
+      {!status?.selectedProperty && (
+        <div className="p-8 rounded-2xl bg-[#0F0F0F] border border-[#252525] text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#C7FF4D]/10 text-[#C7FF4D] mx-auto flex items-center justify-center">
+            <Target className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-white">No GA4 Property Selected</h3>
+            <p className="text-xs text-[#8A8A8A] max-w-md mx-auto">
+              Select or enter your numeric Google Analytics 4 Property ID in the banner above to load live traffic reports, audience channels, landing pages, and real-time visitor telemetry.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Date Range Selector & Realtime Indicator */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">

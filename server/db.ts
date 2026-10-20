@@ -1530,17 +1530,65 @@ export function getGscSearchAnalyticsCache(property: string, periodType: 'curren
 export function updateGa4SelectedProperty(propertyId: string, propertyName?: string): SeoConnectionRecord {
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO seo_research_connections (id, selected_ga4_property, selected_ga4_property_name, updated_at)
-    VALUES (1, ?, ?, ?)
+    INSERT INTO seo_research_connections (
+      id, selected_ga4_property, selected_ga4_property_name, ga4_connection_status, ga4_last_error, updated_at
+    )
+    VALUES (1, ?, ?, 'Connected', NULL, ?)
     ON CONFLICT(id) DO UPDATE SET
       selected_ga4_property = excluded.selected_ga4_property,
       selected_ga4_property_name = COALESCE(excluded.selected_ga4_property_name, seo_research_connections.selected_ga4_property_name),
+      ga4_connection_status = 'Connected',
+      ga4_last_error = NULL,
       updated_at = excluded.updated_at
   `).run(propertyId, propertyName || null, now);
 
   const conn = getSeoConnection()!;
   pushSeoConnectionToSupabase(conn).catch(() => {});
   return conn;
+}
+
+export async function persistGa4SelectedProperty(propertyId: string, propertyName?: string): Promise<SeoConnectionRecord> {
+  const conn = updateGa4SelectedProperty(propertyId, propertyName);
+  try {
+    await pushSeoConnectionToSupabase(conn);
+  } catch (err) {
+    console.warn('[DB] pushSeoConnectionToSupabase error in persistGa4SelectedProperty:', err);
+  }
+  return conn;
+}
+
+export async function disconnectGa4Property(): Promise<SeoConnectionRecord> {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE seo_research_connections SET
+      selected_ga4_property = NULL,
+      selected_ga4_property_name = NULL,
+      ga4_connection_status = 'Disconnected',
+      ga4_last_sync_at = NULL,
+      ga4_last_error = NULL,
+      updated_at = ?
+    WHERE id = 1
+  `).run(now);
+
+  clearGa4ReportCache();
+
+  const conn = getSeoConnection()!;
+  try {
+    await pushSeoConnectionToSupabase(conn);
+  } catch (err) {
+    console.warn('[DB] pushSeoConnectionToSupabase error in disconnectGa4Property:', err);
+  }
+  return conn;
+}
+
+export function clearGa4ReportCache(propertyId?: string): void {
+  try {
+    if (propertyId) {
+      db.prepare('DELETE FROM ga4_analytics_cache WHERE property_id = ?').run(propertyId);
+    } else {
+      db.prepare('DELETE FROM ga4_analytics_cache').run();
+    }
+  } catch {}
 }
 
 export function updateGa4ConnectionTelemetry(updates: {

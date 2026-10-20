@@ -2,6 +2,9 @@ import {
   getSeoConnection,
   saveSeoConnection,
   updateGa4SelectedProperty,
+  persistGa4SelectedProperty,
+  disconnectGa4Property,
+  clearGa4ReportCache,
   updateGa4ConnectionTelemetry,
   createGa4Job,
   updateGa4Job,
@@ -17,6 +20,7 @@ import { GscService, decryptPayload } from './gscService.js';
 export interface Ga4ConnectionStatus {
   featureEnabled: boolean;
   hasGoogleCredentials: boolean;
+  hasGoogleAuth: boolean;
   isConnected: boolean;
   hasGa4Scope: boolean;
   connectionStatus: 'Connected' | 'Missing GA4 Scope' | 'Disconnected' | 'Error';
@@ -320,15 +324,16 @@ export class Ga4Service {
       return {
         featureEnabled: true,
         hasGoogleCredentials,
+        hasGoogleAuth: false,
         isConnected: false,
         hasGa4Scope: false,
         connectionStatus: 'Disconnected',
         googleEmail: null,
-        selectedProperty: null,
-        selectedPropertyName: null,
-        lastSyncAt: null,
-        lastAttemptAt: null,
-        lastError: null,
+        selectedProperty: conn?.selected_ga4_property || null,
+        selectedPropertyName: conn?.selected_ga4_property_name || null,
+        lastSyncAt: conn?.ga4_last_sync_at || null,
+        lastAttemptAt: conn?.ga4_last_attempt_at || null,
+        lastError: conn?.ga4_last_error || null,
         redirectUri:
           process.env.GOOGLE_OAUTH_REDIRECT_URI ||
           'https://dawnexus.in/api/admin/seo-research/google/callback'
@@ -353,7 +358,8 @@ export class Ga4Service {
     return {
       featureEnabled: true,
       hasGoogleCredentials,
-      isConnected: Boolean(accessToken),
+      hasGoogleAuth: true,
+      isConnected: Boolean(accessToken && hasGa4Scope),
       hasGa4Scope,
       connectionStatus,
       googleEmail: googleEmail || conn.google_email,
@@ -418,11 +424,104 @@ export class Ga4Service {
   }
 
   /**
-   * Set and save active GA4 property.
+   * Helper to normalize and validate GA4 Property ID formats.
    */
-  public static selectProperty(propertyId: string, propertyName?: string): SeoConnectionRecord {
-    const normalized = propertyId.startsWith('properties/') ? propertyId : `properties/${propertyId}`;
-    return updateGa4SelectedProperty(normalized, propertyName);
+  public static normalizePropertyId(raw: string): { valid: boolean; normalized?: string; error?: string } {
+    if (!raw || typeof raw !== 'string') {
+      return { valid: false, error: 'Property ID is required.' };
+    }
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return { valid: false, error: 'Property ID cannot be empty.' };
+    }
+    if (/^G-[A-Z0-9]+$/i.test(trimmed)) {
+      return {
+        valid: false,
+        error: `"${trimmed}" is a Google Analytics Measurement ID (Data Stream ID). The GA4 Data API requires your numeric Property ID (e.g. 123456789 or properties/123456789). You can find it in Google Analytics under Admin > Property Settings.`
+      };
+    }
+    const match = trimmed.match(/^(?:properties\/)?(\d+)$/);
+    if (!match) {
+      return {
+        valid: false,
+        error: `Invalid GA4 Property ID format "${trimmed}". Expected a numeric ID (e.g. 123456789 or properties/123456789).`
+      };
+    }
+    return { valid: true, normalized: `properties/${match[1]}` };
+  }
+
+  /**
+   * Set, validate, and persistently save active GA4 property.
+   * Ensures Google authorization is NOT disrupted and tokens are NEVER wiped.
+   */
+  public static async selectProperty(
+    propertyId: string,
+    propertyName?: string,
+    options?: { validateAccess?: boolean }
+  ): Promise<{
+    success: boolean;
+    selectedProperty?: string;
+    selectedPropertyName?: string | null;
+    error?: string;
+  }> {
+    const norm = this.normalizePropertyId(propertyId);
+    if (!norm.valid || !norm.normalized) {
+      return { success: false, error: norm.error || 'Invalid Property ID' };
+    }
+    const normalized = norm.normalized;
+
+    // If live access validation is explicitly requested, verify active token and query API
+    if (options?.validateAccess === true) {
+      const { accessToken, hasGa4Scope, error: authError } = await this.getValidGa4Token();
+      if (!accessToken) {
+        return {
+          success: false,
+          error: authError || 'Google account is not connected. Please connect your Google account first.'
+        };
+      }
+      if (!hasGa4Scope) {
+        return {
+          success: false,
+          error: 'Google account is authorized for Search Console, but lacks the GA4 read-only permission. Please click "Authorize GA4 Scope" first.'
+        };
+      }
+
+      // Test property accessibility against Google Data API
+      const testRes = await this.runReport({
+        propertyId: normalized,
+        dateRanges: [{ startDate: 'yesterday', endDate: 'yesterday' }],
+        metrics: [{ name: 'activeUsers' }],
+        limit: 1
+      });
+
+      if (testRes.error) {
+        return {
+          success: false,
+          error: `Google Analytics API rejected property ${normalized}: ${testRes.error}`
+        };
+      }
+    }
+
+    // Persist to local SQLite and await Supabase PostgreSQL sync
+    const updated = await persistGa4SelectedProperty(normalized, propertyName);
+    clearGa4ReportCache(normalized);
+
+    return {
+      success: true,
+      selectedProperty: updated.selected_ga4_property || normalized,
+      selectedPropertyName: updated.selected_ga4_property_name || propertyName || null
+    };
+  }
+
+  /**
+   * Disconnects active GA4 property while preserving Google Search Console tokens & authorization.
+   */
+  public static async disconnectProperty(): Promise<{ success: boolean; message: string }> {
+    await disconnectGa4Property();
+    return {
+      success: true,
+      message: 'Google Analytics property disconnected successfully. Search Console remains connected.'
+    };
   }
 
   /**
@@ -528,13 +627,15 @@ export class Ga4Service {
     dateRange = '28d',
     customStart?: string,
     customEnd?: string,
-    forceRefresh = false
+    forceRefresh = false,
+    overridePropertyId?: string
   ): Promise<{ data?: Ga4OverviewResponse; error?: string }> {
     const conn = getSeoConnection();
-    const propertyId = conn?.selected_ga4_property;
-    if (!propertyId) {
-      return { error: 'No GA4 property configured.' };
+    const rawProp = overridePropertyId || conn?.selected_ga4_property;
+    if (!rawProp) {
+      return { error: 'No GA4 property configured. Please select or enter a Property ID in the Admin panel or provide propertyId.' };
     }
+    const propertyId = rawProp.startsWith('properties/') ? rawProp : `properties/${rawProp}`;
 
     const { startDate, endDate, prevStartDate, prevEndDate } = this.calculateDateIntervals(
       dateRange,
@@ -729,11 +830,13 @@ export class Ga4Service {
     dateRange = '28d',
     customStart?: string,
     customEnd?: string,
-    limit = 25
+    limit = 25,
+    overridePropertyId?: string
   ): Promise<{ data?: Ga4TrafficAcquisitionRow[]; error?: string }> {
     const conn = getSeoConnection();
-    const propertyId = conn?.selected_ga4_property;
-    if (!propertyId) return { error: 'No GA4 property configured.' };
+    const rawProp = overridePropertyId || conn?.selected_ga4_property;
+    if (!rawProp) return { error: 'No GA4 property configured.' };
+    const propertyId = rawProp.startsWith('properties/') ? rawProp : `properties/${rawProp}`;
 
     const { startDate, endDate } = this.calculateDateIntervals(dateRange, customStart, customEnd);
     const cacheKey = `${startDate}_${endDate}_${limit}`;
@@ -783,11 +886,13 @@ export class Ga4Service {
     dateRange = '28d',
     customStart?: string,
     customEnd?: string,
-    limit = 25
+    limit = 25,
+    overridePropertyId?: string
   ): Promise<{ data?: Ga4LandingPageRow[]; error?: string }> {
     const conn = getSeoConnection();
-    const propertyId = conn?.selected_ga4_property;
-    if (!propertyId) return { error: 'No GA4 property configured.' };
+    const rawProp = overridePropertyId || conn?.selected_ga4_property;
+    if (!rawProp) return { error: 'No GA4 property configured.' };
+    const propertyId = rawProp.startsWith('properties/') ? rawProp : `properties/${rawProp}`;
 
     const { startDate, endDate } = this.calculateDateIntervals(dateRange, customStart, customEnd);
     const cacheKey = `${startDate}_${endDate}_${limit}`;
@@ -831,11 +936,13 @@ export class Ga4Service {
     dateRange = '28d',
     customStart?: string,
     customEnd?: string,
-    limit = 25
+    limit = 25,
+    overridePropertyId?: string
   ): Promise<{ data?: Ga4PagePerformanceRow[]; error?: string }> {
     const conn = getSeoConnection();
-    const propertyId = conn?.selected_ga4_property;
-    if (!propertyId) return { error: 'No GA4 property configured.' };
+    const rawProp = overridePropertyId || conn?.selected_ga4_property;
+    if (!rawProp) return { error: 'No GA4 property configured.' };
+    const propertyId = rawProp.startsWith('properties/') ? rawProp : `properties/${rawProp}`;
 
     const { startDate, endDate } = this.calculateDateIntervals(dateRange, customStart, customEnd);
     const cacheKey = `${startDate}_${endDate}_${limit}`;
@@ -877,14 +984,16 @@ export class Ga4Service {
   public static async getDevicesAndGeography(
     dateRange = '28d',
     customStart?: string,
-    customEnd?: string
+    customEnd?: string,
+    overridePropertyId?: string
   ): Promise<{
     data?: { devices: Ga4DeviceRow[]; countries: Ga4CountryRow[] };
     error?: string;
   }> {
     const conn = getSeoConnection();
-    const propertyId = conn?.selected_ga4_property;
-    if (!propertyId) return { error: 'No GA4 property configured.' };
+    const rawProp = overridePropertyId || conn?.selected_ga4_property;
+    if (!rawProp) return { error: 'No GA4 property configured.' };
+    const propertyId = rawProp.startsWith('properties/') ? rawProp : `properties/${rawProp}`;
 
     const { startDate, endDate } = this.calculateDateIntervals(dateRange, customStart, customEnd);
     const cacheKey = `${startDate}_${endDate}`;
@@ -933,12 +1042,12 @@ export class Ga4Service {
   /**
    * Real-time report: activeUsers last 30 minutes.
    */
-  public static async getRealtimeReport(): Promise<{
+  public static async getRealtimeReport(overridePropertyId?: string): Promise<{
     data?: Ga4RealtimeResponse;
     error?: string;
   }> {
     const conn = getSeoConnection();
-    const rawProp = conn?.selected_ga4_property;
+    const rawProp = overridePropertyId || conn?.selected_ga4_property;
     if (!rawProp) return { error: 'No GA4 property configured.' };
 
     const propertyId = rawProp.startsWith('properties/') ? rawProp : `properties/${rawProp}`;

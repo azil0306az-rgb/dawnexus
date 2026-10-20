@@ -44,6 +44,9 @@ test.before(async () => {
   if (cookie) {
     sessionCookie = cookie.split(';')[0];
   }
+
+  // Allow any initial background Supabase hydration to complete
+  await new Promise(r => setTimeout(r, 1200));
 });
 
 test.after(async () => {
@@ -110,6 +113,149 @@ test('Admin GA4: /api/admin/analytics/select-property sets and normalizes GA4 pr
   const conn = getSeoConnection();
   assert.equal(conn?.selected_ga4_property, testPropId);
   assert.equal(conn?.selected_ga4_property_name, testPropName);
+});
+
+test('Admin GA4: normalizePropertyId validates numeric, prefixed, Measurement IDs, and invalid formats', () => {
+  // Plain numeric
+  const numeric = Ga4Service.normalizePropertyId('123456789');
+  assert.equal(numeric.valid, true);
+  assert.equal(numeric.normalized, 'properties/123456789');
+
+  // Prefixed
+  const prefixed = Ga4Service.normalizePropertyId('properties/987654321');
+  assert.equal(prefixed.valid, true);
+  assert.equal(prefixed.normalized, 'properties/987654321');
+
+  // Measurement ID (Stream ID) - must be rejected with helpful guidance
+  const measurementId = Ga4Service.normalizePropertyId('G-MJN67XNHE4');
+  assert.equal(measurementId.valid, false);
+  assert.ok(measurementId.error?.includes('Measurement ID'));
+  assert.ok(measurementId.error?.includes('Property Settings'));
+
+  // Invalid non-numeric strings
+  const invalid = Ga4Service.normalizePropertyId('invalid-prop-name');
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.error?.includes('Invalid GA4 Property ID format'));
+
+  // Empty string
+  const empty = Ga4Service.normalizePropertyId('   ');
+  assert.equal(empty.valid, false);
+});
+
+test('Admin GA4: /api/admin/analytics/select-property rejects Measurement IDs and invalid inputs with HTTP 400', async () => {
+  // Try sending a Measurement ID like G-MJN67XNHE4
+  const resMeasurement = await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: sessionCookie
+    },
+    body: JSON.stringify({ propertyId: 'G-MJN67XNHE4' })
+  });
+  assert.equal(resMeasurement.status, 400);
+  const dataMeasurement = await resMeasurement.json();
+  assert.ok(dataMeasurement.error?.includes('Measurement ID'));
+
+  // Try sending empty propertyId
+  const resEmpty = await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: sessionCookie
+    },
+    body: JSON.stringify({ propertyId: '' })
+  });
+  assert.equal(resEmpty.status, 400);
+
+  // Connection should not be corrupted or wiped
+  const conn = getSeoConnection();
+  assert.ok(conn);
+});
+
+test('Admin GA4: /api/admin/analytics/select-property normalizes plain digits to properties/ID', async () => {
+  const res = await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: sessionCookie
+    },
+    body: JSON.stringify({
+      propertyId: '123456789',
+      propertyName: 'Dawnexus Normalized'
+    })
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.selectedProperty, 'properties/123456789');
+
+  const conn = getSeoConnection();
+  assert.equal(conn?.selected_ga4_property, 'properties/123456789');
+  assert.equal(conn?.selected_ga4_property_name, 'Dawnexus Normalized');
+});
+
+test('Admin GA4: Changing property updates active target without disconnecting Google or GSC', async () => {
+  // Initial property
+  await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+    body: JSON.stringify({ propertyId: 'properties/111222333', propertyName: 'Property 1' })
+  });
+  let conn = getSeoConnection();
+  assert.equal(conn?.selected_ga4_property, 'properties/111222333');
+
+  // Change to Property 2
+  const resChange = await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+    body: JSON.stringify({ propertyId: 'properties/444555666', propertyName: 'Property 2' })
+  });
+  assert.equal(resChange.status, 200);
+
+  conn = getSeoConnection();
+  assert.equal(conn?.selected_ga4_property, 'properties/444555666');
+  assert.equal(conn?.selected_ga4_property_name, 'Property 2');
+
+  // GSC property and credentials must remain intact
+  assert.ok(conn?.selected_property);
+});
+
+test('Admin GA4: /api/admin/analytics/disconnect safely clears GA4 property without touching GSC', async () => {
+  // First ensure a property is set
+  await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+    body: JSON.stringify({ propertyId: 'properties/987654321', propertyName: 'To Disconnect' })
+  });
+
+  const res = await fetch(`${baseUrl}/api/admin/analytics/disconnect`, {
+    method: 'POST',
+    headers: { Cookie: sessionCookie }
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.success, true);
+
+  // In DB, GA4 property must be cleared and marked Disconnected
+  const conn = getSeoConnection();
+  assert.equal(conn?.selected_ga4_property, null);
+  assert.equal(conn?.selected_ga4_property_name, null);
+  assert.equal(conn?.ga4_connection_status, 'Disconnected');
+
+  // CRITICAL: Google Search Console property and tokens must still exist
+  assert.ok(conn?.selected_property);
+  if (conn?.encrypted_tokens) {
+    assert.ok(conn.encrypted_tokens.length > 0);
+  }
+
+  // Restore test property for subsequent tests
+  const restoreRes = await fetch(`${baseUrl}/api/admin/analytics/select-property`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+    body: JSON.stringify({ propertyId: 'properties/987654321', propertyName: 'Dawnexus Production GA4' })
+  });
+  assert.equal(restoreRes.status, 200);
+  const connRestored = getSeoConnection();
+  assert.equal(connRestored?.selected_ga4_property, 'properties/987654321');
 });
 
 test('Admin GA4: calculateDateIntervals accurately computes standard and custom intervals', () => {

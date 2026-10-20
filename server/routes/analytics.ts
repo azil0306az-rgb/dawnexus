@@ -28,22 +28,42 @@ analyticsRouter.get('/properties', async (req, res) => {
 });
 
 // POST /api/admin/analytics/select-property
-// Set the active GA4 property ID and optional display name
-analyticsRouter.post('/select-property', (req, res) => {
+// Set and validate the active GA4 property ID and optional display name
+analyticsRouter.post('/select-property', async (req, res) => {
   try {
-    const { propertyId, propertyName } = req.body;
+    const { propertyId, propertyName, validateAccess } = req.body;
     if (!propertyId || typeof propertyId !== 'string') {
-      return res.status(400).json({ error: 'propertyId is required' });
+      return res.status(400).json({ error: 'propertyId is required and must be a string' });
     }
-    const updated = Ga4Service.selectProperty(propertyId.trim(), propertyName);
+
+    const result = await Ga4Service.selectProperty(propertyId.trim(), propertyName, {
+      validateAccess: Boolean(validateAccess)
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
     return res.json({
       success: true,
-      selectedProperty: updated.selected_ga4_property,
-      selectedPropertyName: updated.selected_ga4_property_name
+      selectedProperty: result.selectedProperty,
+      selectedPropertyName: result.selectedPropertyName
     });
   } catch (err: any) {
     console.error('[Analytics Select Property Route Error]:', err);
-    return res.status(500).json({ error: 'Failed to select property' });
+    return res.status(500).json({ error: 'Failed to select property: ' + (err.message || 'Server error') });
+  }
+});
+
+// POST /api/admin/analytics/disconnect
+// Safely disconnect GA4 active property without disrupting Google Search Console
+analyticsRouter.post('/disconnect', async (req, res) => {
+  try {
+    const result = await Ga4Service.disconnectProperty();
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Analytics Disconnect Route Error]:', err);
+    return res.status(500).json({ error: 'Failed to disconnect GA4 property: ' + (err.message || 'Server error') });
   }
 });
 
