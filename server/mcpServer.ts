@@ -1293,6 +1293,89 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           responses: { '200': { description: 'Metadata updated' } }
         }
       },
+      '/tools/analytics/funnel': {
+        get: {
+          operationId: 'analytics_get_conversion_funnel',
+          summary: 'Get 7-step commercial conversion funnel',
+          description: 'Retrieves visit-to-enquiry conversion stages, visitor drop-offs, and funnel conversion rates.',
+          parameters: [
+            { name: 'days', in: 'query', schema: { type: 'integer', default: 30 }, description: 'Days to analyze' }
+          ],
+          responses: { '200': { description: 'Conversion funnel stages' } }
+        }
+      },
+      '/tools/analytics/form-abandonment': {
+        get: {
+          operationId: 'analytics_get_form_abandonment',
+          summary: 'Get form abandonment metrics',
+          description: 'Returns form starts, completions, overall abandonment rate, and drop-offs by field or step.',
+          parameters: [
+            { name: 'days', in: 'query', schema: { type: 'integer', default: 30 }, description: 'Days to analyze' }
+          ],
+          responses: { '200': { description: 'Form abandonment telemetry' } }
+        }
+      },
+      '/tools/analytics/overview': {
+        get: {
+          operationId: 'analytics_get_overview',
+          summary: 'Get visitor behaviour intelligence overview',
+          description: 'High-level visitor metrics, total sessions, bounce rate, and human vs bot metrics.',
+          parameters: [
+            { name: 'days', in: 'query', schema: { type: 'integer', default: 30 }, description: 'Days to analyze' }
+          ],
+          responses: { '200': { description: 'Overview telemetry' } }
+        }
+      },
+      '/tools/website/pages': {
+        get: {
+          operationId: 'website_list_editable_pages',
+          summary: 'List editable website service pages',
+          description: 'Returns current editable service pages (website-design, seo-services, ai-video-creation, digital-marketing) and published versions.',
+          responses: { '200': { description: 'List of editable pages' } }
+        }
+      },
+      '/tools/website/content': {
+        get: {
+          operationId: 'website_get_page_content',
+          summary: 'Get structured content for editable website page',
+          description: 'Returns structured page content (hero, features, process, FAQ, meta) for the specified service slug.',
+          parameters: [
+            {
+              name: 'slug',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', enum: ['website-design', 'seo-services', 'ai-video-creation', 'digital-marketing'] },
+              description: 'Service page slug'
+            }
+          ],
+          responses: { '200': { description: 'Structured page content' } }
+        }
+      },
+      '/tools/website/proposals/draft': {
+        post: {
+          operationId: 'website_create_optimization_draft',
+          summary: 'Create AI website content optimization draft',
+          description: 'Saves an evidence-backed optimization proposal as a draft requiring human admin review and approval.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['slug', 'proposedChanges'],
+                  properties: {
+                    slug: { type: 'string', enum: ['website-design', 'seo-services', 'ai-video-creation', 'digital-marketing'] },
+                    proposedChanges: { type: 'object', description: 'Updated sections (e.g. hero, faq, features)' },
+                    rationale: { type: 'string', description: 'Explanation backed by visitor telemetry' },
+                    evidenceAnalytics: { type: 'object', description: 'Telemetry metrics supporting this change' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '201': { description: 'Optimization draft proposal created' } }
+        }
+      },
       '/tools/schedule': {
         post: {
           operationId: 'schedule_blog_draft',
@@ -1335,14 +1418,6 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           summary: 'Inspect Search Console connection status',
           description: 'Returns live connection status, Google email, selected property, and sync telemetry.',
           responses: { '200': { description: 'Connection status' } }
-        }
-      },
-      '/tools/gsc/properties': {
-        get: {
-          operationId: 'gsc_list_properties',
-          summary: 'List verified Search Console properties',
-          description: 'Returns accessible sites from Google Search Console.',
-          responses: { '200': { description: 'List of properties' } }
         }
       },
       '/tools/gsc/search-analytics': {
@@ -1394,59 +1469,12 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           responses: { '200': { description: 'Top landing pages' } }
         }
       },
-      '/tools/gsc/research-status': {
-        get: {
-          operationId: 'gsc_get_research_status',
-          summary: 'Get research status and recent jobs',
-          description: 'Returns connection status and recent research sync jobs.',
-          responses: { '200': { description: 'Research status' } }
-        }
-      },
-      '/tools/gsc/sync': {
-        post: {
-          operationId: 'gsc_run_research_sync',
-          summary: 'Trigger Search Console synchronization job',
-          description: 'Executes research sync job with concurrency protection and caches query metrics.',
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    dateRange: { type: 'string', enum: ['28d', '3m'] }
-                  }
-                }
-              }
-            }
-          },
-          responses: { '200': { description: 'Sync completed' } }
-        }
-      },
-      '/tools/gsc/jobs/{jobId}': {
-        get: {
-          operationId: 'gsc_get_research_job',
-          summary: 'Get specific research job details',
-          description: 'Returns status, queries returned, queries saved, and API request count for a job ID.',
-          parameters: [
-            { name: 'jobId', in: 'path', required: true, schema: { type: 'string' } }
-          ],
-          responses: { '200': { description: 'Job record' }, '404': { description: 'Not found' } }
-        }
-      },
       '/tools/ga4/status': {
         get: {
           operationId: 'ga4_get_connection_status',
           summary: 'Inspect GA4 connection status',
           description: 'Returns live connection status, authorized Google email, selected GA4 property, and sync telemetry.',
           responses: { '200': { description: 'Connection status' } }
-        }
-      },
-      '/tools/ga4/properties': {
-        get: {
-          operationId: 'ga4_list_properties',
-          summary: 'List accessible GA4 properties',
-          description: 'Returns accessible properties with ID and display name.',
-          responses: { '200': { description: 'List of properties' } }
         }
       },
       '/tools/ga4/overview': {
@@ -1462,18 +1490,6 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           responses: { '200': { description: 'Overview metrics' } }
         }
       },
-      '/tools/ga4/traffic-acquisition': {
-        get: {
-          operationId: 'ga4_get_traffic_acquisition',
-          summary: 'Get traffic acquisition breakdown',
-          description: 'Returns metrics by channel, source, and medium.',
-          parameters: [
-            { name: 'dateRange', in: 'query', schema: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] } },
-            { name: 'limit', in: 'query', schema: { type: 'integer' } }
-          ],
-          responses: { '200': { description: 'Traffic channels' } }
-        }
-      },
       '/tools/ga4/landing-pages': {
         get: {
           operationId: 'ga4_get_landing_pages',
@@ -1486,56 +1502,12 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           responses: { '200': { description: 'Landing pages' } }
         }
       },
-      '/tools/ga4/page-performance': {
-        get: {
-          operationId: 'ga4_get_page_performance',
-          summary: 'Get page performance',
-          description: 'Returns views, active users, avg engagement time, and events by page.',
-          parameters: [
-            { name: 'dateRange', in: 'query', schema: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] } },
-            { name: 'limit', in: 'query', schema: { type: 'integer' } }
-          ],
-          responses: { '200': { description: 'Page performance' } }
-        }
-      },
       '/tools/ga4/realtime': {
         get: {
           operationId: 'ga4_get_realtime',
           summary: 'Get realtime active users',
           description: 'Returns active users in the last 30 minutes and active screen names.',
           responses: { '200': { description: 'Realtime report' } }
-        }
-      },
-      '/tools/ga4/report': {
-        post: {
-          operationId: 'ga4_get_report',
-          summary: 'Execute custom validated report',
-          description: 'Executes custom query with supported dimensions and metrics.',
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  required: ['dimensions', 'metrics'],
-                  properties: {
-                    dimensions: { type: 'array', items: { type: 'string' } },
-                    metrics: { type: 'array', items: { type: 'string' } },
-                    dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'custom'] },
-                    limit: { type: 'integer' }
-                  }
-                }
-              }
-            }
-          },
-          responses: { '200': { description: 'Custom report data' } }
-        }
-      },
-      '/tools/ga4/analytics-status': {
-        get: {
-          operationId: 'ga4_get_analytics_status',
-          summary: 'Get analytics jobs and status',
-          description: 'Returns report retrieval activity, job counts, and recent sanitized errors.',
-          responses: { '200': { description: 'Analytics status' } }
         }
       }
     }
@@ -2080,6 +2052,67 @@ mcpRouter.post('/tools/seo-check', (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Failed to run SEO check' });
+  }
+});
+
+// Visitor Analytics Dedicated REST Endpoints
+mcpRouter.get('/tools/analytics/funnel', async (req: Request, res: Response) => {
+  try {
+    const days = req.query.days ? parseInt(String(req.query.days), 10) : 30;
+    const result = await McpService.analyticsGetConversionFunnel({ days });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get conversion funnel' });
+  }
+});
+
+mcpRouter.get('/tools/analytics/form-abandonment', async (req: Request, res: Response) => {
+  try {
+    const days = req.query.days ? parseInt(String(req.query.days), 10) : 30;
+    const result = await McpService.analyticsGetFormAbandonment({ days });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get form abandonment' });
+  }
+});
+
+mcpRouter.get('/tools/analytics/overview', async (req: Request, res: Response) => {
+  try {
+    const days = req.query.days ? parseInt(String(req.query.days), 10) : 30;
+    const result = await McpService.analyticsGetOverview({ days });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get analytics overview' });
+  }
+});
+
+// Website Content Dedicated REST Endpoints
+mcpRouter.get('/tools/website/pages', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.websiteListEditablePages();
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to list editable pages' });
+  }
+});
+
+mcpRouter.get('/tools/website/content', async (req: Request, res: Response) => {
+  try {
+    const slug = String(req.query.slug || 'website-design');
+    const result = await McpService.websiteGetPageContent({ slug });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to get page content' });
+  }
+});
+
+mcpRouter.post('/tools/website/proposals/draft', async (req: Request, res: Response) => {
+  try {
+    const callerIp = req.ip || req.socket.remoteAddress || 'mcp-rest';
+    const result = await McpService.websiteCreateOptimizationDraft({ ...req.body, createdBy: `mcp-${callerIp}` });
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to create optimization draft' });
   }
 });
 
