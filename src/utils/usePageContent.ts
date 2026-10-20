@@ -92,3 +92,4 @@ export function usePageContent(slug: string, defaultContent: ServicePageContent)
 
   return { content, isDynamic };
 }
+

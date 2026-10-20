@@ -23,7 +23,8 @@ import {
   Briefcase,
   Activity,
   Calculator,
-  BarChart3
+  BarChart3,
+  Shield
 } from 'lucide-react';
 import type { EnquiryRecord, EnquiryStats } from '../../types';
 import { EnquiryDetailModal } from './EnquiryDetailModal';
@@ -38,13 +39,14 @@ import { Ga4Dashboard } from './Ga4Dashboard';
 import { BehaviourAnalyticsDashboard } from './BehaviourAnalyticsDashboard';
 import { ContentEditor } from './ContentEditor';
 import { AiOptimizationStudio } from './AiOptimizationStudio';
+import { IntegrationDiagnostics } from './IntegrationDiagnostics';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'ai-optimization' | 'calculator' | 'notifications' | 'db-health'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'ai-optimization' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -456,6 +458,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 4h
               </span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('diagnostics')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'diagnostics'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Shield className="w-4 h-4" />
+                <span>Diagnostics</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                AI
+              </span>
+            </button>
           </nav>
         </div>
 
@@ -504,6 +523,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <NotificationSettings />
         ) : activeTab === 'db-health' ? (
           <DatabaseHealthDashboard />
+        ) : activeTab === 'diagnostics' ? (
+          <IntegrationDiagnostics />
         ) : (
           <>
             {/* Top Header Bar */}

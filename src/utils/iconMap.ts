@@ -56,3 +56,4 @@ export const ICON_MAP: Record<string, React.FC<any>> = {
 export function getIconComponent(name: string, fallback = CheckCircle2): React.FC<any> {
   return ICON_MAP[name] || fallback;
 }
+
