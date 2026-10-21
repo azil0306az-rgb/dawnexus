@@ -58,6 +58,8 @@ import { getExpectedMcpKey, getMcpAuditTrail } from '../mcpAuth.js';
 import { MCP_TOOLS } from '../mcpServer.js';
 import { GscService } from '../gscService.js';
 import { Ga4Service } from '../ga4Service.js';
+import { seoAiRouter } from './seoAi.js';
+import { GeminiService } from '../geminiService.js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -65,6 +67,9 @@ function isValidEmail(email: string): boolean {
 }
 
 export const adminRouter = Router();
+
+// Mount SEO AI Router (Version 7.1.8)
+adminRouter.use('/seo-ai', seoAiRouter);
 
 // Authentication Endpoints
 adminRouter.post('/login', handleAdminLogin);
@@ -1630,6 +1635,30 @@ adminRouter.get('/diagnostics', async (req, res) => {
       lastTested,
       details: { editableSlugs: pages.map(p => p.slug) }
     });
+
+    // 12. Google Gemini AI Engine (Version 7.1.8)
+    try {
+      const geminiConn = await GeminiService.testConnection();
+      const geminiStats = GeminiService.getUsageStats();
+      checks.push({
+        id: 'gemini-ai-engine',
+        name: 'Google Gemini AI Service (v7.1.8)',
+        category: 'integrations',
+        status: geminiConn.connected ? 'Connected and verified' : (geminiStats.configured ? 'Authentication failed' : 'Configuration missing'),
+        message: geminiConn.connected ? `Operational with model ${geminiConn.model}. Total invocations: ${geminiStats.totalCalls}.` : (geminiConn.error || 'GEMINI_API_KEY missing or invalid'),
+        lastTested,
+        details: { model: geminiConn.model || geminiStats.activeModel, totalCalls: geminiStats.totalCalls, totalTokens: geminiStats.totalTokens }
+      });
+    } catch (e: any) {
+      checks.push({
+        id: 'gemini-ai-engine',
+        name: 'Google Gemini AI Service (v7.1.8)',
+        category: 'integrations',
+        status: 'Authentication failed',
+        message: e?.message || 'Failed to inspect Gemini connection',
+        lastTested
+      });
+    }
 
     const failedCount = checks.filter(c => c.status === 'Check failed' || c.status === 'Authentication failed').length;
     const overallStatus = failedCount === 0 ? 'Connected and verified' : 'Check failed';

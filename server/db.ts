@@ -48,6 +48,54 @@ export function getDb() {
   return db;
 }
 
+export const DEFAULT_SEO_CATEGORIES = [
+  {
+    name: 'Website Development',
+    slug: 'website-development',
+    primary_keyword: 'custom website development services',
+    secondary_keywords: ['responsive web design', 'business website development', 'ecommerce web development'],
+    target_audience: 'Small to mid-sized businesses, startups, and enterprises seeking modern web platforms',
+    search_intent: 'Commercial',
+    instructions: 'Focus on high performance, modern full-stack architectures, mobile-first responsiveness, and conversion UX.'
+  },
+  {
+    name: 'SEO Services',
+    slug: 'seo-services',
+    primary_keyword: 'technical seo services',
+    secondary_keywords: ['organic search ranking', 'technical seo audit', 'core web vitals optimization', 'link building strategy'],
+    target_audience: 'Business owners and marketing leaders looking to capture sustainable organic search revenue',
+    search_intent: 'Commercial',
+    instructions: 'Highlight data-backed search console performance, site speed, crawlability, and schema markup.'
+  },
+  {
+    name: 'Google Business Profile Optimization',
+    slug: 'google-business-profile-optimization',
+    primary_keyword: 'google business profile optimization',
+    secondary_keywords: ['local seo 3-pack', 'gbp management services', 'google maps ranking', 'local business citations'],
+    target_audience: 'Local businesses, medical practices, retail outlets, and multi-location franchises',
+    search_intent: 'Commercial',
+    instructions: 'Emphasize local map pack visibility, customer review workflows, citation consistency, and geo-relevance.'
+  },
+  {
+    name: 'Digital Marketing',
+    slug: 'digital-marketing',
+    primary_keyword: 'performance digital marketing agency',
+    secondary_keywords: ['roi driven advertising', 'content marketing strategy', 'conversion rate optimization', 'omnichannel growth'],
+    target_audience: 'Growth teams and founders looking to scale qualified customer inquiries and pipeline',
+    search_intent: 'Commercial',
+    instructions: 'Emphasize measurable attribution, CAC reduction, landing page alignment, and full-funnel retention.'
+  },
+  {
+    name: 'AI and Automation',
+    slug: 'ai-and-automation',
+    primary_keyword: 'business ai workflow automation',
+    secondary_keywords: ['custom ai integrations', 'business process automation', 'intelligent chatbots', 'lead qualification automation'],
+    target_audience: 'Forward-looking enterprises and modern businesses modernizing operational workflows',
+    search_intent: 'Informational',
+    instructions: 'Focus on practical automation use cases, eliminating repetitive manual work, and integrating generative AI with real business data.'
+  }
+];
+
 // Initialize schema
 let databaseInitialized = false;
 
@@ -530,6 +578,63 @@ export function initDatabase() {
     }
   } catch (seedErr) {
     console.warn('[Website Pages Seed Notice]:', seedErr);
+  }
+
+  // Version 7.1.8 — Dynamic SEO Categories & Gemini Usage Telemetry
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS seo_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      slug TEXT NOT NULL UNIQUE,
+      primary_keyword TEXT DEFAULT '',
+      secondary_keywords TEXT DEFAULT '[]',
+      target_audience TEXT DEFAULT '',
+      search_intent TEXT DEFAULT 'Commercial',
+      instructions TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_seo_categories_slug ON seo_categories(slug);
+
+    CREATE TABLE IF NOT EXISTS gemini_usage_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action TEXT NOT NULL,
+      model TEXT NOT NULL,
+      prompt_tokens INTEGER DEFAULT 0,
+      candidate_tokens INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
+      status TEXT NOT NULL,
+      error_message TEXT DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_gemini_usage_action ON gemini_usage_logs(action, status);
+  `);
+
+  // Seed default SEO categories if empty
+  try {
+    const catCount = (db.prepare('SELECT COUNT(*) as c FROM seo_categories').get() as { c: number })?.c || 0;
+    if (catCount === 0) {
+      const now = new Date().toISOString();
+      for (const cat of DEFAULT_SEO_CATEGORIES) {
+        db.prepare(`
+          INSERT INTO seo_categories (
+            name, slug, primary_keyword, secondary_keywords, target_audience, search_intent, instructions, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          cat.name,
+          cat.slug,
+          cat.primary_keyword,
+          JSON.stringify(cat.secondary_keywords),
+          cat.target_audience,
+          cat.search_intent,
+          cat.instructions,
+          now,
+          now
+        );
+      }
+    }
+  } catch (catSeedErr) {
+    console.warn('[SEO Categories Seed Notice]:', catSeedErr);
   }
 
   console.log(`[Database] SQLite initialized successfully at: ${path.resolve(dbPath)}`);
@@ -1231,6 +1336,221 @@ export async function publishDueScheduledBlogsReliable(): Promise<{ publishedCou
   }
 
   return { publishedCount, errors };
+}
+
+// ----------------------------------------------------
+// Version 7.1.8: Bulk Blog Scheduling
+// ----------------------------------------------------
+export interface BulkScheduleItem {
+  id: number;
+  scheduledAt: string; // ISO string or parsable date string
+}
+
+export interface BulkScheduleResult {
+  success: boolean;
+  scheduledCount: number;
+  updatedBlogs: BlogRecord[];
+  errors: Array<{ id: number; error: string }>;
+}
+
+export async function bulkScheduleBlogsReliable(items: BulkScheduleItem[]): Promise<BulkScheduleResult> {
+  const errors: Array<{ id: number; error: string }> = [];
+  const updatedBlogs: BlogRecord[] = [];
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return { success: false, scheduledCount: 0, updatedBlogs: [], errors: [{ id: 0, error: 'No blogs provided for scheduling' }] };
+  }
+
+  const validatedItems: Array<{ id: number; targetIso: string }> = [];
+  const now = new Date();
+
+  for (const item of items) {
+    if (!item.id || !item.scheduledAt) {
+      errors.push({ id: item.id || 0, error: 'Missing blog ID or scheduled date' });
+      continue;
+    }
+
+    const blog = getBlogById(item.id);
+    if (!blog) {
+      errors.push({ id: item.id, error: `Blog #${item.id} not found` });
+      continue;
+    }
+
+    const scheduledDate = new Date(item.scheduledAt);
+    if (isNaN(scheduledDate.getTime())) {
+      errors.push({ id: item.id, error: `Invalid date format: ${item.scheduledAt}` });
+      continue;
+    }
+
+    if (scheduledDate.getTime() <= now.getTime()) {
+      errors.push({ id: item.id, error: `Scheduled time must be in the future (received: ${item.scheduledAt})` });
+      continue;
+    }
+
+    validatedItems.push({ id: item.id, targetIso: scheduledDate.toISOString() });
+  }
+
+  if (errors.length > 0 && validatedItems.length === 0) {
+    return { success: false, scheduledCount: 0, updatedBlogs: [], errors };
+  }
+
+  db.exec('BEGIN');
+  try {
+    for (const item of validatedItems) {
+      const nowIso = new Date().toISOString();
+      db.prepare(`
+        UPDATE blogs 
+        SET status = 'Scheduled', scheduled_at = ?, publication_error = '', updated_at = ?
+        WHERE id = ?
+      `).run(item.targetIso, nowIso, item.id);
+
+      const updated = getBlogById(item.id);
+      if (updated) {
+        updatedBlogs.push(updated);
+      }
+    }
+    db.exec('COMMIT');
+  } catch (err: unknown) {
+    db.exec('ROLLBACK');
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, scheduledCount: 0, updatedBlogs: [], errors: [{ id: 0, error: `Batch rollback: ${msg}` }] };
+  }
+
+  // Push updated scheduled blogs to Supabase if active
+  if (isSupabaseActive()) {
+    for (const b of updatedBlogs) {
+      try {
+        await pushBlogToSupabase(b);
+      } catch (pushErr) {
+        console.warn(`[BulkScheduler] Could not sync scheduled blog #${b.id} to Supabase:`, pushErr);
+      }
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    scheduledCount: updatedBlogs.length,
+    updatedBlogs,
+    errors
+  };
+}
+
+// ----------------------------------------------------
+// Version 7.1.8: Dynamic SEO Categories Management
+// ----------------------------------------------------
+export interface SeoCategoryRecord {
+  id: number;
+  name: string;
+  slug: string;
+  primary_keyword: string;
+  secondary_keywords: string[];
+  target_audience: string;
+  search_intent: string;
+  instructions: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSeoCategoryInput {
+  name: string;
+  slug?: string;
+  primary_keyword?: string;
+  secondary_keywords?: string[];
+  target_audience?: string;
+  search_intent?: string;
+  instructions?: string;
+}
+
+export interface UpdateSeoCategoryInput {
+  name?: string;
+  slug?: string;
+  primary_keyword?: string;
+  secondary_keywords?: string[];
+  target_audience?: string;
+  search_intent?: string;
+  instructions?: string;
+}
+
+export function getSeoCategories(): SeoCategoryRecord[] {
+  const rows = db.prepare('SELECT * FROM seo_categories ORDER BY id ASC').all() as any[];
+  return rows.map(r => ({
+    ...r,
+    secondary_keywords: typeof r.secondary_keywords === 'string' ? JSON.parse(r.secondary_keywords || '[]') : (r.secondary_keywords || [])
+  }));
+}
+
+export function getSeoCategoryById(id: number): SeoCategoryRecord | null {
+  const r = db.prepare('SELECT * FROM seo_categories WHERE id = ?').get(id) as any;
+  if (!r) return null;
+  return {
+    ...r,
+    secondary_keywords: typeof r.secondary_keywords === 'string' ? JSON.parse(r.secondary_keywords || '[]') : (r.secondary_keywords || [])
+  };
+}
+
+export function getSeoCategoryBySlug(slug: string): SeoCategoryRecord | null {
+  const r = db.prepare('SELECT * FROM seo_categories WHERE slug = ?').get(slug) as any;
+  if (!r) return null;
+  return {
+    ...r,
+    secondary_keywords: typeof r.secondary_keywords === 'string' ? JSON.parse(r.secondary_keywords || '[]') : (r.secondary_keywords || [])
+  };
+}
+
+export function createSeoCategory(input: CreateSeoCategoryInput): SeoCategoryRecord {
+  const name = input.name.trim();
+  const slug = (input.slug || input.name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const now = new Date().toISOString();
+  const secJson = JSON.stringify(input.secondary_keywords || []);
+
+  const res = db.prepare(`
+    INSERT INTO seo_categories (
+      name, slug, primary_keyword, secondary_keywords, target_audience, search_intent, instructions, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    name,
+    slug,
+    input.primary_keyword || '',
+    secJson,
+    input.target_audience || '',
+    input.search_intent || 'Commercial',
+    input.instructions || '',
+    now,
+    now
+  );
+
+  return getSeoCategoryById(Number(res.lastInsertRowid))!;
+}
+
+export function updateSeoCategory(id: number, input: UpdateSeoCategoryInput): SeoCategoryRecord | null {
+  const current = getSeoCategoryById(id);
+  if (!current) return null;
+
+  const name = input.name !== undefined ? input.name.trim() : current.name;
+  const slug = input.slug !== undefined ? input.slug.trim() : current.slug;
+  const primary = input.primary_keyword !== undefined ? input.primary_keyword.trim() : current.primary_keyword;
+  const secJson = input.secondary_keywords !== undefined ? JSON.stringify(input.secondary_keywords) : JSON.stringify(current.secondary_keywords);
+  const audience = input.target_audience !== undefined ? input.target_audience.trim() : current.target_audience;
+  const intent = input.search_intent !== undefined ? input.search_intent.trim() : current.search_intent;
+  const instructions = input.instructions !== undefined ? input.instructions.trim() : current.instructions;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    UPDATE seo_categories SET
+      name = ?, slug = ?, primary_keyword = ?, secondary_keywords = ?,
+      target_audience = ?, search_intent = ?, instructions = ?, updated_at = ?
+    WHERE id = ?
+  `).run(name, slug, primary, secJson, audience, intent, instructions, now, id);
+
+  return getSeoCategoryById(id);
+}
+
+export function deleteSeoCategory(id: number): boolean {
+  const res = db.prepare('DELETE FROM seo_categories WHERE id = ?').run(id);
+  return res.changes > 0;
 }
 
 let lastSyncTime = 0;

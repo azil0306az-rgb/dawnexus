@@ -40,13 +40,14 @@ import { BehaviourAnalyticsDashboard } from './BehaviourAnalyticsDashboard';
 import { ContentEditor } from './ContentEditor';
 import { AiOptimizationStudio } from './AiOptimizationStudio';
 import { IntegrationDiagnostics } from './IntegrationDiagnostics';
+import { SeoAiStudio } from './SeoAiStudio';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'ai-optimization' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'seo-ai' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'ai-optimization' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -327,6 +328,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
+              onClick={() => setActiveTab('seo-ai')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'seo-ai'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-4 h-4 text-[#C7FF4D]" />
+                <span>AI SEO Studio</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                v7.1.8
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('gsc')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'gsc'
@@ -503,7 +521,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       {/* Main Content Area */}
       <main className="flex-1 p-6 sm:p-8 lg:p-10 overflow-y-auto">
         
-        {activeTab === 'clients' ? (
+        {activeTab === 'seo-ai' ? (
+          <SeoAiStudio />
+        ) : activeTab === 'clients' ? (
           <ClientShowcaseManager />
         ) : activeTab === 'blogs' ? (
           <BlogManager />

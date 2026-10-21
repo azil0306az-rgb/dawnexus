@@ -173,6 +173,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     brand: 'Dawnexus',
+    version: '7.1.8',
     timestamp: new Date().toISOString()
   });
 });
@@ -214,10 +215,15 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Start listening if not running in a serverless environment (like Vercel)
+// Start listening if not running in a serverless environment (like Vercel) or test suite
 export let server: ReturnType<typeof app.listen> | undefined;
 
-if (!process.env.VERCEL) {
+const isTestEnv = process.env.NODE_ENV === 'test' ||
+  Boolean(process.env.NODE_TEST_CONTEXT) ||
+  process.argv.some(arg => arg.includes('test')) ||
+  process.env.npm_lifecycle_event === 'test';
+
+if (!process.env.VERCEL && !isTestEnv) {
   server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`=======================================================`);
     console.log(`  DAWNEXUS BACKEND RUNNING ON http://localhost:${PORT}`);

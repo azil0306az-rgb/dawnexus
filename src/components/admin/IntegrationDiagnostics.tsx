@@ -15,7 +15,8 @@ import {
   Image,
   Shield,
   Layers,
-  Clock
+  Clock,
+  Sparkles
 } from 'lucide-react';
 
 export type DiagnosticStatus =
@@ -129,6 +130,7 @@ export const IntegrationDiagnostics: React.FC = () => {
   };
 
   const getCategoryIcon = (category: DiagnosticCheck['category'], id: string) => {
+    if (id.includes('gemini')) return <Sparkles className="w-5 h-5 text-lime-400" />;
     if (id.includes('gsc')) return <Search className="w-5 h-5 text-blue-400" />;
     if (id.includes('ga4')) return <BarChart2 className="w-5 h-5 text-amber-400" />;
     if (id.includes('image')) return <Image className="w-5 h-5 text-purple-400" />;
@@ -149,8 +151,11 @@ export const IntegrationDiagnostics: React.FC = () => {
               <div className="w-10 h-10 rounded-xl bg-lime-400/10 border border-lime-400/20 flex items-center justify-center text-lime-400">
                 <Activity className="w-5 h-5" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-white">
-                Integration Health & Diagnostics
+              <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
+                <span>Integration Health & Diagnostics</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-lime-400/10 text-lime-400 border border-lime-400/30">
+                  v7.1.8
+                </span>
               </h1>
             </div>
             <p className="mt-2 text-sm text-zinc-400 max-w-2xl leading-relaxed">
@@ -263,3 +268,4 @@ export const IntegrationDiagnostics: React.FC = () => {
     </div>
   );
 };
+

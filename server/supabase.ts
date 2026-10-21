@@ -344,6 +344,48 @@ export async function syncFromSupabase(db: any): Promise<void> {
       console.warn('[Supabase Sync Pages Notice]:', pageErr);
     }
 
+    // 8. Sync SEO Categories (Version 7.1.8 dynamic categories)
+    try {
+      const { data: categories } = await supabase
+        .from('seo_categories')
+        .select('*');
+
+      if (categories && Array.isArray(categories) && categories.length > 0) {
+        const stmt = db.prepare(`
+          INSERT INTO seo_categories (
+            id, name, slug, primary_keyword, secondary_keywords,
+            target_audience, search_intent, instructions, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(slug) DO UPDATE SET
+            name = excluded.name,
+            primary_keyword = excluded.primary_keyword,
+            secondary_keywords = excluded.secondary_keywords,
+            target_audience = excluded.target_audience,
+            search_intent = excluded.search_intent,
+            instructions = excluded.instructions,
+            updated_at = excluded.updated_at
+        `);
+
+        for (const c of categories) {
+          stmt.run(
+            c.id,
+            c.name,
+            c.slug,
+            c.primary_keyword || '',
+            typeof c.secondary_keywords === 'string' ? c.secondary_keywords : JSON.stringify(c.secondary_keywords || []),
+            c.target_audience || '',
+            c.search_intent || 'Commercial',
+            c.instructions || '',
+            c.created_at || new Date().toISOString(),
+            c.updated_at || new Date().toISOString()
+          );
+        }
+        console.log(`[Supabase Sync] Hydrated ${categories.length} SEO categories.`);
+      }
+    } catch {
+      // Non-fatal if remote table does not exist yet
+    }
+
     console.log('[Supabase Sync] Local database is fully synchronized with Supabase.');
   } catch (err) {
     console.warn('[Supabase Sync Error]:', err);
@@ -604,3 +646,40 @@ export async function pushOptimizationProposalToSupabase(prop: any): Promise<voi
     console.warn('[Supabase pushOptimizationProposal Error]:', err);
   }
 }
+
+export async function pushSeoCategoryToSupabase(category: any): Promise<void> {
+  if (!supabase) return;
+  try {
+    const payload = {
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      primary_keyword: category.primary_keyword,
+      secondary_keywords: typeof category.secondary_keywords === 'string' ? JSON.parse(category.secondary_keywords) : category.secondary_keywords,
+      target_audience: category.target_audience,
+      search_intent: category.search_intent,
+      instructions: category.instructions,
+      updated_at: category.updated_at || new Date().toISOString()
+    };
+
+    const { error } = await supabase.from('seo_categories').upsert(payload, { onConflict: 'slug' });
+    if (error) {
+      console.warn('[Supabase pushSeoCategory Notice]:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase pushSeoCategory Error]:', err);
+  }
+}
+
+export async function deleteSeoCategoryFromSupabase(id: number): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.from('seo_categories').delete().eq('id', id);
+    if (error) {
+      console.warn('[Supabase deleteSeoCategory Notice]:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase deleteSeoCategory Error]:', err);
+  }
+}
+
