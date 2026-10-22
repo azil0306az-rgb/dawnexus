@@ -311,7 +311,14 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
       });
     }
 
-    // Persist locally, then wait for durable Supabase confirmation before acknowledging success.
+    // Persist locally with idempotency protection, then wait for durable Supabase confirmation
+    const rawIdempotencyKey = (
+      req.headers['idempotency-key'] ||
+      req.headers['x-idempotency-key'] ||
+      req.body.idempotency_key ||
+      ''
+    ).toString().trim();
+
     const newRecord = createEnquiry({
       full_name: full_name.trim(),
       business_name: typeof business_name === 'string' ? business_name.trim() : '',
@@ -319,7 +326,8 @@ publicRouter.post('/enquiries', enquiryLimiter, async (req, res) => {
       phone: normalizedPhone,
       requested_services: services,
       budget: validatedBudget,
-      project_details: project_details.trim()
+      project_details: project_details.trim(),
+      idempotency_key: rawIdempotencyKey || undefined
     });
     await persistEnquiry(newRecord);
 
@@ -493,7 +501,15 @@ publicRouter.post('/calculator/enquiry', enquiryLimiter, async (req, res) => {
       project_notes && project_notes.trim() ? `Customer Notes: ${project_notes.trim()}` : ''
     ].filter(Boolean).join('\n');
 
-    // Persist to enquiries with estimate snapshot
+    const rawCalcIdempotency = (
+      req.headers['idempotency-key'] ||
+      req.headers['x-idempotency-key'] ||
+      req.body.idempotency_key ||
+      authoritativeEstimate.referenceId ||
+      ''
+    ).toString().trim();
+
+    // Persist to enquiries with estimate snapshot and idempotency protection
     const newEnquiry = createEnquiry({
       full_name: full_name.trim(),
       business_name: typeof business_name === 'string' ? business_name.trim() : '',
@@ -503,7 +519,8 @@ publicRouter.post('/calculator/enquiry', enquiryLimiter, async (req, res) => {
       budget: oneTimeFmt,
       project_details: projectSummary,
       estimate_ref_id: authoritativeEstimate.referenceId,
-      estimate_data: JSON.stringify(authoritativeEstimate)
+      estimate_data: JSON.stringify(authoritativeEstimate),
+      idempotency_key: rawCalcIdempotency || undefined
     });
     await persistEnquiry(newEnquiry);
 

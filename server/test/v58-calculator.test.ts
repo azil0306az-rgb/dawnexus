@@ -9,7 +9,8 @@ import {
 import { 
   getCalculatorPricingConfig, 
   updateCalculatorPricingConfig,
-  createEnquiry
+  createEnquiry,
+  deleteEnquiry
 } from '../db.js';
 
 test('Cost Estimator: calculateWebsiteCost calculates correct landing page cost', () => {
@@ -156,9 +157,15 @@ test('Cost Estimator DB: persists estimate_ref_id and estimate_data in enquiries
     estimate_data: JSON.stringify(testEstimate)
   });
 
-  assert.ok(enq.id > 0);
-  assert.equal(enq.estimate_ref_id, testRefId);
-  assert.ok(enq.estimate_data);
-  const parsedData = typeof enq.estimate_data === 'string' ? JSON.parse(enq.estimate_data) : enq.estimate_data;
-  assert.equal(parsedData.breakdown.subtotalOneTime, 19999);
+  try {
+    assert.ok(enq.id > 0);
+    assert.equal(enq.estimate_ref_id, testRefId);
+    assert.ok(enq.estimate_data);
+    const parsedData = typeof enq.estimate_data === 'string' ? JSON.parse(enq.estimate_data) : enq.estimate_data;
+    assert.equal(parsedData.breakdown.subtotalOneTime, 19999);
+  } finally {
+    if (enq && enq.id) {
+      deleteEnquiry(enq.id);
+    }
+  }
 });

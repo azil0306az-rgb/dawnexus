@@ -353,6 +353,15 @@ export function initDatabase() {
   try {
     db.exec(`ALTER TABLE enquiries ADD COLUMN estimate_data TEXT DEFAULT NULL;`);
   } catch {}
+  try {
+    db.exec(`ALTER TABLE enquiries ADD COLUMN idempotency_key TEXT DEFAULT NULL;`);
+  } catch {}
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_enquiries_idempotency ON enquiries(idempotency_key) WHERE idempotency_key IS NOT NULL;`);
+  } catch {}
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_enquiries_estimate_ref ON enquiries(estimate_ref_id) WHERE estimate_ref_id IS NOT NULL;`);
+  } catch {}
 
   // Safe migrations for blogs table
   try {
@@ -670,6 +679,7 @@ export interface EnquiryRecord {
   admin_notes: string;
   estimate_ref_id?: string | null;
   estimate_data?: string | null;
+  idempotency_key?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -684,32 +694,73 @@ export interface CreateEnquiryInput {
   project_details: string;
   estimate_ref_id?: string;
   estimate_data?: string;
+  idempotency_key?: string;
 }
 
 // Queries
 export function createEnquiry(input: CreateEnquiryInput): EnquiryRecord {
+  const emailNorm = input.email.trim().toLowerCase();
+  const phoneNorm = (input.phone || '').trim();
+  const idempotencyKey = (input.idempotency_key || '').trim() || null;
+  const estimateRefId = (input.estimate_ref_id || '').trim() || null;
+
+  // 1. Idempotency Check by explicit key
+  if (idempotencyKey) {
+    const existing = db.prepare('SELECT * FROM enquiries WHERE idempotency_key = ?').get(idempotencyKey) as EnquiryRecord | undefined;
+    if (existing) {
+      console.log(`[Idempotency Hit] Returning existing enquiry #${existing.id} for key "${idempotencyKey}"`);
+      return existing;
+    }
+  }
+
+  // 2. Idempotency Check by estimate reference ID
+  if (estimateRefId) {
+    const existing = db.prepare('SELECT * FROM enquiries WHERE estimate_ref_id = ?').get(estimateRefId) as EnquiryRecord | undefined;
+    if (existing) {
+      console.log(`[Idempotency Hit] Returning existing enquiry #${existing.id} for estimateRef "${estimateRefId}"`);
+      return existing;
+    }
+  }
+
+  // 3. Duplicate submission prevention: same email + phone + content within 120 seconds
+  const recentWindowIso = new Date(Date.now() - 120 * 1000).toISOString();
+  const duplicate = db.prepare(`
+    SELECT * FROM enquiries 
+    WHERE email = ? AND phone = ? AND created_at >= ?
+    ORDER BY id DESC LIMIT 1
+  `).get(emailNorm, phoneNorm, recentWindowIso) as EnquiryRecord | undefined;
+
+  if (duplicate) {
+    const servicesJson = JSON.stringify(input.requested_services || []);
+    if (duplicate.requested_services === servicesJson && duplicate.project_details.trim() === input.project_details.trim()) {
+      console.log(`[Duplicate Prevented] Returning recent identical enquiry #${duplicate.id} submitted within 120s`);
+      return duplicate;
+    }
+  }
+
   const now = new Date().toISOString();
   const servicesJson = JSON.stringify(input.requested_services || []);
   
   const stmt = db.prepare(`
     INSERT INTO enquiries (
       full_name, business_name, email, phone, requested_services,
-      budget, project_details, status, admin_notes, estimate_ref_id, estimate_data, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'New', '', ?, ?, ?, ?)
+      budget, project_details, status, admin_notes, estimate_ref_id, estimate_data, idempotency_key, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'New', '', ?, ?, ?, ?, ?)
   `);
 
   const info = stmt.run(
     input.full_name.trim(),
     (input.business_name || '').trim(),
-    input.email.trim().toLowerCase(),
-    (input.phone || '').trim(),
+    emailNorm,
+    phoneNorm,
     servicesJson,
     (input.budget || '').trim(),
     input.project_details.trim(),
-    input.estimate_ref_id ? input.estimate_ref_id.trim() : null,
+    estimateRefId,
     input.estimate_data 
       ? (typeof input.estimate_data === 'string' ? input.estimate_data.trim() : JSON.stringify(input.estimate_data))
       : null,
+    idempotencyKey,
     now,
     now
   );
@@ -837,6 +888,11 @@ export function deleteEnquiry(id: number): boolean {
   const stmt = db.prepare('DELETE FROM enquiries WHERE id = ?');
   const result = stmt.run(id);
   const ok = Number(result.changes) > 0;
+  if (ok) {
+    deleteEnquiryFromSupabase(id).catch(err => {
+      console.warn(`[Supabase Delete Warning] Enquiry #${id}:`, err?.message || err);
+    });
+  }
   return ok;
 }
 
@@ -991,6 +1047,14 @@ export function ensureUniqueSlug(desiredSlug: string, currentId?: number): strin
 }
 
 export function createBlog(input: CreateBlogInput): BlogRecord {
+  // Safeguard: Check if an identical draft already exists by title to prevent duplicate drafts
+  const normTitle = input.title.trim().toLowerCase();
+  const existingDraft = db.prepare(`SELECT * FROM blogs WHERE LOWER(TRIM(title)) = ? AND status = 'Draft' LIMIT 1`).get(normTitle) as BlogRecord | undefined;
+  if (existingDraft) {
+    console.log(`[Blog Idempotency Hit] Returning existing draft #${existingDraft.id} ("${existingDraft.title}") instead of creating duplicate`);
+    return existingDraft;
+  }
+
   const now = new Date().toISOString();
   const slug = ensureUniqueSlug(input.slug || input.title);
   const status = input.status || 'Draft';

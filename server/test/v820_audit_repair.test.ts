@@ -155,4 +155,55 @@ describe('Dawnexus Version 8.2.0: Website, SEO, Canonical & GA4 Audit and Repair
     const deltaDown = Ga4Service.calculateDelta(5, 10);
     assert.strictEqual(deltaDown, -50);
   });
+
+  // 10. Server-Side Idempotency Protection
+  test('10. Enquiry Idempotency: Retrying with the same idempotency key or estimate_ref_id returns existing record without duplicating', async () => {
+    const { createEnquiry, deleteEnquiry } = await import('../db.js');
+    const testKey = `test_idemp_${Date.now()}`;
+    const testRef = `DNX-TEST-${Date.now()}`;
+
+    let firstEnq: any;
+    try {
+      firstEnq = createEnquiry({
+        full_name: 'Idempotency Tester',
+        email: 'idemp-test@example.com',
+        phone: '+919876543210',
+        requested_services: ['Website Development'],
+        project_details: 'Testing idempotency guarantees',
+        idempotency_key: testKey,
+        estimate_ref_id: testRef
+      });
+
+      assert.ok(firstEnq.id > 0);
+
+      // Repeat with same idempotency key
+      const secondEnq = createEnquiry({
+        full_name: 'Idempotency Tester Retry',
+        email: 'idemp-test@example.com',
+        phone: '+919876543210',
+        requested_services: ['Website Development'],
+        project_details: 'Testing idempotency guarantees',
+        idempotency_key: testKey,
+        estimate_ref_id: testRef
+      });
+
+      assert.strictEqual(secondEnq.id, firstEnq.id, 'Must return identical enquiry ID on retry');
+
+      // Repeat with same estimate reference ID
+      const thirdEnq = createEnquiry({
+        full_name: 'Idempotency Tester Calculator Retry',
+        email: 'idemp-test@example.com',
+        phone: '+919876543210',
+        requested_services: ['Website Development'],
+        project_details: 'Testing idempotency guarantees',
+        estimate_ref_id: testRef
+      });
+
+      assert.strictEqual(thirdEnq.id, firstEnq.id, 'Must return identical enquiry ID when estimate_ref_id matches');
+    } finally {
+      if (firstEnq && firstEnq.id) {
+        deleteEnquiry(firstEnq.id);
+      }
+    }
+  });
 });
