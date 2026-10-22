@@ -183,7 +183,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     brand: 'Dawnexus',
-    version: '7.1.8',
+    version: '8.0.0',
+    release: '8.0.0 — Claude MCP Transition',
     timestamp: new Date().toISOString()
   });
 });

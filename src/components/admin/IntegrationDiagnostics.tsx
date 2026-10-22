@@ -154,12 +154,12 @@ export const IntegrationDiagnostics: React.FC = () => {
               <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
                 <span>Integration Health & Diagnostics</span>
                 <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-lime-400/10 text-lime-400 border border-lime-400/30">
-                  v7.1.8
+                  v8.0.0
                 </span>
               </h1>
             </div>
             <p className="mt-2 text-sm text-zinc-400 max-w-2xl leading-relaxed">
-              Real-time diagnostic verification of Dawnexus AI SEO Studio. Monitors MCP handshake, OpenAPI schemas, Supabase persistence, Search Console, GA4, and visitor telemetry.
+              Real-time diagnostic verification of Dawnexus Claude MCP Platform. Monitors MCP handshake, OpenAPI schemas, Supabase persistence, Search Console, GA4, and visitor telemetry.
             </p>
           </div>
 

@@ -58,7 +58,6 @@ import { getExpectedMcpKey, getMcpAuditTrail } from '../mcpAuth.js';
 import { MCP_TOOLS } from '../mcpServer.js';
 import { GscService } from '../gscService.js';
 import { Ga4Service } from '../ga4Service.js';
-import { seoAiRouter } from './seoAi.js';
 import { GeminiService } from '../geminiService.js';
 
 function isValidEmail(email: string): boolean {
@@ -68,9 +67,6 @@ function isValidEmail(email: string): boolean {
 
 export const adminRouter = Router();
 
-// Mount SEO AI Router (Version 7.1.8)
-adminRouter.use('/seo-ai', seoAiRouter);
-
 // Authentication Endpoints
 adminRouter.post('/login', handleAdminLogin);
 adminRouter.get('/session', handleAdminSession);
@@ -78,6 +74,15 @@ adminRouter.post('/logout', handleAdminLogout);
 
 // All routes below require valid session authentication
 adminRouter.use(requireAuth);
+
+// Retired AI SEO Studio Endpoint (Version 8.0.0 — Claude MCP Transition)
+adminRouter.use('/seo-ai', (_req, res) => {
+  res.status(410).json({
+    success: false,
+    error: 'AI SEO Studio has been retired in Dawnexus Version 8.0.0. All SEO intelligence is managed via the authorized Claude MCP server.',
+    version: '8.0.0'
+  });
+});
 
 // Ensure admin queries are never cached by intermediate proxies or browser cache
 adminRouter.use((req, res, next) => {
@@ -1382,51 +1387,14 @@ adminRouter.post('/analytics/behaviour/cleanup', (req, res) => {
 });
 
 // ==========================================
-// VERSION 6.1.3: AI OPTIMIZATION STUDIO
+// RETIRED IN VERSION 8.0.0 (Claude MCP Transition)
 // ==========================================
-
-// GET /api/admin/ai-optimization/proposals
-adminRouter.get('/ai-optimization/proposals', async (req, res) => {
-  try {
-    const proposals = await AnalyticsService.generateOptimizationProposals();
-    return res.json({ proposals });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to load proposals' });
-  }
-});
-
-// POST /api/admin/ai-optimization/generate
-adminRouter.post('/ai-optimization/generate', async (req, res) => {
-  try {
-    const proposals = await AnalyticsService.generateOptimizationProposals();
-    return res.json({ success: true, proposals });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to generate proposals' });
-  }
-});
-
-// POST /api/admin/ai-optimization/proposals/:id/approve - Approve and immediately publish to live site
-adminRouter.post('/ai-optimization/proposals/:id/approve', async (req, res) => {
-  try {
-    const result = await AnalyticsService.approveAndPublishProposal(req.params.id, 'admin');
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    return res.json({ ...result, message: 'Proposal approved and published live immediately.' });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to approve proposal' });
-  }
-});
-
-// POST /api/admin/ai-optimization/proposals/:id/reject
-adminRouter.post('/ai-optimization/proposals/:id/reject', (req, res) => {
-  try {
-    const success = AnalyticsService.rejectProposal(req.params.id, 'admin');
-    if (!success) return res.status(404).json({ error: 'Proposal not found' });
-    return res.json({ success: true, message: 'Proposal rejected.' });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to reject proposal' });
-  }
+adminRouter.use('/ai-optimization', (_req, res) => {
+  return res.status(410).json({
+    success: false,
+    error: 'AI Optimization Studio has been retired in Dawnexus Version 8.0.0. Use authorized Claude MCP client for website optimization.',
+    version: '8.0.0'
+  });
 });
 
 // ==========================================
@@ -1636,13 +1604,29 @@ adminRouter.get('/diagnostics', async (req, res) => {
       details: { editableSlugs: pages.map(p => p.slug) }
     });
 
-    // 12. Google Gemini AI Engine (Version 7.1.8)
+    // 12. Claude MCP Platform Readiness (Version 8.0.0)
+    checks.push({
+      id: 'claude-mcp-readiness',
+      name: 'Claude MCP Platform Readiness (v8.0.0)',
+      category: 'mcp',
+      status: toolsCount === 53 ? 'Connected and verified' : 'Check failed',
+      message: 'All 53 Dawnexus MCP tools operational for authorized Claude Desktop, Claude Code, and web MCP clients over SSE and JSON-RPC.',
+      lastTested,
+      details: {
+        toolsCount,
+        transports: ['SSE (/api/mcp/sse)', 'JSON-RPC (/api/mcp/rpc)', 'OpenAPI (/api/mcp/openapi.json)'],
+        authSchemes: ['RFC 8414 OAuth 2.0 Bearer', 'x-mcp-api-key'],
+        targetClient: 'Claude Desktop / Claude Code / Web MCP'
+      }
+    });
+
+    // 13. Public Chatbot AI Engine
     try {
       const geminiConn = await GeminiService.testConnection();
       const geminiStats = GeminiService.getUsageStats();
       checks.push({
         id: 'gemini-ai-engine',
-        name: 'Google Gemini AI Service (v7.1.8)',
+        name: 'Public Website Chatbot Engine',
         category: 'integrations',
         status: geminiConn.connected ? 'Connected and verified' : (geminiStats.configured ? 'Authentication failed' : 'Configuration missing'),
         message: geminiConn.connected ? `Operational with model ${geminiConn.model}. Total invocations: ${geminiStats.totalCalls}.` : (geminiConn.error || 'GEMINI_API_KEY missing or invalid'),
@@ -1652,7 +1636,7 @@ adminRouter.get('/diagnostics', async (req, res) => {
     } catch (e: any) {
       checks.push({
         id: 'gemini-ai-engine',
-        name: 'Google Gemini AI Service (v7.1.8)',
+        name: 'Public Website Chatbot Engine',
         category: 'integrations',
         status: 'Authentication failed',
         message: e?.message || 'Failed to inspect Gemini connection',

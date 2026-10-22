@@ -878,8 +878,8 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
 export function createDawnexusMcpServer(): Server {
   const server = new Server(
     {
-      name: 'dawnexus-ai-seo-studio',
-      version: '7.1.8'
+      name: 'dawnexus-mcp-server',
+      version: '8.0.0'
     },
     {
       capabilities: {
@@ -939,10 +939,10 @@ export function createDawnexusMcpServer(): Server {
 mcpRouter.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    service: 'Dawnexus AI SEO Studio MCP Server',
-    version: '7.1.8',
+    service: 'Dawnexus MCP Server',
+    version: '8.0.0',
     transport: ['SSE (/api/mcp/sse)', 'JSON-RPC POST (/api/mcp/rpc)', 'REST OpenAPI (/api/mcp/tools)'],
-    policy: 'Draft first. Human approval required. Gemini API enabled.',
+    policy: 'Draft first. Human approval required. Claude MCP Integration.',
     toolsCount: MCP_TOOLS.length,
     timestamp: new Date().toISOString()
   });
@@ -957,9 +957,9 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
   const spec = {
     openapi: '3.1.0',
     info: {
-      title: 'Dawnexus AI SEO Studio API',
-      version: '7.1.8',
-      description: 'Custom MCP & Action interface for ChatGPT to research, plan, draft, and audit SEO blog posts for Dawnexus. All created content is strictly saved as Drafts in Supabase and requires human approval in the Admin panel.'
+      title: 'Dawnexus MCP API',
+      version: '8.0.0',
+      description: 'Dawnexus Model Context Protocol (MCP) and Action API for Claude and AI integrations to research, plan, draft, and audit SEO blog posts, inspect Search Console & GA4 analytics, monitor first-party visitor telemetry, and manage approved website content. All content creation is saved strictly as Drafts requiring human approval in the Admin panel.'
     },
     servers: [{ url: baseUrl }],
     components: {
@@ -1587,8 +1587,8 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
           serverInfo: {
-            name: 'dawnexus-ai-seo-studio',
-            version: '1.0.0'
+            name: 'dawnexus-mcp-server',
+            version: '8.0.0'
           }
         }
       });

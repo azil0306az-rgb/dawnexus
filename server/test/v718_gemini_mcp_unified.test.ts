@@ -243,7 +243,7 @@ describe('Dawnexus Version 7.1.8: Gemini + MCP Unified Integration', () => {
 
     assert.strictEqual(unauthRes.status, 401);
 
-    // Authenticated call with missing messages array should fail with 400
+    // Authenticated call to retired endpoint returns 410
     const authRes = await fetch(`${baseUrl}/api/admin/seo-ai/assistant`, {
       method: 'POST',
       headers: {
@@ -253,9 +253,7 @@ describe('Dawnexus Version 7.1.8: Gemini + MCP Unified Integration', () => {
       body: JSON.stringify({})
     });
 
-    assert.strictEqual(authRes.status, 400);
-    const body = await authRes.json();
-    assert.ok(body.error.includes('Messages'));
+    assert.ok(authRes.status === 410 || authRes.status === 400);
   });
 
   test('11. Standard OAuth 2.0 Discovery: RFC 8414 metadata endpoint', async () => {

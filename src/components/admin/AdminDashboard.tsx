@@ -38,16 +38,14 @@ import { GscDashboard } from './GscDashboard';
 import { Ga4Dashboard } from './Ga4Dashboard';
 import { BehaviourAnalyticsDashboard } from './BehaviourAnalyticsDashboard';
 import { ContentEditor } from './ContentEditor';
-import { AiOptimizationStudio } from './AiOptimizationStudio';
 import { IntegrationDiagnostics } from './IntegrationDiagnostics';
-import { SeoAiStudio } from './SeoAiStudio';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'seo-ai' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'ai-optimization' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -125,6 +123,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   useEffect(() => {
     fetchStats();
     fetchEnquiries();
+
+    // Gracefully handle legacy deep-links to retired AI Studio tabs
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam === 'seo-ai' || tabParam === 'ai-optimization') {
+        setActiveTab('blogs');
+        window.history.replaceState({}, '', '/admin');
+      }
+    }
   }, [fetchStats, fetchEnquiries]);
 
   // Automatic periodic polling every 15s to keep leads and stats up to date
@@ -259,7 +267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </a>
             <div className="mt-2 text-[11px] font-mono text-[#A5A5A5] flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#C7FF4D]" />
-              <span>Admin Dashboard</span>
+              <span>Admin Dashboard • v8.0.0</span>
             </div>
           </div>
 
@@ -325,23 +333,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <FileText className="w-4 h-4" />
                 <span>Blogs & CMS</span>
               </div>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('seo-ai')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                activeTab === 'seo-ai'
-                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
-                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Sparkles className="w-4 h-4 text-[#C7FF4D]" />
-                <span>AI SEO Studio</span>
-              </div>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
-                v7.1.8
-              </span>
             </button>
 
             <button
@@ -413,23 +404,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('ai-optimization')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                activeTab === 'ai-optimization'
-                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
-                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Sparkles className="w-4 h-4" />
-                <span>AI Optimization</span>
-              </div>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
-                AI
-              </span>
-            </button>
-
-            <button
               onClick={() => setActiveTab('calculator')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'calculator'
@@ -490,7 +464,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <span>Diagnostics</span>
               </div>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
-                AI
+                MCP
               </span>
             </button>
           </nav>
@@ -521,9 +495,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       {/* Main Content Area */}
       <main className="flex-1 p-6 sm:p-8 lg:p-10 overflow-y-auto">
         
-        {activeTab === 'seo-ai' ? (
-          <SeoAiStudio />
-        ) : activeTab === 'clients' ? (
+        {activeTab === 'clients' ? (
           <ClientShowcaseManager />
         ) : activeTab === 'blogs' ? (
           <BlogManager />
@@ -535,8 +507,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <BehaviourAnalyticsDashboard />
         ) : activeTab === 'content-editor' ? (
           <ContentEditor />
-        ) : activeTab === 'ai-optimization' ? (
-          <AiOptimizationStudio />
         ) : activeTab === 'calculator' ? (
           <CalculatorSettings />
         ) : activeTab === 'notifications' ? (
