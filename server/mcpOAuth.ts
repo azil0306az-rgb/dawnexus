@@ -9,12 +9,13 @@ import { Router, Request, Response } from 'express';
 
 export const mcpOAuthRouter = Router();
 
-export const DEFAULT_OAUTH_CLIENT_ID = 'dawnexus-gemini-client';
-export const DEFAULT_OAUTH_CLIENT_SECRET = 'dawnexus_sec_gemini_oauth_9566';
+export const DEFAULT_OAUTH_CLIENT_ID = 'dawnexus-claude-client';
+export const DEFAULT_OAUTH_CLIENT_SECRET = 'dawnexus_sec_claude_oauth_9566';
+export const LEGACY_OAUTH_CLIENT_SECRET = 'dawnexus_sec_gemini_oauth_9566';
 export const FALLBACK_MCP_KEY = 'dawnexus_mcp_sec_dd4261fa4c111e447e53e7774bab3965';
 
 export function getOAuthSecret(): string {
-  return process.env.JWT_SECRET || process.env.MCP_API_KEY || 'dawnexus_oauth_signing_secret_v718';
+  return process.env.JWT_SECRET || process.env.MCP_API_KEY || 'dawnexus_oauth_signing_secret_v800';
 }
 
 export function getExpectedClientId(): string {
@@ -32,13 +33,14 @@ export function validateClientCredentials(clientId: string, clientSecret: string
   const secValid =
     clientSecret === expectedSec ||
     clientSecret === DEFAULT_OAUTH_CLIENT_SECRET ||
+    clientSecret === LEGACY_OAUTH_CLIENT_SECRET ||
     clientSecret === FALLBACK_MCP_KEY ||
     (process.env.MCP_API_KEY && clientSecret === process.env.MCP_API_KEY.trim());
 
   if (!secValid) return false;
 
   // When client secret is verified, permit any valid client ID
-  // (e.g. dawnexus-gemini-client, user_bound_custom-mcp-*, google, gemini, etc.)
+  // (e.g. dawnexus-claude-client, dawnexus-gemini-client, user_bound_custom-mcp-*, etc.)
   return true;
 }
 
