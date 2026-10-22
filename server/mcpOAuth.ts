@@ -29,20 +29,17 @@ export function validateClientCredentials(clientId: string, clientSecret: string
   const expectedId = getExpectedClientId();
   const expectedSec = getExpectedClientSecret();
 
-  const idValid =
-    !clientId ||
-    clientId === expectedId ||
-    clientId === DEFAULT_OAUTH_CLIENT_ID ||
-    clientId === 'gemini' ||
-    clientId === 'google';
-
   const secValid =
     clientSecret === expectedSec ||
     clientSecret === DEFAULT_OAUTH_CLIENT_SECRET ||
     clientSecret === FALLBACK_MCP_KEY ||
     (process.env.MCP_API_KEY && clientSecret === process.env.MCP_API_KEY.trim());
 
-  return idValid && secValid;
+  if (!secValid) return false;
+
+  // When client secret is verified, permit any valid client ID
+  // (e.g. dawnexus-gemini-client, user_bound_custom-mcp-*, google, gemini, etc.)
+  return true;
 }
 
 /**
