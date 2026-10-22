@@ -19,9 +19,13 @@ import { mcpRouter } from './mcpServer.js';
 import { mcpStreamableRouter } from './mcpStreamable.js';
 import { getOAuthServerMetadata, getOAuthProtectedResourceMetadata, mcpOAuthRouter } from './mcpOAuth.js';
 import { resolvePageMetadata, injectPageMetadata } from './ssrRenderer.js';
+import { ensurePostgresEmailTables } from './scripts/migrate_email_tables_postgres.js';
 
 // Initialize DB schema & tables
 initDatabase();
+ensurePostgresEmailTables().catch((err: any) => {
+  console.warn('[Postgres Email Tables Notice]:', err?.message || err);
+});
 
 // Clean up expired sessions every hour
 const sessionTimer = setInterval(() => {

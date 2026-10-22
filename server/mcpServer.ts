@@ -1570,61 +1570,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
                     name: {
                       type: 'string',
                       description: 'Name of the MCP tool to execute',
-                      enum: [
-                        'chatbot_get_public_knowledge',
-                        'chatbot_estimate_pricing',
-                        'chatbot_submit_enquiry',
-                        'enquiries_admin_list',
-                        'analytics_get_overview',
-                        'analytics_get_conversion_funnel',
-                        'analytics_get_page_performance',
-                        'analytics_get_visitor_journeys',
-                        'analytics_get_exit_analysis',
-                        'analytics_get_click_heatmap',
-                        'analytics_get_scroll_depth',
-                        'analytics_get_form_abandonment',
-                        'analytics_get_session_replay_summary',
-                        'analytics_get_bot_filter_stats',
-                        'analytics_get_tracking_health',
-                        'website_list_editable_pages',
-                        'website_get_page_content',
-                        'website_get_page_metadata',
-                        'website_get_content_version_history',
-                        'website_create_optimization_draft',
-                        'website_preview_optimization_draft',
-                        'website_get_approval_status',
-                        'website_publish_approved_changes',
-                        'website_rollback_content_version',
-                        'get_blog_categories',
-                        'get_existing_articles',
-                        'get_search_console_opportunities',
-                        'get_weekly_content_context',
-                        'create_blog_draft',
-                        'update_blog_draft',
-                        'upload_blog_image',
-                        'attach_blog_image',
-                        'verify_blog_image',
-                        'update_blog_image_metadata',
-                        'schedule_blog_draft',
-                        'run_seo_quality_check',
-                        'gsc_get_connection_status',
-                        'gsc_list_properties',
-                        'gsc_get_search_analytics',
-                        'gsc_get_top_queries',
-                        'gsc_get_top_pages',
-                        'gsc_get_research_status',
-                        'gsc_run_research_sync',
-                        'gsc_get_research_job',
-                        'ga4_get_connection_status',
-                        'ga4_list_properties',
-                        'ga4_get_overview',
-                        'ga4_get_traffic_acquisition',
-                        'ga4_get_landing_pages',
-                        'ga4_get_page_performance',
-                        'ga4_get_realtime',
-                        'ga4_get_report',
-                        'ga4_get_analytics_status'
-                      ]
+                      enum: MCP_TOOLS.map(t => t.name)
                     },
                     arguments: {
                       type: 'object',
@@ -1990,6 +1936,154 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           summary: 'Get realtime active users',
           description: 'Returns active users in the last 30 minutes and active screen names.',
           responses: { '200': { description: 'Realtime report' } }
+        }
+      },
+      '/tools/email/accounts': {
+        get: {
+          operationId: 'list_connected_email_accounts',
+          summary: 'List authorized connected Gmail accounts',
+          description: 'Retrieve authorized connected Gmail and Google Workspace accounts in Dawnexus. Returns account identifiers, email addresses, display names, and connection status. Read-only. Never returns tokens.',
+          responses: { '200': { description: 'Connected email accounts' } }
+        }
+      },
+      '/tools/email/search': {
+        get: {
+          operationId: 'search_emails',
+          summary: 'Search connected Gmail accounts',
+          description: 'Search authorized connected Gmail accounts for messages and threads. Supports Gmail search operators (from:, to:, subject:, is:unread, etc.), filters, and bounded pagination. Read-only.',
+          parameters: [
+            { name: 'account_id', in: 'query', schema: { type: 'integer' }, description: 'Optional account ID' },
+            { name: 'query', in: 'query', schema: { type: 'string' }, description: 'Gmail search query' },
+            { name: 'unread_only', in: 'query', schema: { type: 'boolean' }, description: 'Filter unread' },
+            { name: 'likely_unanswered_only', in: 'query', schema: { type: 'boolean' }, description: 'Filter unanswered enquiries' },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 10 }, description: 'Max results' }
+          ],
+          responses: { '200': { description: 'Search results' } }
+        }
+      },
+      '/tools/email/thread': {
+        get: {
+          operationId: 'get_email_thread',
+          summary: 'Get email thread messages',
+          description: 'Retrieve an email thread and its messages from an authorized connected account. Validates account ownership. Content is sanitized and treated as untrusted input. Read-only.',
+          parameters: [
+            { name: 'account_id', in: 'query', required: true, schema: { type: 'integer' }, description: 'Connected account ID' },
+            { name: 'thread_id', in: 'query', required: true, schema: { type: 'string' }, description: 'Gmail thread ID' }
+          ],
+          responses: { '200': { description: 'Email thread with messages' } }
+        }
+      },
+      '/tools/email/message': {
+        get: {
+          operationId: 'get_email_message',
+          summary: 'Get single email message',
+          description: 'Retrieve a specific email message after verifying account ownership. Read-only.',
+          parameters: [
+            { name: 'account_id', in: 'query', required: true, schema: { type: 'integer' }, description: 'Connected account ID' },
+            { name: 'message_id', in: 'query', required: true, schema: { type: 'string' }, description: 'Gmail message ID' }
+          ],
+          responses: { '200': { description: 'Email message details' } }
+        }
+      },
+      '/tools/email/drafts': {
+        get: {
+          operationId: 'list_email_reply_drafts',
+          summary: 'List saved Dawnexus reply drafts',
+          description: 'List saved Dawnexus reply drafts for authorized accounts. Supports status and date filtering. Read-only.',
+          parameters: [
+            { name: 'account_id', in: 'query', schema: { type: 'integer' }, description: 'Optional account ID' },
+            { name: 'status', in: 'query', schema: { type: 'string' }, description: 'Filter by status' },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 }, description: 'Max items' }
+          ],
+          responses: { '200': { description: 'List of drafts' } }
+        },
+        post: {
+          operationId: 'create_email_reply_draft',
+          summary: 'Create proposed email reply draft in Dawnexus',
+          description: 'Generate or register a proposed email reply draft in Dawnexus against a specific message or thread. Enforces idempotency to prevent duplicate drafts. NEVER sends email.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['account_id', 'thread_id', 'message_id', 'recipient_email', 'subject', 'proposed_body'],
+                  properties: {
+                    account_id: { type: 'integer', description: 'Originating account ID' },
+                    thread_id: { type: 'string', description: 'Thread ID' },
+                    message_id: { type: 'string', description: 'Message ID being replied to' },
+                    recipient_email: { type: 'string', description: 'Recipient email' },
+                    recipient_name: { type: 'string', description: 'Optional recipient name' },
+                    subject: { type: 'string', description: 'Reply subject' },
+                    proposed_body: { type: 'string', description: 'Proposed reply body' },
+                    idempotency_key: { type: 'string', description: 'Optional idempotency key' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '201': { description: 'Draft created or retrieved' } }
+        }
+      },
+      '/tools/email/drafts/{id}': {
+        get: {
+          operationId: 'get_email_reply_draft',
+          summary: 'Get email reply draft by ID',
+          description: 'Retrieve a specific Dawnexus email reply draft by ID after authorization verification. Read-only.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'integer' }, description: 'Draft ID' }
+          ],
+          responses: { '200': { description: 'Draft details' } }
+        },
+        put: {
+          operationId: 'update_email_reply_draft',
+          summary: 'Update email reply draft',
+          description: 'Update the subject, body, or status of an existing Dawnexus reply draft. Requires draft ID and supports optimistic version control.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'integer' }, description: 'Draft ID' }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    subject: { type: 'string', description: 'Updated subject' },
+                    proposed_body: { type: 'string', description: 'Updated body' },
+                    status: { type: 'string', enum: ['Proposed', 'Reviewed', 'Needs Attention', 'Archived'] },
+                    expected_version: { type: 'integer', description: 'Expected version' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Updated draft' } }
+        }
+      },
+      '/tools/email/drafts/{id}/save-to-gmail': {
+        post: {
+          operationId: 'save_email_draft_to_gmail',
+          summary: 'Save approved draft to Gmail as a draft',
+          description: 'Explicitly save an approved Dawnexus reply draft to the corresponding Gmail account as a Gmail draft using Gmail API. DOES NOT SEND the message. Requires explicit approval confirmation (approved: true).',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'integer' }, description: 'Draft ID' }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['approved'],
+                  properties: {
+                    approved: { type: 'boolean', description: 'Must be true confirming human approval to save as a draft in Gmail' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Saved draft in Gmail confirmation' } }
         }
       }
     }
@@ -2478,6 +2572,107 @@ mcpRouter.get('/tools/ga4/analytics-status', async (req: Request, res: Response)
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to get analytics status' });
+  }
+});
+
+// 6b. Version 8.2.5 — Email AI & Multi-Inbox Tools
+mcpRouter.get('/tools/email/accounts', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('list_connected_email_accounts', {}, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to list email accounts' });
+  }
+});
+
+mcpRouter.get('/tools/email/search', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('search_emails', {
+      account_id: req.query.account_id ? Number(req.query.account_id) : undefined,
+      query: req.query.query,
+      unread_only: req.query.unread_only === 'true',
+      likely_unanswered_only: req.query.likely_unanswered_only === 'true',
+      limit: req.query.limit ? Number(req.query.limit) : 10
+    }, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to search emails' });
+  }
+});
+
+mcpRouter.get('/tools/email/thread', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('get_email_thread', {
+      account_id: Number(req.query.account_id),
+      thread_id: String(req.query.thread_id)
+    }, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get email thread' });
+  }
+});
+
+mcpRouter.get('/tools/email/message', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('get_email_message', {
+      account_id: Number(req.query.account_id),
+      message_id: String(req.query.message_id)
+    }, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to get email message' });
+  }
+});
+
+mcpRouter.get('/tools/email/drafts', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('list_email_reply_drafts', {
+      account_id: req.query.account_id ? Number(req.query.account_id) : undefined,
+      status: req.query.status ? String(req.query.status) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : 20
+    }, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to list drafts' });
+  }
+});
+
+mcpRouter.post('/tools/email/drafts', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('create_email_reply_draft', req.body, req.ip);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to create email reply draft' });
+  }
+});
+
+mcpRouter.get('/tools/email/drafts/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('get_email_reply_draft', { id: Number(req.params.id) }, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err?.message || 'Draft not found' });
+  }
+});
+
+mcpRouter.put('/tools/email/drafts/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('update_email_reply_draft', { id: Number(req.params.id), ...req.body }, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to update draft' });
+  }
+});
+
+mcpRouter.post('/tools/email/drafts/:id/save-to-gmail', async (req: Request, res: Response) => {
+  try {
+    const result = await executeMcpTool('save_email_draft_to_gmail', {
+      id: Number(req.params.id),
+      approved: Boolean(req.body?.approved)
+    }, req.ip);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to save draft to Gmail' });
   }
 });
 

@@ -314,3 +314,4 @@ emailAiRouter.delete('/drafts/:id', (req: Request, res: Response) => {
     return res.status(500).json({ error: err?.message || 'Failed to delete draft' });
   }
 });
+
