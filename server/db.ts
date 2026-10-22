@@ -164,6 +164,18 @@ export function initDatabase() {
     );
   `);
 
+  // Table for 301 blog redirects & slug history
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blog_redirects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      old_path TEXT NOT NULL UNIQUE,
+      new_path TEXT NOT NULL,
+      status_code INTEGER DEFAULT 301,
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Table for admin notification email settings
   db.exec(`
     CREATE TABLE IF NOT EXISTS notification_settings (
@@ -1045,6 +1057,41 @@ export function getBlogBySlug(slug: string): BlogRecord | null {
   return (res as unknown as BlogRecord) || null;
 }
 
+export interface BlogRedirectRecord {
+  id: number;
+  old_path: string;
+  new_path: string;
+  status_code: number;
+  notes: string;
+  created_at: string;
+}
+
+export function getBlogRedirect(pathOrSlug: string): BlogRedirectRecord | null {
+  const normalized = pathOrSlug.startsWith('/') ? pathOrSlug : `/blog/${pathOrSlug}`;
+  const stmt = db.prepare('SELECT * FROM blog_redirects WHERE old_path = ? OR old_path = ?');
+  const res = stmt.get(normalized, pathOrSlug);
+  return (res as unknown as BlogRedirectRecord) || null;
+}
+
+export function addBlogRedirect(oldPath: string, newPath: string, statusCode = 301, notes = ''): void {
+  const normOld = oldPath.startsWith('/') ? oldPath : `/blog/${oldPath}`;
+  const normNew = newPath.startsWith('/') || newPath.startsWith('http') ? newPath : `/blog/${newPath}`;
+  const stmt = db.prepare(`
+    INSERT INTO blog_redirects (old_path, new_path, status_code, notes)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(old_path) DO UPDATE SET
+      new_path = excluded.new_path,
+      status_code = excluded.status_code,
+      notes = excluded.notes
+  `);
+  stmt.run(normOld, normNew, statusCode, notes);
+}
+
+export function getAllBlogRedirects(): BlogRedirectRecord[] {
+  const stmt = db.prepare('SELECT * FROM blog_redirects ORDER BY id ASC');
+  return (stmt.all() as unknown as BlogRedirectRecord[]) || [];
+}
+
 export interface GetBlogsQuery {
   search?: string;
   status?: string;
@@ -1227,6 +1274,11 @@ export function deleteBlog(id: number): boolean {
   const stmt = db.prepare('DELETE FROM blogs WHERE id = ?');
   const res = stmt.run(id);
   const ok = Number(res.changes) > 0;
+  if (ok) {
+    deleteBlogFromSupabase(id).catch(err => {
+      console.warn(`[Supabase Delete Warning] Blog #${id}:`, err?.message || err);
+    });
+  }
   return ok;
 }
 
