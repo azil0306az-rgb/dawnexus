@@ -13,6 +13,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpService } from './mcpService.js';
 import { mcpAuthMiddleware, getMcpAuditTrail, getExpectedMcpKey } from './mcpAuth.js';
+import { mcpOAuthRouter } from './mcpOAuth.js';
 
 export const mcpRouter = Router();
 
@@ -968,6 +969,21 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           in: 'header',
           name: 'x-mcp-api-key',
           description: 'Provide your MCP_API_KEY in the x-mcp-api-key header'
+        },
+        OAuth2: {
+          type: 'oauth2',
+          description: 'Standard OAuth 2.0 Authorization for Google Gemini / Vertex AI / Extensions',
+          flows: {
+            clientCredentials: {
+              tokenUrl: `${baseUrl}/oauth/token`,
+              scopes: { 'mcp:tools': 'Full tool execution access' }
+            },
+            authorizationCode: {
+              authorizationUrl: `${baseUrl}/oauth/authorize`,
+              tokenUrl: `${baseUrl}/oauth/token`,
+              scopes: { 'mcp:tools': 'Full tool execution access' }
+            }
+          }
         }
       },
       schemas: {
@@ -1512,6 +1528,10 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
 
   res.json(spec);
 });
+
+// 2b. Standard OAuth 2.0 Endpoints for Google Gemini / Vertex AI / Extensions
+mcpRouter.use('/oauth', mcpOAuthRouter);
+mcpRouter.use(mcpOAuthRouter);
 
 // Apply authentication middleware to all MCP operations below
 mcpRouter.use(mcpAuthMiddleware);

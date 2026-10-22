@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
+import { verifyOAuthAccessToken } from './mcpOAuth.js';
 
 export interface McpAuditEntry {
   id: string;
@@ -94,14 +95,22 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
     });
   }
 
-  // Constant-time comparison to prevent timing attacks
-  const bufProvided = Buffer.from(providedToken);
   let authenticated = false;
-  for (const k of validKeys) {
-    const bufK = Buffer.from(k);
-    if (bufProvided.length === bufK.length && crypto.timingSafeEqual(bufProvided, bufK)) {
-      authenticated = true;
-      break;
+
+  // 1. Check if provided token is a valid signed OAuth 2.0 Access Token
+  if (verifyOAuthAccessToken(providedToken)) {
+    authenticated = true;
+  }
+
+  // 2. Constant-time comparison against configured API keys (x-mcp-api-key / Bearer fallback)
+  if (!authenticated) {
+    const bufProvided = Buffer.from(providedToken);
+    for (const k of validKeys) {
+      const bufK = Buffer.from(k);
+      if (bufProvided.length === bufK.length && crypto.timingSafeEqual(bufProvided, bufK)) {
+        authenticated = true;
+        break;
+      }
     }
   }
 

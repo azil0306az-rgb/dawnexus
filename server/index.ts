@@ -15,6 +15,7 @@ import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
 import { performDatabaseHealthCheck } from './dbHealth.js';
 import { mcpRouter } from './mcpServer.js';
+import { getOAuthServerMetadata } from './mcpOAuth.js';
 
 // Initialize DB schema & tables
 initDatabase();
@@ -162,6 +163,15 @@ app.get('/api/sitemap.xml', handleSitemapRequest);
 
 // Google OAuth 2.0 callback endpoint (needs to be reachable by Google redirection without requiring pre-existing admin cookie)
 app.get('/api/admin/seo-research/google/callback', handleGoogleOAuthCallback);
+
+// RFC 8414 OAuth 2.0 Authorization Server Metadata Discovery
+const handleOAuthDiscovery = (req: any, res: any) => {
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const host = req.get('host') || 'www.dawnexus.in';
+  res.json(getOAuthServerMetadata(`${protocol}://${host}`));
+};
+app.get('/.well-known/oauth-authorization-server', handleOAuthDiscovery);
+app.get('/.well-known/openid-configuration', handleOAuthDiscovery);
 
 // API route mounts
 app.use('/api/mcp', mcpRouter);

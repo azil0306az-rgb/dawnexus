@@ -257,4 +257,89 @@ describe('Dawnexus Version 7.1.8: Gemini + MCP Unified Integration', () => {
     const body = await authRes.json();
     assert.ok(body.error.includes('Messages'));
   });
+
+  test('11. Standard OAuth 2.0 Discovery: RFC 8414 metadata endpoint', async () => {
+    const metaRes = await fetch(`${baseUrl}/.well-known/oauth-authorization-server`);
+    assert.strictEqual(metaRes.status, 200);
+    const meta = await metaRes.json();
+
+    assert.ok(meta.authorization_endpoint.includes('/api/mcp/oauth/authorize'));
+    assert.ok(meta.token_endpoint.includes('/api/mcp/oauth/token'));
+    assert.ok(meta.grant_types_supported.includes('client_credentials'));
+    assert.ok(meta.grant_types_supported.includes('authorization_code'));
+  });
+
+  test('12. Standard OAuth 2.0: Client Credentials grant issues signed access token', async () => {
+    const tokenRes = await fetch(`${baseUrl}/api/mcp/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'client_credentials',
+        client_id: 'dawnexus-gemini-client',
+        client_secret: 'dawnexus_sec_gemini_oauth_9566',
+        scope: 'mcp:tools'
+      })
+    });
+
+    assert.strictEqual(tokenRes.status, 200);
+    const tokenData = await tokenRes.json();
+
+    assert.ok(tokenData.access_token);
+    assert.strictEqual(tokenData.token_type, 'Bearer');
+    assert.ok(tokenData.expires_in > 0);
+
+    // Verify the issued OAuth token authenticates tool calls
+    const toolRes = await fetch(`${baseUrl}/api/mcp/tools/call`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${tokenData.access_token}`
+      },
+      body: JSON.stringify({
+        name: 'chatbot_estimate_pricing',
+        arguments: {
+          websiteType: 'corporate-business',
+          pageCount: 3,
+          designTier: 'Standard'
+        }
+      })
+    });
+
+    assert.strictEqual(toolRes.status, 200);
+    const toolBody = await toolRes.json();
+    assert.ok(toolBody.referenceId);
+  });
+
+  test('13. Standard OAuth 2.0: Authorization Code flow with redirect', async () => {
+    // 1. Authorize
+    const authRes = await fetch(`${baseUrl}/api/mcp/oauth/authorize?response_type=code&client_id=dawnexus-gemini-client&redirect_uri=https://oauth.pstmn.io/v1/callback&state=test_state`, {
+      redirect: 'manual'
+    });
+
+    assert.strictEqual(authRes.status, 302);
+    const location = authRes.headers.get('location') || '';
+    const redirectUrl = new URL(location);
+    const code = redirectUrl.searchParams.get('code');
+    const state = redirectUrl.searchParams.get('state');
+
+    assert.ok(code);
+    assert.strictEqual(state, 'test_state');
+
+    // 2. Exchange code for access token
+    const exchangeRes = await fetch(`${baseUrl}/api/mcp/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code,
+        client_id: 'dawnexus-gemini-client',
+        client_secret: 'dawnexus_sec_gemini_oauth_9566'
+      })
+    });
+
+    assert.strictEqual(exchangeRes.status, 200);
+    const exchanged = await exchangeRes.json();
+    assert.ok(exchanged.access_token);
+    assert.ok(exchanged.refresh_token);
+  });
 });
