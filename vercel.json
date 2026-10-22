@@ -1,6 +1,11 @@
 {
   "buildCommand": "vite build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "dist/**"
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/publish",
@@ -9,6 +14,24 @@
     {
       "path": "/api/cron/db-health",
       "schedule": "30 2 * * *"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/blog/local-seo-google-maps-playbook",
+      "destination": "https://www.dawnexus.in/blog/local-seo-playbook-small-businesses",
+      "statusCode": 301
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "dawnexus.in"
+        }
+      ],
+      "destination": "https://www.dawnexus.in/$1",
+      "statusCode": 301
     }
   ],
   "headers": [
@@ -70,9 +93,24 @@
       "destination": "/api/index.ts"
     },
     {
+      "source": "/services/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/blog",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/blog/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/website-cost-calculator",
+      "destination": "/api/index.ts"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
 }
-

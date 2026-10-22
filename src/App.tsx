@@ -35,15 +35,15 @@ const HomePageContent: React.FC = () => {
   usePageSeo({
     title: 'Dawnexus | Web Development, AI Video & Digital Marketing',
     description: 'Dawnexus helps businesses grow with professional website development, AI-powered video creation, digital advertising, SEO, and Google Business Profile optimization.',
-    canonicalUrl: 'https://dawnexus.in/',
-    ogImage: 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+    canonicalUrl: 'https://www.dawnexus.in/',
+    ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: {
       '@context': 'https://schema.org',
       '@type': 'ProfessionalService',
       'name': 'Dawnexus',
-      'url': 'https://dawnexus.in/',
-      'logo': 'https://dawnexus.in/brand/dawnexus-logo-original.png',
-      'image': 'https://dawnexus.in/brand/dawnexus-logo-original.png',
+      'url': 'https://www.dawnexus.in/',
+      'logo': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
+      'image': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
       'description': 'Professional website development, AI video creation, digital advertising, SEO, and Google Business Profile optimization.'
     }
   });

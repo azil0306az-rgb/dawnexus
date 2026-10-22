@@ -342,7 +342,7 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
       target_questions: targetQuestions,
       seo_title: seoTitle.trim() || title.trim(),
       meta_description: metaDescription.trim() || excerpt.trim(),
-      canonical_url: canonicalUrl.trim() || `https://dawnexus.in/blog/${slug.trim()}`,
+      canonical_url: canonicalUrl.trim() || `https://www.dawnexus.in/blog/${slug.trim()}`,
       status: resolvedStatus,
       scheduled_at: scheduledUtc,
       published_at: resolvedStatus === 'Published' ? (initialBlog?.published_at || new Date().toISOString()) : null,
@@ -394,7 +394,7 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                 {status}
               </span>
               <span>•</span>
-              <span>URL: https://dawnexus.in/blog/{slug || 'your-slug'}</span>
+              <span>URL: https://www.dawnexus.in/blog/{slug || 'your-slug'}</span>
             </div>
           </div>
         </div>
@@ -924,11 +924,11 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                   type="text"
                   value={canonicalUrl}
                   onChange={e => setCanonicalUrl(e.target.value)}
-                  placeholder={`https://dawnexus.in/blog/${slug || 'your-slug'}`}
+                  placeholder={`https://www.dawnexus.in/blog/${slug || 'your-slug'}`}
                   className="w-full px-4 py-2.5 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm font-mono text-xs focus:outline-none transition"
                 />
                 <p className="text-[11px] text-neutral-500 mt-1">
-                  Leave as canonical URL on https://dawnexus.in/ to prevent duplicate content indexing.
+                  Leave as canonical URL on https://www.dawnexus.in/ to prevent duplicate content indexing.
                 </p>
               </div>
 
@@ -939,7 +939,7 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                 </span>
                 <div className="p-4 bg-[#141414] border border-[#252525] rounded-lg max-w-xl">
                   <div className="text-xs text-neutral-400 flex items-center space-x-1.5 mb-1">
-                    <span className="text-white font-medium">dawnexus.in</span>
+                    <span className="text-white font-medium">www.dawnexus.in</span>
                     <span>› blog › {slug || 'article-slug'}</span>
                   </div>
                   <h4 className="text-base font-medium text-[#8ab4f8] hover:underline cursor-pointer line-clamp-1">

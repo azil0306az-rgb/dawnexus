@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/admin/
 
-Sitemap: https://dawnexus.in/sitemap.xml
+Sitemap: https://www.dawnexus.in/sitemap.xml
