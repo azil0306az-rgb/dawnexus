@@ -42,6 +42,10 @@
   ],
   "rewrites": [
     {
+      "source": "/.well-known/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
       "source": "/sitemap.xml",
       "destination": "/api/index.ts"
     },
