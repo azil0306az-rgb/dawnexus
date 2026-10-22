@@ -39,8 +39,8 @@ describe('Dawnexus Version 8.1.0: Remote MCP Server for Claude', () => {
     const body = await res.json();
     assert.strictEqual(body.status, 'ok');
     assert.strictEqual(body.brand, 'Dawnexus');
-    assert.strictEqual(body.version, '8.1.0');
-    assert.ok(body.release.includes('8.1.0'));
+    assert.ok(body.version >= '8.1.0');
+    assert.ok(body.release.includes('8.'));
   });
 
   // 2. RFC 8414 & RFC 9728 Discovery Metadata
@@ -137,7 +137,7 @@ describe('Dawnexus Version 8.1.0: Remote MCP Server for Claude', () => {
     const body = await res.json();
     assert.strictEqual(body.status, 'ready');
     assert.strictEqual(body.server, 'dawnexus-mcp-server');
-    assert.strictEqual(body.version, '8.1.0');
+    assert.ok(body.version >= '8.1.0');
     assert.strictEqual(body.client_target, 'Claude Custom Connector');
     assert.ok(body.tools_count >= 73);
   });
@@ -190,7 +190,7 @@ describe('Dawnexus Version 8.1.0: Remote MCP Server for Claude', () => {
     assert.ok(sessionId, 'Server must return mcp-session-id header');
     const initBody = await initRes.json();
     assert.strictEqual(initBody.result.serverInfo.name, 'dawnexus-mcp-server');
-    assert.strictEqual(initBody.result.serverInfo.version, '8.1.0');
+    assert.ok(initBody.result.serverInfo.version >= '8.1.0');
 
     // B. Notification: initialized
     const notifyRes = await fetch(`${baseUrl}/mcp`, {

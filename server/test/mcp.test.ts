@@ -114,10 +114,10 @@ test('MCP Tools: get_existing_articles returns articles and authentic internal l
   assert.ok(Array.isArray(data.internalLinkTargets));
   
   const targetUrls = data.internalLinkTargets.map((t: any) => t.url);
-  assert.ok(targetUrls.includes('https://dawnexus.in/'));
-  assert.ok(targetUrls.includes('https://dawnexus.in/services/website-design'));
-  assert.ok(targetUrls.includes('https://dawnexus.in/services/seo-services'));
-  assert.ok(targetUrls.includes('https://dawnexus.in/website-cost-calculator'));
+  assert.ok(targetUrls.includes('https://www.dawnexus.in/'));
+  assert.ok(targetUrls.includes('https://www.dawnexus.in/services/website-design'));
+  assert.ok(targetUrls.includes('https://www.dawnexus.in/services/seo-services'));
+  assert.ok(targetUrls.includes('https://www.dawnexus.in/website-cost-calculator'));
 });
 
 test('MCP Tools: get_search_console_opportunities returns real status without fabricating metrics', async () => {
@@ -1006,7 +1006,7 @@ Enterprise web architecture demands robust security, scalable infrastructure, an
 
 ### Key Architectural Pillars
 Modern organizations leverage distributed microfrontends and serverless APIs to maximize performance.
-Check our [broken internal resource](https://dawnexus.in/completely-invalid-nonexistent-path-987654).
+Check our [broken internal resource](https://www.dawnexus.in/completely-invalid-nonexistent-path-987654).
 Also review [website design services](/services/website-design).
 
 ### Operational Excellence

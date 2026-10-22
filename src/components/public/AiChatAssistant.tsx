@@ -166,7 +166,7 @@ export const AiChatAssistant: React.FC = () => {
                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                   Dawnexus Assistant
                   <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#C7FF4D]/10 text-[#C7FF4D] border border-[#C7FF4D]/20">
-                    MCP v8.1.0
+                    MCP v8.2.0
                   </span>
                 </h3>
                 <p className="text-xs text-neutral-400 flex items-center gap-1.5 mt-0.5">

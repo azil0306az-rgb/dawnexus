@@ -267,7 +267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </a>
             <div className="mt-2 text-[11px] font-mono text-[#A5A5A5] flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#C7FF4D]" />
-              <span>Admin Dashboard • v8.1.0</span>
+              <span>Admin Dashboard • v8.2.0</span>
             </div>
           </div>
 

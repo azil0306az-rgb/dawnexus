@@ -154,7 +154,7 @@ export const IntegrationDiagnostics: React.FC = () => {
               <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
                 <span>Integration Health & Diagnostics</span>
                 <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-lime-400/10 text-lime-400 border border-lime-400/30">
-                  v8.1.0
+                  v8.2.0
                 </span>
               </h1>
             </div>
