@@ -912,6 +912,122 @@ export const MCP_TOOLS: Tool[] = [
         days: { type: 'number', description: 'Days to analyze (default 30)' }
       }
     }
+  },
+  // --- Version 8.2.5: Email AI & Multi-Inbox Tools ---
+  {
+    name: 'list_connected_email_accounts',
+    description: 'Retrieve authorized connected Gmail and Google Workspace accounts in Dawnexus. Returns account identifiers, email addresses, display names, and connection status. Read-only. Never returns tokens.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'search_emails',
+    description: 'Search authorized connected Gmail accounts for messages and threads. Supports Gmail search operators (from:, to:, subject:, is:unread, etc.), filters, and bounded pagination. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'number', description: 'Optional specific account ID to search. If omitted, searches across all authorized connected accounts.' },
+        query: { type: 'string', description: 'Gmail search query or keywords (e.g. "is:unread", "from:client@example.com", "subject:quote")' },
+        unread_only: { type: 'boolean', description: 'Filter only unread messages' },
+        likely_unanswered_only: { type: 'boolean', description: 'Filter likely unanswered customer enquiries' },
+        limit: { type: 'number', description: 'Max results to return (default 10, max 25)' },
+        page_token: { type: 'string', description: 'Pagination token for next page' }
+      }
+    }
+  },
+  {
+    name: 'get_email_thread',
+    description: 'Retrieve an email thread and its messages from an authorized connected account. Validates account ownership. Content is sanitized and treated as untrusted input. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'number', description: 'Connected account ID' },
+        thread_id: { type: 'string', description: 'Gmail thread ID' }
+      },
+      required: ['account_id', 'thread_id']
+    }
+  },
+  {
+    name: 'get_email_message',
+    description: 'Retrieve a specific email message after verifying account ownership. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'number', description: 'Connected account ID' },
+        message_id: { type: 'string', description: 'Gmail message ID' }
+      },
+      required: ['account_id', 'message_id']
+    }
+  },
+  {
+    name: 'create_email_reply_draft',
+    description: 'Generate or register a proposed email reply draft in Dawnexus against a specific message or thread. Enforces idempotency to prevent duplicate drafts. NEVER sends email.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'number', description: 'Originating connected account ID' },
+        thread_id: { type: 'string', description: 'Gmail thread ID being replied to' },
+        message_id: { type: 'string', description: 'Specific message ID being answered' },
+        recipient_email: { type: 'string', description: 'Target recipient email address' },
+        recipient_name: { type: 'string', description: 'Optional recipient name' },
+        subject: { type: 'string', description: 'Reply subject line' },
+        proposed_body: { type: 'string', description: 'Complete proposed reply body in plain text or markdown' },
+        idempotency_key: { type: 'string', description: 'Unique idempotency key to prevent duplicate drafts on retry' }
+      },
+      required: ['account_id', 'thread_id', 'message_id', 'recipient_email', 'subject', 'proposed_body']
+    }
+  },
+  {
+    name: 'list_email_reply_drafts',
+    description: 'List saved Dawnexus reply drafts for authorized accounts. Supports status and date filtering. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: { type: 'number', description: 'Optional filter by connected account ID' },
+        status: { type: 'string', enum: ['All', 'Proposed', 'Reviewed', 'Saved to Gmail', 'Needs Attention', 'Archived'], description: 'Filter by draft status' },
+        limit: { type: 'number', description: 'Max items to return' }
+      }
+    }
+  },
+  {
+    name: 'get_email_reply_draft',
+    description: 'Retrieve a specific Dawnexus email reply draft by ID after authorization verification. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Draft ID in Dawnexus database' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'update_email_reply_draft',
+    description: 'Update the subject, body, or status of an existing Dawnexus reply draft. Requires draft ID and supports optimistic version control.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Draft ID in Dawnexus database' },
+        subject: { type: 'string', description: 'Updated subject' },
+        proposed_body: { type: 'string', description: 'Updated proposed reply body' },
+        status: { type: 'string', enum: ['Proposed', 'Reviewed', 'Needs Attention', 'Archived'], description: 'Updated status' },
+        expected_version: { type: 'number', description: 'Expected draft version for concurrency safety' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'save_email_draft_to_gmail',
+    description: 'Explicitly save an approved Dawnexus reply draft to the corresponding Gmail account as a Gmail draft using Gmail API. DOES NOT SEND the message. Requires explicit approval.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Draft ID in Dawnexus database to save to Gmail' },
+        approved: { type: 'boolean', description: 'Must be true confirming the user has explicitly reviewed and approved saving the draft to Gmail' }
+      },
+      required: ['id', 'approved']
+    }
   }
 ];
 
@@ -1192,6 +1308,34 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
     case 'get_chatbot_analytics':
       return McpService.getChatbotAnalytics(toolArgs);
 
+    // --- Version 8.2.5: Email AI & Multi-Inbox Tools ---
+    case 'list_connected_email_accounts':
+      return await McpService.listConnectedEmailAccounts('admin');
+
+    case 'search_emails':
+      return await McpService.searchEmails(toolArgs, callerIp, 'admin');
+
+    case 'get_email_thread':
+      return await McpService.getEmailThread(toolArgs, callerIp, 'admin');
+
+    case 'get_email_message':
+      return await McpService.getEmailMessage(toolArgs, callerIp, 'admin');
+
+    case 'create_email_reply_draft':
+      return await McpService.createEmailReplyDraft(toolArgs, callerIp, 'admin');
+
+    case 'list_email_reply_drafts':
+      return await McpService.listEmailReplyDrafts(toolArgs, 'admin');
+
+    case 'get_email_reply_draft':
+      return await McpService.getEmailReplyDraft(toolArgs, 'admin');
+
+    case 'update_email_reply_draft':
+      return await McpService.updateEmailReplyDraft(toolArgs, callerIp, 'admin');
+
+    case 'save_email_draft_to_gmail':
+      return await McpService.saveEmailDraftToGmail(toolArgs, callerIp, 'admin');
+
     default:
       throw new Error(`Tool '${name}' is not recognized or permitted.`);
   }
@@ -1204,7 +1348,7 @@ export function createDawnexusMcpServer(): Server {
   const server = new Server(
     {
       name: 'dawnexus-mcp-server',
-      version: '8.2.0'
+      version: '8.2.5'
     },
     {
       capabilities: {
@@ -1265,7 +1409,7 @@ mcpRouter.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'Dawnexus MCP Server',
-    version: '8.2.0',
+    version: '8.2.5',
     transport: ['Streamable HTTP (/mcp)', 'SSE (/api/mcp/sse)', 'JSON-RPC POST (/api/mcp/rpc)', 'REST OpenAPI (/api/mcp/tools)'],
     policy: 'Draft first. Human approval required. Claude MCP Integration.',
     toolsCount: MCP_TOOLS.length,
@@ -1283,7 +1427,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
     openapi: '3.1.0',
     info: {
       title: 'Dawnexus MCP API',
-      version: '8.2.0',
+      version: '8.2.5',
       description: 'Dawnexus Model Context Protocol (MCP) and Action API for Claude and AI integrations to research, plan, draft, and audit SEO blog posts, inspect Search Console & GA4 analytics, monitor first-party visitor telemetry, and manage approved website content. All content creation is saved strictly as Drafts requiring human approval in the Admin panel.'
     },
     servers: [{ url: baseUrl }],
@@ -1913,7 +2057,7 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           capabilities: { tools: {} },
           serverInfo: {
             name: 'dawnexus-mcp-server',
-            version: '8.2.0'
+            version: '8.2.5'
           }
         }
       });

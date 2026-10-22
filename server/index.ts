@@ -13,6 +13,7 @@ import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogsReliable,
 import { publicRouter } from './routes/api.js';
 import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
+import { emailAiRouter, handleGoogleEmailOAuthCallback } from './routes/emailAi.js';
 import { performDatabaseHealthCheck } from './dbHealth.js';
 import { mcpRouter } from './mcpServer.js';
 import { mcpStreamableRouter } from './mcpStreamable.js';
@@ -183,6 +184,7 @@ app.get('/api/sitemap.xml', handleSitemapRequest);
 
 // Google OAuth 2.0 callback endpoint (needs to be reachable by Google redirection without requiring pre-existing admin cookie)
 app.get('/api/admin/seo-research/google/callback', handleGoogleOAuthCallback);
+app.get('/api/admin/email-ai/google/callback', handleGoogleEmailOAuthCallback);
 
 // RFC 8414 OAuth 2.0 Authorization Server Metadata Discovery
 const handleOAuthDiscovery = (req: any, res: any) => {
@@ -206,6 +208,7 @@ app.use('/oauth', mcpOAuthRouter);
 app.use('/api/oauth', mcpOAuthRouter);
 app.use('/api/mcp', mcpRouter);
 app.use('/api', publicRouter);
+app.use('/api/admin/email-ai', emailAiRouter);
 app.use('/api/admin', adminRouter);
 
 // Health check endpoint
@@ -213,8 +216,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     brand: 'Dawnexus',
-    version: '8.2.0',
-    release: '8.2.0 — Complete Website, SEO, Google Search Console & GA4 Audit and Repair',
+    version: '8.2.5',
+    release: '8.2.5 — Email AI & Multi-Inbox MCP Integration',
     timestamp: new Date().toISOString()
   });
 });

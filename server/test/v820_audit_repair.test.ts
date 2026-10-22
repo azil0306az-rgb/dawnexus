@@ -26,15 +26,15 @@ describe('Dawnexus Version 8.2.0: Website, SEO, Canonical & GA4 Audit and Repair
     if (serverInstance) serverInstance.close();
   });
 
-  // 1. Version 8.2.0 Verification
-  test('1. Application Version: /api/health reports version 8.2.0', async () => {
+  // 1. Version Verification
+  test('1. Application Version: /api/health reports version >= 8.2.0', async () => {
     const res = await fetch(`${baseUrl}/api/health`);
     assert.strictEqual(res.status, 200);
     const body = await res.json();
     assert.strictEqual(body.status, 'ok');
     assert.strictEqual(body.brand, 'Dawnexus');
-    assert.strictEqual(body.version, '8.2.0');
-    assert.ok(body.release.includes('8.2.0'));
+    assert.ok(body.version.startsWith('8.2.'));
+    assert.ok(body.release.includes('8.2.'));
   });
 
   // 2. Canonical Host 301 Redirect Middleware

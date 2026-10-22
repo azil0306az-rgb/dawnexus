@@ -51,6 +51,7 @@ import { WebsiteContentService } from '../websiteContent.js';
 import { AnalyticsService } from '../analyticsService.js';
 import { seoResearchRouter } from './seoResearch.js';
 import { analyticsRouter } from './analytics.js';
+import { emailAiRouter } from './emailAi.js';
 import { calculateSeoScore, normalizeSeoReport, computeContentRevision } from '../seoScorer.js';
 import { getDatabaseHealthStats, performDatabaseHealthCheck } from '../dbHealth.js';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
@@ -716,6 +717,9 @@ adminRouter.use('/seo-research', seoResearchRouter);
 
 // Google Analytics 4 Router
 adminRouter.use('/analytics', analyticsRouter);
+
+// Version 8.2.5: Email AI & Multi-Inbox Router
+adminRouter.use('/email-ai', emailAiRouter);
 
 // ==========================================
 // VERSION 3.5.297: CLIENT SHOWCASE / OUR WORK ENDPOINTS
