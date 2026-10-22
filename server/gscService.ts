@@ -365,15 +365,37 @@ export class GscService {
           const parsed = JSON.parse(errText);
           if (parsed.error?.message) message = parsed.error.message;
         } catch {}
+        try {
+          updateSeoConnectionTelemetry({
+            last_attempt_at: new Date().toISOString(),
+            last_error: message,
+            connection_status: 'Error'
+          });
+        } catch {}
         return { rows: [], apiRequestsCount: 1, error: message };
       }
 
       const data = await res.json();
+      try {
+        updateSeoConnectionTelemetry({
+          last_sync_at: new Date().toISOString(),
+          last_attempt_at: new Date().toISOString(),
+          last_error: null,
+          connection_status: 'Connected'
+        });
+      } catch {}
       return {
         rows: data.rows || [],
         apiRequestsCount: 1
       };
     } catch (err: any) {
+      try {
+        updateSeoConnectionTelemetry({
+          last_attempt_at: new Date().toISOString(),
+          last_error: err?.message || 'Network error',
+          connection_status: 'Error'
+        });
+      } catch {}
       return { rows: [], apiRequestsCount: 1, error: err?.message || 'Network error' };
     }
   }

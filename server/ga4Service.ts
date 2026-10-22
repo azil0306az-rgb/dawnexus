@@ -690,26 +690,37 @@ export class Ga4Service {
       return { error: currentRes.error };
     }
 
-    // Previous period totals
-    const prevRes = await this.runReport({
-      propertyId,
-      dateRanges: [{ startDate: prevStartDate, endDate: prevEndDate }],
-      metrics: reportMetrics,
-      limit: 1
-    });
+    // Query date range totals for both current and previous periods (dimensions omitted for accurate user deduplication)
+    const [currentTotalsRes, prevRes] = await Promise.all([
+      this.runReport({
+        propertyId,
+        dateRanges: [{ startDate, endDate }],
+        metrics: reportMetrics,
+        limit: 1
+      }),
+      this.runReport({
+        propertyId,
+        dateRanges: [{ startDate: prevStartDate, endDate: prevEndDate }],
+        metrics: reportMetrics,
+        limit: 1
+      })
+    ]);
 
-    // Compute aggregate current totals from daily rows
+    // Compute aggregate current totals from date-range report or daily rows
+    const curRow = currentTotalsRes.data?.rows?.[0]?.metricValues || [];
+    const curM = (idx: number) => Number(curRow[idx]?.value || 0);
+
     const currentRows = currentRes.data?.rows || [];
-    let totUsers = 0;
-    let actUsers = 0;
-    let newUsers = 0;
-    let sessions = 0;
-    let engagedSessions = 0;
-    let views = 0;
-    let eventCount = 0;
-    let conversions = 0;
-
     const timeline: Ga4OverviewTimelinePoint[] = [];
+
+    let dailyTotUsers = 0;
+    let dailyActUsers = 0;
+    let dailyNewUsers = 0;
+    let dailySessions = 0;
+    let dailyEngaged = 0;
+    let dailyViews = 0;
+    let dailyEvents = 0;
+    let dailyConv = 0;
 
     for (const r of currentRows) {
       const rawDate = r.dimensionValues?.[0]?.value || '';
@@ -731,14 +742,14 @@ export class Ga4Service {
       const dEvents = m(8);
       const dConv = m(9);
 
-      totUsers = Math.max(totUsers, dTotUsers);
-      actUsers += dActUsers;
-      newUsers += dNewUsers;
-      sessions += dSessions;
-      engagedSessions += dEngaged;
-      views += dViews;
-      eventCount += dEvents;
-      conversions += dConv;
+      dailyTotUsers = Math.max(dailyTotUsers, dTotUsers);
+      dailyActUsers += dActUsers;
+      dailyNewUsers += dNewUsers;
+      dailySessions += dSessions;
+      dailyEngaged += dEngaged;
+      dailyViews += dViews;
+      dailyEvents += dEvents;
+      dailyConv += dConv;
 
       timeline.push({
         date: formattedDate,
@@ -749,15 +760,36 @@ export class Ga4Service {
       });
     }
 
+    // Prefer exact deduplicated API totals over daily approximations
+    let finalTotUsers = curRow.length > 0 ? curM(0) : dailyTotUsers;
+    let finalActUsers = curRow.length > 0 ? curM(1) : dailyActUsers;
+    const finalNewUsers = curRow.length > 0 ? curM(2) : dailyNewUsers;
+    const finalSessions = curRow.length > 0 ? curM(3) : dailySessions;
+    const finalEngagedSessions = curRow.length > 0 ? curM(4) : dailyEngaged;
+    const finalRate = curRow.length > 0 
+      ? Math.round(Number(curRow[5]?.value || 0) * 1000) / 1000 
+      : (finalSessions > 0 ? Math.round((finalEngagedSessions / finalSessions) * 1000) / 1000 : 0);
+    const finalDuration = curRow.length > 0
+      ? Math.round(Number(curRow[6]?.value || 0))
+      : (finalSessions > 0 ? Math.round((dailyViews / finalSessions) * 35) : 0);
+    const finalViews = curRow.length > 0 ? curM(7) : dailyViews;
+    const finalEventCount = curRow.length > 0 ? curM(8) : dailyEvents;
+    const finalConversions = curRow.length > 0 ? curM(9) : dailyConv;
+
+    // Strict invariant: totalUsers must always be >= activeUsers
+    if (finalTotUsers < finalActUsers) {
+      finalTotUsers = finalActUsers;
+    }
+
     const currentTotals: Ga4OverviewTotals = {
-      totalUsers: totUsers > 0 ? totUsers : actUsers,
-      activeUsers: actUsers,
-      newUsers: newUsers,
-      sessions: sessions,
-      engagedSessions: engagedSessions,
-      engagementRate: sessions > 0 ? Math.round((engagedSessions / sessions) * 1000) / 1000 : 0,
-      avgEngagementDurationSeconds: sessions > 0 ? Math.round((views / sessions) * 35) : 0,
-      screenPageViews: views,
+      totalUsers: finalTotUsers,
+      activeUsers: finalActUsers,
+      newUsers: finalNewUsers,
+      sessions: finalSessions,
+      engagedSessions: finalEngagedSessions,
+      engagementRate: finalRate,
+      avgEngagementDurationSeconds: finalDuration,
+      screenPageViews: finalViews,
       eventCount: eventCount,
       conversions: conversions
     };
