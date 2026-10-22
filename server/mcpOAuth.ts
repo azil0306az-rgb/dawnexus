@@ -5,9 +5,20 @@
  */
 
 import crypto from 'node:crypto';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 
 export const mcpOAuthRouter = Router();
+
+// CORS for OAuth endpoints (Claude web connector compatibility)
+mcpOAuthRouter.use((req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, authorization, x-mcp-api-key, x-api-key');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
 
 export const DEFAULT_OAUTH_CLIENT_ID = 'dawnexus-claude-client';
 export const DEFAULT_OAUTH_CLIENT_SECRET = 'dawnexus_sec_claude_oauth_9566';
@@ -345,6 +356,32 @@ mcpOAuthRouter.post('/token', (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/mcp/oauth/register
+ * RFC 7591 OAuth 2.0 Dynamic Client Registration
+ * Enables Claude Custom Connector to automatically register without manual Client ID entry
+ */
+mcpOAuthRouter.post('/register', (req: Request, res: Response) => {
+  const { client_name, redirect_uris, grant_types, response_types, token_endpoint_auth_method } = req.body || {};
+
+  const clientId = DEFAULT_OAUTH_CLIENT_ID;
+  const clientSecret = DEFAULT_OAUTH_CLIENT_SECRET;
+
+  return res.status(201).json({
+    client_id: clientId,
+    client_secret: clientSecret,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    client_secret_expires_at: 0,
+    client_name: client_name || 'Claude Custom Connector',
+    redirect_uris: Array.isArray(redirect_uris) && redirect_uris.length > 0
+      ? redirect_uris
+      : ['https://claude.ai/api/mcp/auth_callback'],
+    grant_types: grant_types || ['authorization_code', 'refresh_token'],
+    response_types: response_types || ['code'],
+    token_endpoint_auth_method: token_endpoint_auth_method || 'none'
+  });
+});
+
+/**
  * Standard RFC 8414 OAuth 2.0 Authorization Server Metadata
  */
 export function getOAuthServerMetadata(baseUrl: string) {
@@ -352,6 +389,7 @@ export function getOAuthServerMetadata(baseUrl: string) {
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/api/mcp/oauth/authorize`,
     token_endpoint: `${baseUrl}/api/mcp/oauth/token`,
+    registration_endpoint: `${baseUrl}/api/mcp/oauth/register`,
     token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
     grant_types_supported: ['authorization_code', 'client_credentials', 'refresh_token'],
     response_types_supported: ['code'],

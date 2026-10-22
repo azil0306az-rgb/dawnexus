@@ -182,3 +182,4 @@ mcpStreamableRouter.delete('/', mcpAuthMiddleware, async (req: Request, res: Res
   // Idempotent 204 if session not found or already closed
   return res.status(204).end();
 });
+

@@ -51,7 +51,22 @@ describe('Dawnexus Version 8.1.0: Remote MCP Server for Claude', () => {
     const authMeta = await resAuth.json();
     assert.ok(authMeta.authorization_endpoint.includes('/api/mcp/oauth/authorize'));
     assert.ok(authMeta.token_endpoint.includes('/api/mcp/oauth/token'));
+    assert.ok(authMeta.registration_endpoint.includes('/register'));
     assert.ok(authMeta.code_challenge_methods_supported.includes('S256'));
+
+    // RFC 7591 Dynamic Client Registration
+    const regRes = await fetch(`${baseUrl}/api/mcp/oauth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Claude Custom Connector',
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback']
+      })
+    });
+    assert.strictEqual(regRes.status, 201);
+    const regData = await regRes.json();
+    assert.strictEqual(regData.client_id, 'dawnexus-claude-client');
+    assert.ok(regData.client_secret);
 
     // RFC 9728
     const resResource = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);

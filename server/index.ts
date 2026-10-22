@@ -16,7 +16,7 @@ import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
 import { performDatabaseHealthCheck } from './dbHealth.js';
 import { mcpRouter } from './mcpServer.js';
 import { mcpStreamableRouter } from './mcpStreamable.js';
-import { getOAuthServerMetadata, getOAuthProtectedResourceMetadata } from './mcpOAuth.js';
+import { getOAuthServerMetadata, getOAuthProtectedResourceMetadata, mcpOAuthRouter } from './mcpOAuth.js';
 
 // Initialize DB schema & tables
 initDatabase();
@@ -183,6 +183,8 @@ app.get('/.well-known/oauth-protected-resource', (req: any, res: any) => {
 
 // MCP Remote Server (Streamable HTTP for Claude) & API route mounts
 app.use('/mcp', mcpStreamableRouter);
+app.use('/oauth', mcpOAuthRouter);
+app.use('/api/oauth', mcpOAuthRouter);
 app.use('/api/mcp', mcpRouter);
 app.use('/api', publicRouter);
 app.use('/api/admin', adminRouter);
@@ -219,7 +221,8 @@ if (fs.existsSync(distPath)) {
       req.path.startsWith('/api') ||
       req.path === '/mcp' ||
       req.path.startsWith('/mcp/') ||
-      req.path.startsWith('/.well-known')
+      req.path.startsWith('/.well-known') ||
+      req.path.startsWith('/oauth')
     ) {
       return next();
     }
