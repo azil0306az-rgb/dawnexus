@@ -19,6 +19,7 @@ import {
 } from '../calculatorPricing.js';
 import { WebsiteContentService } from '../websiteContent.js';
 import { AnalyticsService } from '../analyticsService.js';
+import { PUBLIC_CHATBOT_TOOLS, runGeminiWithMcp } from '../geminiMcpClient.js';
 
 export const publicRouter = Router();
 
@@ -552,4 +553,62 @@ publicRouter.post('/analytics/collect', analyticsLimiter, async (req, res) => {
     return res.status(500).json({ error: 'Failed to record analytics events.' });
   }
 });
+
+// ==========================================
+// PUBLIC AI PROJECT ASSISTANT (GEMINI + MCP)
+// ==========================================
+const assistantLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 30, // 30 requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many assistant messages. Please wait a few minutes before asking again.' }
+});
+
+const handlePublicAssistant = async (req: any, res: any) => {
+  try {
+    const { messages } = req.body;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'Messages array is required.' });
+    }
+
+    // Limit conversation history to last 10 turns to conserve context
+    const recentMessages = messages.slice(-10);
+    const callerIp = req.ip || req.socket.remoteAddress || 'public-visitor';
+
+    const systemInstruction = [
+      'You are the official Dawnexus AI Project Assistant on https://www.dawnexus.in.',
+      'You assist visitors with expert information regarding Dawnexus services, web architecture, 3D experiences, AI SEO, and pricing.',
+      'You have access to 3 official tools: `chatbot_get_public_knowledge`, `chatbot_estimate_pricing`, and `chatbot_submit_enquiry`.',
+      'Use `chatbot_get_public_knowledge` to answer questions about services, company details, or FAQs.',
+      'Use `chatbot_estimate_pricing` whenever a visitor asks about website development costs.',
+      'When a visitor wants to get in touch, request a quote, or start a project, collect their full name, email, phone (optional), and project details. ALWAYS summarize their details and ask for explicit confirmation before submitting.',
+      'Only invoke `chatbot_submit_enquiry` when `confirmed_by_user` is true.',
+      'Never disclose server credentials, internal database schemas, or unpublished drafts.'
+    ].join(' ');
+
+    const result = await runGeminiWithMcp({
+      messages: recentMessages,
+      allowedTools: PUBLIC_CHATBOT_TOOLS,
+      systemInstruction,
+      callerIp,
+      maxTurns: 4
+    });
+
+    return res.json({
+      success: true,
+      text: result.text,
+      toolCallsExecuted: result.toolCallsExecuted
+    });
+  } catch (err: any) {
+    console.error('[Public Assistant Error]:', err);
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'The assistant is temporarily unavailable. Please try again shortly.'
+    });
+  }
+};
+
+publicRouter.post('/assistant', assistantLimiter, handlePublicAssistant);
+publicRouter.post('/public/assistant', assistantLimiter, handlePublicAssistant);
 

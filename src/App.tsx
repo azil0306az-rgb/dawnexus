@@ -9,6 +9,7 @@ import { ProductShowcases } from './components/public/ProductShowcases';
 import { ContactForm } from './components/public/ContactForm';
 import { Footer } from './components/public/Footer';
 import { PrivacyModal } from './components/public/PrivacyModal';
+import { AiChatAssistant } from './components/public/AiChatAssistant';
 import { usePageSeo } from './utils/seo';
 import { tracker } from './utils/tracker';
 import { Loader2 } from 'lucide-react';
@@ -203,6 +204,7 @@ export const App: React.FC = () => {
       {renderContent()}
       <Footer />
       <PrivacyModal />
+      {!isAdminRoute && <AiChatAssistant />}
     </div>
   );
 };

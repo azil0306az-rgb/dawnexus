@@ -3,6 +3,7 @@ import { requireAuth } from '../auth.js';
 import { GeminiService } from '../geminiService.js';
 import { GscService } from '../gscService.js';
 import { Ga4Service } from '../ga4Service.js';
+import { ADMIN_STUDIO_TOOLS, runGeminiWithMcp } from '../geminiMcpClient.js';
 import {
   getSeoCategories,
   getSeoCategoryById,
@@ -417,3 +418,50 @@ seoAiRouter.get('/usage', (_req: Request, res: Response) => {
     });
   }
 });
+
+/**
+ * POST /api/admin/seo-ai/assistant
+ * Admin conversational SEO Copilot backed by Gemini function calling over official Dawnexus MCP tools.
+ */
+seoAiRouter.post('/assistant', async (req: Request, res: Response) => {
+  try {
+    const { messages, model } = req.body;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ success: false, error: 'Messages array is required.' });
+    }
+
+    const callerIp = req.ip || req.socket.remoteAddress || 'admin-studio';
+
+    const systemInstruction = [
+      'You are the Dawnexus AI SEO Studio Administrative Copilot.',
+      'You have complete, direct access to Dawnexus MCP tools including Google Search Console, Google Analytics 4, first-party visitor telemetry, service page content, and the blog CMS draft system.',
+      'Always base SEO and website recommendations on live data retrieved via MCP tools.',
+      'All blog content creation must be saved strictly as Drafts via `create_blog_draft`.',
+      'Provide concise, actionable, and data-driven responses.'
+    ].join(' ');
+
+    const result = await runGeminiWithMcp({
+      messages,
+      allowedTools: ADMIN_STUDIO_TOOLS,
+      systemInstruction,
+      callerIp,
+      model,
+      maxTurns: 5
+    });
+
+    return res.json({
+      success: true,
+      text: result.text,
+      toolCallsExecuted: result.toolCallsExecuted,
+      turnCount: result.turnCount,
+      modelUsed: result.modelUsed
+    });
+  } catch (err: any) {
+    console.error('[Admin SEO Copilot Error]:', err);
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to process assistant request.'
+    });
+  }
+});
+

@@ -13,8 +13,16 @@ import {
   slugify,
   getSeoConnection,
   refreshFromPersistentStore,
-  BlogRecord
+  BlogRecord,
+  createEnquiry,
+  persistEnquiry,
+  getEnquiries,
+  getCalculatorPricingConfig,
+  getPublicBlogs
 } from './db.js';
+import { isSupabaseActive } from './supabase.js';
+import { calculateWebsiteCost } from './calculatorPricing.js';
+import { sendEnquiryNotification } from './email.js';
 import {
   calculateSeoScore,
   normalizeSeoReport,
@@ -1950,6 +1958,232 @@ export class McpService {
       args.reason || 'MCP requested rollback'
     );
     return result;
+  }
+
+  /**
+   * Tool: chatbot_get_public_knowledge
+   * Public knowledge retrieval for website visitors and chatbot assistant
+   */
+  static async chatbotGetPublicKnowledge(args?: { query?: string }) {
+    const q = (args?.query || '').toLowerCase().trim();
+
+    // 1. Service offerings
+    const serviceList = WebsiteContentService.listAllPages();
+    const serviceSummaries = serviceList.map(item => {
+      const p = WebsiteContentService.getPage(item.slug);
+      return {
+        slug: p.slug,
+        title: p.title,
+        canonicalUrl: p.canonical_url,
+        heroSubtitle: p.hero_subtitle || '',
+        heroDescription: p.hero_description || '',
+        capabilities: (p.capabilities || []).map(c => ({ title: c.title, desc: c.desc })),
+        packages: (p.packages || []).map(pkg => ({ name: pkg.name, price: pkg.price, inclusions: pkg.inclusions })),
+        faqs: p.faqs || []
+      };
+    });
+
+    // Filter services if query matches specific keywords
+    let matchingServices = serviceSummaries;
+    if (q) {
+      const filtered = serviceSummaries.filter(s =>
+        s.title.toLowerCase().includes(q) ||
+        s.slug.toLowerCase().includes(q) ||
+        s.capabilities.some(c => c.title.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q))
+      );
+      if (filtered.length > 0) matchingServices = filtered;
+    }
+
+    // 2. Approved business info
+    const businessInfo = {
+      companyName: 'Dawnexus',
+      tagline: 'Modern Digital Marketing & AI-Powered Creative Agency',
+      websiteUrl: 'https://www.dawnexus.in',
+      primaryServices: [
+        'Custom Website Design & Modern Web Development',
+        'Technical SEO & Performance Optimization',
+        'Google Business Profile & Local 3-Pack Growth',
+        'Performance Digital Marketing & Full-Funnel Retargeting',
+        'Interactive 3D Real Estate & AI Automations'
+      ],
+      headquarters: 'Chennai & Bangalore, India',
+      contactEmail: 'hello@dawnexus.in',
+      contactPhone: '+91 95663 88471',
+      workingHours: 'Monday - Saturday: 9:00 AM - 7:00 PM IST',
+      guarantee: 'Zero boilerplate templates, human review of all AI generation, sub-second Core Web Vitals performance.'
+    };
+
+    // 3. Recent published blog posts
+    const publicBlogs = getPublicBlogs({ limit: 6 });
+    const recentArticles = (publicBlogs.blogs || []).map(b => ({
+      id: b.id,
+      title: b.title,
+      slug: b.slug,
+      url: `https://www.dawnexus.in/blog/${b.slug}`,
+      category: b.category,
+      excerpt: b.excerpt,
+      publishedAt: b.published_at
+    }));
+
+    // 4. Common Public FAQs
+    const allFaqs = serviceSummaries.flatMap(s => s.faqs);
+
+    return {
+      businessInfo,
+      services: matchingServices.map(s => ({
+        slug: s.slug,
+        title: s.title,
+        url: s.canonicalUrl,
+        subtitle: s.heroSubtitle,
+        description: s.heroDescription,
+        keyCapabilities: s.capabilities.slice(0, 4),
+        pricingTiers: s.packages.map(p => `${p.name}: ${p.price}`)
+      })),
+      faqs: allFaqs.slice(0, 8),
+      recentArticles,
+      pricingGuidance: 'Custom web solutions start from ₹15,000 for landing pages to ₹75,000+ for enterprise multi-feature platforms. Use chatbot_estimate_pricing for an exact quote.'
+    };
+  }
+
+  /**
+   * Tool: chatbot_estimate_pricing
+   * Authoritative quotation engine for visitors
+   */
+  static async chatbotEstimatePricing(args: {
+    websiteType?: string;
+    pageCount?: number;
+    designTier?: 'Standard' | 'Premium' | 'Custom';
+    maintenanceOption?: 'None' | 'Monthly' | 'Annual';
+    selectedFeatures?: string[];
+  }) {
+    const config = getCalculatorPricingConfig();
+    const selections = {
+      websiteType: args.websiteType || 'corporate-business',
+      pageCount: Math.max(1, Math.min(args.pageCount || 5, config.maxStandardPages || 20)),
+      selectedFeatures: Array.isArray(args.selectedFeatures) ? args.selectedFeatures : [],
+      designTier: args.designTier || 'Standard',
+      maintenanceOption: args.maintenanceOption || 'Monthly'
+    };
+
+    const estimate = calculateWebsiteCost(config, selections);
+
+    return {
+      referenceId: estimate.referenceId,
+      websiteType: selections.websiteType,
+      pageCount: selections.pageCount,
+      designTier: selections.designTier,
+      currency: config.currency,
+      currencySymbol: config.currencySymbol,
+      oneTimeSetupTotal: estimate.subtotalOneTime,
+      recurringMonthlyTotal: estimate.recurringMaintenance?.amount || 0,
+      breakdown: (estimate.items || []).map(b => ({
+        label: b.label,
+        description: b.description || '',
+        amount: b.amount,
+        type: b.type
+      })),
+      disclaimer: config.disclaimer
+    };
+  }
+
+  /**
+   * Tool: chatbot_submit_enquiry
+   * Public enquiry submission via Chatbot with explicit visitor confirmation
+   */
+  static async chatbotSubmitEnquiry(
+    args: {
+      full_name: string;
+      email: string;
+      phone?: string;
+      requested_services?: string[];
+      budget?: string;
+      project_details: string;
+      estimate_ref_id?: string;
+      confirmed_by_user?: boolean;
+    },
+    callerIp: string
+  ) {
+    if (!args.confirmed_by_user) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        message: 'Please ask the user to confirm their contact details and project summary before submitting.'
+      };
+    }
+
+    if (!args.full_name || !args.full_name.trim()) {
+      return { success: false, error: 'Full name is required.' };
+    }
+    if (!args.email || !args.email.includes('@')) {
+      return { success: false, error: 'A valid email address is required.' };
+    }
+    if (!args.project_details || !args.project_details.trim()) {
+      return { success: false, error: 'Project details are required.' };
+    }
+
+    const enquiryRecord = createEnquiry({
+      full_name: args.full_name.trim(),
+      email: args.email.trim().toLowerCase(),
+      phone: (args.phone || '').trim(),
+      requested_services: Array.isArray(args.requested_services) && args.requested_services.length > 0
+        ? args.requested_services
+        : ['Website Design'],
+      budget: args.budget || '₹25,000 - ₹50,000',
+      project_details: args.project_details.trim(),
+      estimate_ref_id: args.estimate_ref_id?.trim() || null
+    });
+
+    if (isSupabaseActive()) {
+      try {
+        await persistEnquiry(enquiryRecord);
+      } catch {}
+    }
+
+    sendEnquiryNotification(enquiryRecord).catch(err => {
+      console.warn('[Chatbot Enquiry Email Warning]:', err?.message || err);
+    });
+
+    recordMcpAudit({
+      tool: 'chatbot_submit_enquiry',
+      action: 'write',
+      status: 'success',
+      callerIp,
+      targetId: enquiryRecord.id,
+      details: `Enquiry #${enquiryRecord.id} created for ${enquiryRecord.full_name} (${enquiryRecord.email})`
+    });
+
+    return {
+      success: true,
+      enquiryId: enquiryRecord.id,
+      status: 'New',
+      message: `Enquiry #${enquiryRecord.id} submitted successfully! A senior project strategist at Dawnexus will contact you at ${enquiryRecord.email} within 24 hours.`
+    };
+  }
+
+  /**
+   * Tool: enquiries_admin_list (Admin only)
+   */
+  static async enquiriesAdminList(args?: { status?: string; limit?: number }) {
+    const limit = Math.min(args?.limit || 20, 100);
+    const result = getEnquiries({
+      status: (args?.status as any) || 'All',
+      page: 1,
+      limit
+    });
+    return {
+      total: result.total,
+      enquiries: (result.items || []).map(e => ({
+        id: e.id,
+        fullName: e.full_name,
+        businessName: e.business_name,
+        email: e.email,
+        phone: e.phone,
+        requestedServices: typeof e.requested_services === 'string' ? JSON.parse(e.requested_services || '[]') : e.requested_services,
+        budget: e.budget,
+        status: e.status,
+        createdAt: e.created_at
+      }))
+    };
   }
 }
 

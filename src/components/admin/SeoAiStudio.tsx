@@ -18,7 +18,9 @@ import {
   Sliders,
   BarChart2,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Bot,
+  Terminal
 } from 'lucide-react';
 import { BlogRecord } from '../../types';
 
@@ -81,11 +83,23 @@ interface GeminiTelemetry {
 }
 
 export const SeoAiStudio: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'generator' | 'topics' | 'scheduler' | 'categories' | 'telemetry'>('generator');
+  const [activeTab, setActiveTab] = useState<'copilot' | 'generator' | 'topics' | 'scheduler' | 'categories' | 'telemetry'>('copilot');
   const [status, setStatus] = useState<{ connected: boolean; activeModel: string; error: string | null } | null>(null);
   const [categories, setCategories] = useState<SeoCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [telemetry, setTelemetry] = useState<GeminiTelemetry | null>(null);
+
+  // MCP AI Copilot State
+  const [copilotMessages, setCopilotMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; content: string; toolCalls?: any[]; timestamp: string }>>([
+    {
+      id: 'init',
+      role: 'assistant',
+      content: 'Welcome to the Dawnexus MCP Copilot! I have direct function-calling access to official Dawnexus tools: Google Search Console performance, GA4 analytics, first-party visitor funnels, CMS drafts, and website content optimization. What would you like to inspect or execute?',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+  const [copilotInput, setCopilotInput] = useState('');
+  const [isCopilotLoading, setIsCopilotLoading] = useState(false);
 
   // AI Generator Form State
   const [genCategory, setGenCategory] = useState('');
@@ -269,6 +283,72 @@ export const SeoAiStudio: React.FC = () => {
       setGenError(err instanceof Error ? err.message : 'Failed to save draft');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Copilot Message Dispatcher
+  const handleSendCopilotMessage = async (customText?: string) => {
+    const text = (customText || copilotInput).trim();
+    if (!text || isCopilotLoading) return;
+
+    const userMsg = {
+      id: `u-${Date.now()}`,
+      role: 'user' as const,
+      content: text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setCopilotMessages(prev => [...prev, userMsg]);
+    setCopilotInput('');
+    setIsCopilotLoading(true);
+
+    try {
+      const historyForApi = [...copilotMessages, userMsg].map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      const res = await fetch('/api/admin/seo-ai/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: historyForApi })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCopilotMessages(prev => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            role: 'assistant',
+            content: data.text,
+            toolCalls: data.toolCallsExecuted,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+      } else {
+        setCopilotMessages(prev => [
+          ...prev,
+          {
+            id: `e-${Date.now()}`,
+            role: 'assistant',
+            content: data.error || 'Failed to execute Copilot request.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+      }
+    } catch {
+      setCopilotMessages(prev => [
+        ...prev,
+        {
+          id: `e-${Date.now()}`,
+          role: 'assistant',
+          content: 'Network communication error.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    } finally {
+      setIsCopilotLoading(false);
     }
   };
 
@@ -479,6 +559,7 @@ export const SeoAiStudio: React.FC = () => {
       {/* Navigation Sub-Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-[#252525] pb-4">
         {[
+          { id: 'copilot', label: 'MCP AI Copilot', icon: Bot },
           { id: 'generator', label: 'AI Blog Generator', icon: Sparkles },
           { id: 'topics', label: 'Suggested Topics (GSC & GA4)', icon: BarChart2 },
           { id: 'scheduler', label: 'Manual Bulk Scheduler', icon: Calendar },
@@ -503,6 +584,151 @@ export const SeoAiStudio: React.FC = () => {
           );
         })}
       </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 0: MCP AI COPILOT                                                     */}
+      {/* ========================================================================= */}
+      {activeTab === 'copilot' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#0B0B0B] border border-[#252525] flex flex-col h-[700px]">
+            {/* Header */}
+            <div className="pb-4 border-b border-[#202020] flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <Bot className="w-5 h-5 text-[#C7FF4D]" />
+                  Unified Gemini + MCP Administrative Copilot
+                </h3>
+                <p className="text-xs text-[#A5A5A5] mt-1">
+                  Executes authorized Dawnexus MCP tools directly (Search Console, GA4, Visitor Telemetry, CMS Drafts, Content Rollback) with Gemini reasoning.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-1 rounded-full bg-[#C7FF4D]/10 text-[#C7FF4D] border border-[#C7FF4D]/20 font-mono">
+                  45 Tools Available
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Action Chips */}
+            <div className="py-3 flex flex-wrap gap-2 border-b border-[#1c1c1c]">
+              {[
+                'Fetch top Search Console queries (28d)',
+                'Inspect 7-step conversion funnel drop-offs',
+                'List editable service pages in CMS',
+                'Audit recent blog drafts for SEO score >= 90',
+                'Check visitor tracking health and retention'
+              ].map((chip, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendCopilotMessage(chip)}
+                  disabled={isCopilotLoading}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[#141414] border border-[#252525] text-neutral-300 hover:text-white hover:border-[#C7FF4D]/50 hover:bg-[#C7FF4D]/5 transition-all text-left disabled:opacity-50"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
+            {/* Messages Feed */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              {copilotMessages.map(msg => (
+                <div
+                  key={msg.id}
+                  className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {msg.role === 'assistant' && (
+                    <div className="w-8 h-8 rounded-lg bg-[#141414] border border-white/10 flex-shrink-0 flex items-center justify-center mt-1">
+                      <Bot className="w-4 h-4 text-[#C7FF4D]" />
+                    </div>
+                  )}
+
+                  <div className={`max-w-[80%] rounded-2xl p-4 ${
+                    msg.role === 'user'
+                      ? 'bg-[#C7FF4D] text-black font-medium'
+                      : 'bg-[#141414] border border-[#252525] text-neutral-200'
+                  }`}>
+                    <p className="whitespace-pre-wrap leading-relaxed text-sm">{msg.content}</p>
+
+                    {/* Tool executions summary */}
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                        <div className="text-[11px] font-mono text-[#C7FF4D] flex items-center gap-1.5">
+                          <Terminal className="w-3.5 h-3.5" />
+                          <span>MCP Tool Calls Executed ({msg.toolCalls.length}):</span>
+                        </div>
+                        {msg.toolCalls.map((tc, idx) => (
+                          <details key={idx} className="group rounded-lg bg-black/40 border border-white/10 p-2 text-xs">
+                            <summary className="font-mono text-neutral-300 cursor-pointer flex items-center justify-between hover:text-white">
+                              <span>🔧 {tc.tool}</span>
+                              <span className="text-[10px] text-neutral-500 group-open:rotate-90 transition-transform">▸</span>
+                            </summary>
+                            <div className="mt-2 pt-2 border-t border-white/5 space-y-1 text-[11px] font-mono text-neutral-400">
+                              <div><span className="text-neutral-500">Args:</span> {JSON.stringify(tc.args)}</div>
+                              <pre className="max-h-32 overflow-y-auto bg-black/60 p-2 rounded text-emerald-400 whitespace-pre-wrap">
+                                {JSON.stringify(tc.result, null, 2)}
+                              </pre>
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className={`text-[10px] mt-2 ${msg.role === 'user' ? 'text-black/60' : 'text-neutral-500'}`}>
+                      {msg.timestamp}
+                    </div>
+                  </div>
+
+                  {msg.role === 'user' && (
+                    <div className="w-8 h-8 rounded-lg bg-[#C7FF4D]/20 border border-[#C7FF4D]/40 flex-shrink-0 flex items-center justify-center mt-1">
+                      <span className="text-xs font-bold text-[#C7FF4D]">AD</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {isCopilotLoading && (
+                <div className="flex gap-3 justify-start">
+                  <div className="w-8 h-8 rounded-lg bg-[#141414] border border-white/10 flex-shrink-0 flex items-center justify-center mt-1">
+                    <Bot className="w-4 h-4 text-[#C7FF4D] animate-spin" />
+                  </div>
+                  <div className="bg-[#141414] border border-[#252525] rounded-2xl p-4 text-neutral-400 flex items-center gap-3">
+                    <RefreshCw className="w-4 h-4 animate-spin text-[#C7FF4D]" />
+                    <span className="text-xs font-mono">Gemini dispatching MCP tools & analyzing live telemetry...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input Form */}
+            <div className="pt-3 border-t border-[#202020]">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendCopilotMessage();
+                }}
+                className="flex items-center gap-3"
+              >
+                <input
+                  type="text"
+                  value={copilotInput}
+                  onChange={(e) => setCopilotInput(e.target.value)}
+                  placeholder="Ask MCP Copilot to research queries, audit drafts, inspect funnels, or draft articles..."
+                  disabled={isCopilotLoading}
+                  className="flex-1 px-4 py-3 rounded-xl bg-black/70 border border-[#252525] text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-[#C7FF4D] focus:ring-1 focus:ring-[#C7FF4D]"
+                />
+                <button
+                  type="submit"
+                  disabled={!copilotInput.trim() || isCopilotLoading}
+                  className="px-5 py-3 rounded-xl bg-[#C7FF4D] text-black font-semibold text-sm flex items-center gap-2 hover:bg-[#b5f233] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Execute</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* TAB 1: AI BLOG GENERATOR                                                  */}
@@ -1295,3 +1521,4 @@ export const SeoAiStudio: React.FC = () => {
     </div>
   );
 };
+
