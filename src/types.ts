@@ -87,6 +87,22 @@ export interface BlogRecord {
   admin_notes: string;
   seo_report?: string | null;
   content_revision?: string | null;
+  // Version 8.3.0: Information Gain, E-E-A-T & Citation Answer Blocks
+  firsthand_observations?: string;
+  project_examples?: string;
+  case_studies?: string;
+  original_research_data?: string;
+  implementation_process?: string;
+  external_sources?: string; // JSON string array
+  limitations_lessons?: string;
+  author_role?: string;
+  author_bio?: string;
+  author_credentials?: string;
+  reviewer_name?: string;
+  editorial_notes?: string;
+  citation_answer_blocks?: string; // JSON CitationAnswerBlockData[]
+  review_cycle_days?: number;
+  last_reviewed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -122,6 +138,116 @@ export interface BlogInput {
   scheduled_at?: string | null;
   published_at?: string | null;
   admin_notes?: string;
+  // Version 8.3.0: Information Gain, E-E-A-T & Citation Answer Blocks
+  firsthand_observations?: string;
+  project_examples?: string;
+  case_studies?: string;
+  original_research_data?: string;
+  implementation_process?: string;
+  external_sources?: string[] | string;
+  limitations_lessons?: string;
+  author_role?: string;
+  author_bio?: string;
+  author_credentials?: string;
+  reviewer_name?: string;
+  editorial_notes?: string;
+  citation_answer_blocks?: CitationAnswerBlockData[] | string;
+  review_cycle_days?: number;
+  last_reviewed_at?: string | null;
+}
+
+export interface CitationAnswerBlockData {
+  id: string;
+  question: string;
+  answer: string;
+  supporting_details?: string;
+  heading_tag?: 'h2' | 'h3';
+}
+
+export interface InformationGainCriterion {
+  id: string;
+  label?: string;
+  name?: string;
+  status?: 'pass' | 'warning' | 'needs_evidence';
+  score: number; // 0 - 10
+  maxScore?: number;
+  weight?: number;
+  feedback?: string;
+  evidenceFound?: string;
+  missingInformation?: string;
+  recommendation?: string;
+}
+
+export interface InformationGainReport {
+  score?: number; // 0 - 100
+  overall_score?: number;
+  overallScore?: number;
+  ai_readiness_score?: number;
+  answer_blocks_count?: number;
+  has_original_data?: boolean;
+  boilerplate_penalty?: number;
+  criteria: InformationGainCriterion[];
+  strengths?: string[];
+  missingEvidence?: string[];
+  actionableFixes?: string[];
+  recommendations?: string[];
+  overlapWarning?: {
+    similarSlug?: string;
+    similarTitle?: string;
+    overlapReason?: string;
+  };
+  topical_depth?: string;
+  disclaimer?: string;
+}
+
+export interface CitationAnswerBlockConfig {
+  id?: string;
+  heading_text: string;
+  heading_level?: 'h2' | 'h3';
+  concise_answer: string;
+  supporting_points?: string[];
+  source_reference?: string;
+}
+export type CitationAnswerBlockData = CitationAnswerBlockConfig;
+
+export interface AiCitationObservation {
+  id: number;
+  article_slug: string;
+  ai_platform?: string;
+  source_ai: string;
+  query_prompt: string;
+  observed_date: string;
+  observed_at?: string;
+  citation_url?: string;
+  cited_snippet?: string;
+  notes?: string;
+  recorded_by?: string;
+  created_at?: string;
+}
+
+export interface ContextualCtaConfig {
+  id: number;
+  service_key: 'website-design' | 'seo-services' | 'ai-video-creation' | 'digital-marketing';
+  title: string;
+  headline: string;
+  description: string;
+  button_text: string;
+  target_url: string;
+  is_active: boolean | number;
+  scroll_threshold?: number;
+  dwell_time_seconds?: number;
+}
+
+export interface HtmlPayloadAuditResult {
+  url: string;
+  uncompressedBytes: number;
+  uncompressedKb: number;
+  thresholdBytes: number;
+  isExceedingThreshold: boolean;
+  domNodeCountEstimate: number;
+  hasLargeBase64: boolean;
+  recommendations: string[];
+  measuredAt: string;
 }
 
 export interface SeoCheck {

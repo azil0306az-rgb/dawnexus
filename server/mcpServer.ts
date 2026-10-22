@@ -14,7 +14,10 @@ import {
 import { McpService } from './mcpService.js';
 import { mcpAuthMiddleware, getMcpAuditTrail, getExpectedMcpKey } from './mcpAuth.js';
 import { mcpOAuthRouter } from './mcpOAuth.js';
-import { refreshFromPersistentStore } from './db.js';
+import { refreshFromPersistentStore, getBlogById, getBlogBySlug, getBlogs, getBlogsRequiringReview } from './db.js';
+import { assessInformationGain, detectContentOverlap } from './seoQualityService.js';
+import { generateServerJsonLd, validateJsonLdStructure } from './jsonLdService.js';
+import { auditHtmlPayloads } from './payloadAudit.js';
 
 export const mcpRouter = Router();
 
@@ -1029,6 +1032,69 @@ export const MCP_TOOLS: Tool[] = [
       },
       required: ['id', 'approved']
     }
+  },
+  // ==========================================
+  // VERSION 8.3.0: ADVANCED SEO & AI DISCOVERY TOOLS
+  // ==========================================
+  {
+    name: 'seo_audit_content_quality',
+    description: 'Audit a published or draft blog post for Information Gain, original evidence pillars, E-E-A-T credentials, direct answers, and boilerplate penalties.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        blog_id: { type: 'number', description: 'Blog ID to audit' },
+        slug: { type: 'string', description: 'Blog slug to audit if ID is not known' }
+      }
+    }
+  },
+  {
+    name: 'seo_audit_ai_discovery',
+    description: 'Audit an article or draft for AI discovery citation readiness, analyzing concise answer blocks, definition clarity, and factual structure.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        blog_id: { type: 'number', description: 'Blog ID to audit' },
+        slug: { type: 'string', description: 'Blog slug to audit if ID is not known' }
+      }
+    }
+  },
+  {
+    name: 'seo_get_content_freshness',
+    description: 'Retrieve editorial freshness status and review maintenance cycles (30/90 days) for all published Dawnexus articles.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filter: {
+          type: 'string',
+          enum: ['all', 'overdue', 'due_soon', 'healthy'],
+          description: 'Filter articles by freshness status'
+        }
+      }
+    }
+  },
+  {
+    name: 'seo_validate_structured_data',
+    description: 'Validate JSON-LD structured data for a page or article to ensure schema standards compliance and verify zero fabricated review or rating schemas.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        page_type: {
+          type: 'string',
+          enum: ['home', 'service', 'blog', 'blog_index'],
+          description: 'Page type to validate structured data for'
+        },
+        slug: { type: 'string', description: 'Article or service slug if applicable' }
+      },
+      required: ['page_type']
+    }
+  },
+  {
+    name: 'seo_get_html_payload_report',
+    description: 'Audit uncompressed HTML response payload sizes for Dawnexus public routes against the 2 MB operational threshold and inspect Core Web Vitals targets.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
   }
 ];
 
@@ -1338,6 +1404,113 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
     case 'save_email_draft_to_gmail':
       return await McpService.saveEmailDraftToGmail(toolArgs, callerIp, 'admin');
 
+    // ==========================================
+    // VERSION 8.3.0: ADVANCED SEO & AI DISCOVERY TOOLS
+    // ==========================================
+    case 'seo_audit_content_quality': {
+      let blog = null;
+      if (toolArgs.blog_id) {
+        blog = getBlogById(Number(toolArgs.blog_id));
+      } else if (toolArgs.slug) {
+        blog = getBlogBySlug(String(toolArgs.slug));
+      }
+      if (!blog) {
+        throw new Error('Please provide a valid blog_id or slug to audit.');
+      }
+      const audit = assessInformationGain(blog);
+      const allBlogs = getBlogs();
+      const overlap = detectContentOverlap(blog, allBlogs);
+      return {
+        blog_id: blog.id,
+        title: blog.title,
+        slug: blog.slug,
+        audit,
+        overlap
+      };
+    }
+
+    case 'seo_audit_ai_discovery': {
+      let blog = null;
+      if (toolArgs.blog_id) {
+        blog = getBlogById(Number(toolArgs.blog_id));
+      } else if (toolArgs.slug) {
+        blog = getBlogBySlug(String(toolArgs.slug));
+      }
+      if (!blog) {
+        throw new Error('Please provide a valid blog_id or slug to audit.');
+      }
+      const audit = assessInformationGain(blog);
+      return {
+        blog_id: blog.id,
+        title: blog.title,
+        slug: blog.slug,
+        ai_readiness_score: audit.ai_readiness_score,
+        answer_blocks_count: audit.answer_blocks_count,
+        criteria: audit.criteria.filter((c: any) => c.id.includes('answer') || c.id.includes('research') || c.id.includes('eeat')),
+        recommendations: audit.recommendations
+      };
+    }
+
+    case 'seo_get_content_freshness': {
+      const items = getBlogsRequiringReview();
+      const filter = toolArgs.filter || 'all';
+      let filtered = items;
+      if (filter === 'overdue') {
+        filtered = items.filter(i => i.is_overdue);
+      } else if (filter === 'due_soon') {
+        filtered = items.filter(i => !i.is_overdue && (i.review_cycle_days || 90) - i.days_since_review <= 14);
+      } else if (filter === 'healthy') {
+        filtered = items.filter(i => !i.is_overdue && (i.review_cycle_days || 90) - i.days_since_review > 14);
+      }
+      return {
+        total: items.length,
+        filter,
+        filtered_count: filtered.length,
+        articles: filtered.map(b => ({
+          id: b.id,
+          title: b.title,
+          slug: b.slug,
+          review_cycle_days: b.review_cycle_days || 90,
+          days_since_review: b.days_since_review,
+          is_overdue: b.is_overdue,
+          last_reviewed_at: b.last_reviewed_at,
+          published_at: b.published_at
+        }))
+      };
+    }
+
+    case 'seo_validate_structured_data': {
+      const pageType = toolArgs.page_type || 'home';
+      let blog = null;
+      if (toolArgs.slug) {
+        blog = getBlogBySlug(String(toolArgs.slug));
+      }
+      const jsonLd = generateServerJsonLd(pageType as any, blog ? {
+        title: blog.title,
+        description: blog.excerpt || blog.meta_description,
+        canonicalUrl: blog.canonical_url || `https://www.dawnexus.in/blog/${blog.slug}`,
+        publishedAt: blog.published_at || blog.created_at,
+        updatedAt: blog.last_reviewed_at || blog.updated_at,
+        authorName: blog.author || 'Dawnexus Editorial',
+        authorRole: blog.author_role,
+        image: blog.featured_image,
+        category: blog.category,
+        citationBlocks: blog.citation_answer_blocks
+      } : undefined);
+      const validation = validateJsonLdStructure(jsonLd);
+      return {
+        page_type: pageType,
+        is_valid: validation.isValid,
+        errors: validation.errors,
+        warnings: validation.warnings,
+        schema: jsonLd
+      };
+    }
+
+    case 'seo_get_html_payload_report': {
+      return await auditHtmlPayloads();
+    }
+
     default:
       throw new Error(`Tool '${name}' is not recognized or permitted.`);
   }
@@ -1350,7 +1523,7 @@ export function createDawnexusMcpServer(): Server {
   const server = new Server(
     {
       name: 'dawnexus-mcp-server',
-      version: '8.2.5'
+      version: '8.3.0'
     },
     {
       capabilities: {
@@ -1411,7 +1584,7 @@ mcpRouter.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'Dawnexus MCP Server',
-    version: '8.2.5',
+    version: '8.3.0',
     transport: ['Streamable HTTP (/mcp)', 'SSE (/api/mcp/sse)', 'JSON-RPC POST (/api/mcp/rpc)', 'REST OpenAPI (/api/mcp/tools)'],
     policy: 'Draft first. Human approval required. Claude MCP Integration.',
     toolsCount: MCP_TOOLS.length,
@@ -1429,7 +1602,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
     openapi: '3.1.0',
     info: {
       title: 'Dawnexus MCP API',
-      version: '8.2.5',
+      version: '8.3.0',
       description: 'Dawnexus Model Context Protocol (MCP) and Action API for Claude and AI integrations to research, plan, draft, and audit SEO blog posts, inspect Search Console & GA4 analytics, monitor first-party visitor telemetry, and manage approved website content. All content creation is saved strictly as Drafts requiring human approval in the Admin panel.'
     },
     servers: [{ url: baseUrl }],
@@ -2153,7 +2326,7 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           capabilities: { tools: {} },
           serverInfo: {
             name: 'dawnexus-mcp-server',
-            version: '8.2.5'
+            version: '8.3.0'
           }
         }
       });

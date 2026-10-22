@@ -20,11 +20,15 @@ import { mcpStreamableRouter } from './mcpStreamable.js';
 import { getOAuthServerMetadata, getOAuthProtectedResourceMetadata, mcpOAuthRouter } from './mcpOAuth.js';
 import { resolvePageMetadata, injectPageMetadata } from './ssrRenderer.js';
 import { ensurePostgresEmailTables } from './scripts/migrate_email_tables_postgres.js';
+import { ensurePostgresV830Schema } from './scripts/migrate_v830_postgres.js';
 
 // Initialize DB schema & tables
 initDatabase();
 ensurePostgresEmailTables().catch((err: any) => {
   console.warn('[Postgres Email Tables Notice]:', err?.message || err);
+});
+ensurePostgresV830Schema().catch((err: any) => {
+  console.warn('[Postgres v8.3.0 Schema Notice]:', err?.message || err);
 });
 
 // Clean up expired sessions every hour
@@ -220,8 +224,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     brand: 'Dawnexus',
-    version: '8.2.5',
-    release: '8.2.5 — Email AI & Multi-Inbox MCP Integration',
+    version: '8.3.0',
+    release: '8.3.0 — Advanced SEO, AI Discovery & Conversion Optimization',
     timestamp: new Date().toISOString()
   });
 });

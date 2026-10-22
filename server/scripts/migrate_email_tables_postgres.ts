@@ -84,7 +84,7 @@ export async function ensurePostgresEmailTables(): Promise<void> {
 }
 
 // Direct execution
-if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
+if (process.argv[1] && import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
   ensurePostgresEmailTables()
     .then(() => process.exit(0))
     .catch((err) => {

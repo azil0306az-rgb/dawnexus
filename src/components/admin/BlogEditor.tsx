@@ -26,9 +26,14 @@ import {
   ExternalLink,
   Upload,
   X,
-  Loader2
+  Loader2,
+  Award,
+  BookOpen,
+  HelpCircle,
+  Plus,
+  RotateCcw
 } from 'lucide-react';
-import { BlogRecord, BlogInput, BlogStatus } from '../../types';
+import { BlogRecord, BlogInput, BlogStatus, CitationAnswerBlockConfig } from '../../types';
 import { SeoWritingAssistant } from './SeoWritingAssistant';
 
 interface BlogEditorProps {
@@ -112,8 +117,44 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
   const [scheduledAtIst, setScheduledAtIst] = useState<string>(getInitialScheduledIst());
   const [adminNotes, setAdminNotes] = useState(initialBlog?.admin_notes || '');
 
+  // Version 8.3.0: Information Gain, E-E-A-T & AI Discovery State
+  const [firsthandObservations, setFirsthandObservations] = useState(initialBlog?.firsthand_observations || '');
+  const [projectExamples, setProjectExamples] = useState(initialBlog?.project_examples || '');
+  const [caseStudies, setCaseStudies] = useState(initialBlog?.case_studies || '');
+  const [originalResearchData, setOriginalResearchData] = useState(initialBlog?.original_research_data || '');
+  const [implementationProcess, setImplementationProcess] = useState(initialBlog?.implementation_process || '');
+  const [externalSourcesInput, setExternalSourcesInput] = useState(() => {
+    if (!initialBlog?.external_sources) return '';
+    try {
+      const parsed = typeof initialBlog.external_sources === 'string'
+        ? JSON.parse(initialBlog.external_sources)
+        : initialBlog.external_sources;
+      return Array.isArray(parsed) ? parsed.join('\n') : '';
+    } catch {
+      return '';
+    }
+  });
+  const [limitationsLessons, setLimitationsLessons] = useState(initialBlog?.limitations_lessons || '');
+  const [authorRole, setAuthorRole] = useState(initialBlog?.author_role || 'Lead Web & SEO Consultant');
+  const [authorBio, setAuthorBio] = useState(initialBlog?.author_bio || '');
+  const [authorCredentials, setAuthorCredentials] = useState(initialBlog?.author_credentials || '');
+  const [reviewerName, setReviewerName] = useState(initialBlog?.reviewer_name || '');
+  const [editorialNotes, setEditorialNotes] = useState(initialBlog?.editorial_notes || '');
+  const [reviewCycleDays, setReviewCycleDays] = useState<number>(initialBlog?.review_cycle_days || 90);
+  const [citationBlocks, setCitationBlocks] = useState<CitationAnswerBlockConfig[]>(() => {
+    if (!initialBlog?.citation_answer_blocks) return [];
+    try {
+      const parsed = typeof initialBlog.citation_answer_blocks === 'string'
+        ? JSON.parse(initialBlog.citation_answer_blocks)
+        : initialBlog.citation_answer_blocks;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
   // UI state
-  const [activeTab, setActiveTab] = useState<'content' | 'seo' | 'intent' | 'schedule'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'evidence' | 'citation_blocks' | 'seo' | 'intent' | 'schedule'>('content');
   const [showSeoAssistant, setShowSeoAssistant] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -346,7 +387,23 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
       status: resolvedStatus,
       scheduled_at: scheduledUtc,
       published_at: resolvedStatus === 'Published' ? (initialBlog?.published_at || new Date().toISOString()) : null,
-      admin_notes: adminNotes.trim()
+      admin_notes: adminNotes.trim(),
+
+      // Version 8.3.0 Evidence & AI Discovery
+      firsthand_observations: firsthandObservations.trim(),
+      project_examples: projectExamples.trim(),
+      case_studies: caseStudies.trim(),
+      original_research_data: originalResearchData.trim(),
+      implementation_process: implementationProcess.trim(),
+      external_sources: externalSourcesInput.split('\n').map(s => s.trim()).filter(Boolean),
+      limitations_lessons: limitationsLessons.trim(),
+      author_role: authorRole.trim(),
+      author_bio: authorBio.trim(),
+      author_credentials: authorCredentials.trim(),
+      reviewer_name: reviewerName.trim(),
+      editorial_notes: editorialNotes.trim(),
+      citation_answer_blocks: citationBlocks,
+      review_cycle_days: Number(reviewCycleDays) || 90
     };
 
     try {
@@ -549,7 +606,7 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('content')}
-                className={`px-4 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
+                className={`px-3 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
                   activeTab === 'content'
                     ? 'border-[#C7FF4D] text-[#C7FF4D]'
                     : 'border-transparent text-neutral-400 hover:text-white'
@@ -560,8 +617,32 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setActiveTab('evidence')}
+                className={`px-3 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
+                  activeTab === 'evidence'
+                    ? 'border-[#C7FF4D] text-[#C7FF4D]'
+                    : 'border-transparent text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Award className="w-4 h-4" />
+                <span>Evidence & E-E-A-T</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('citation_blocks')}
+                className={`px-3 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
+                  activeTab === 'citation_blocks'
+                    ? 'border-[#C7FF4D] text-[#C7FF4D]'
+                    : 'border-transparent text-neutral-400 hover:text-white'
+                }`}
+              >
+                <HelpCircle className="w-4 h-4" />
+                <span>Citation Blocks ({citationBlocks.length})</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab('seo')}
-                className={`px-4 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
+                className={`px-3 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
                   activeTab === 'seo'
                     ? 'border-[#C7FF4D] text-[#C7FF4D]'
                     : 'border-transparent text-neutral-400 hover:text-white'
@@ -573,7 +654,7 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('intent')}
-                className={`px-4 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
+                className={`px-3 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
                   activeTab === 'intent'
                     ? 'border-[#C7FF4D] text-[#C7FF4D]'
                     : 'border-transparent text-neutral-400 hover:text-white'
@@ -585,14 +666,14 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('schedule')}
-                className={`px-4 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
+                className={`px-3 py-2.5 text-xs font-semibold transition border-b-2 -mb-px flex items-center space-x-1.5 ${
                   activeTab === 'schedule'
                     ? 'border-[#C7FF4D] text-[#C7FF4D]'
                     : 'border-transparent text-neutral-400 hover:text-white'
                 }`}
               >
                 <Calendar className="w-4 h-4" />
-                <span>Publishing & Calendar</span>
+                <span>Publishing & Review</span>
               </button>
             </div>
 
@@ -869,6 +950,410 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
             </div>
           )}
 
+          {/* TAB: ORIGINAL EVIDENCE & E-E-A-T */}
+          {activeTab === 'evidence' && (
+            <div className="space-y-5">
+              {/* Author Credibility Card */}
+              <div className="bg-[#0D0D0D] border border-[#202020] rounded-xl p-5 space-y-4">
+                <div className="flex items-center space-x-2 pb-3 border-b border-[#1f1f1f]">
+                  <Award className="w-4 h-4 text-[#C7FF4D]" />
+                  <h3 className="text-sm font-bold text-white tracking-wide">
+                    Author Credibility & Editorial Verification (E-E-A-T)
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Author Role / Title
+                    </label>
+                    <input
+                      type="text"
+                      value={authorRole}
+                      onChange={e => setAuthorRole(e.target.value)}
+                      placeholder="e.g. Lead Web & SEO Architect, Dawnexus"
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Author Credentials / Track Record
+                    </label>
+                    <input
+                      type="text"
+                      value={authorCredentials}
+                      onChange={e => setAuthorCredentials(e.target.value)}
+                      placeholder="e.g. 8+ years enterprise web development; 50+ Coimbatore client rollouts"
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                    Author Bio / Professional Context
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={authorBio}
+                    onChange={e => setAuthorBio(e.target.value)}
+                    placeholder="Short biography establishing hands-on experience and professional background..."
+                    className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-[#1f1f1f]">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Reviewed / Fact-Checked By
+                    </label>
+                    <input
+                      type="text"
+                      value={reviewerName}
+                      onChange={e => setReviewerName(e.target.value)}
+                      placeholder="e.g. Dawnexus Technical Review Board"
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Maintenance Review Cycle
+                    </label>
+                    <select
+                      value={reviewCycleDays}
+                      onChange={e => setReviewCycleDays(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    >
+                      <option value={30}>Every 30 Days (Fast-evolving topics / Pricing)</option>
+                      <option value={60}>Every 60 Days</option>
+                      <option value={90}>Every 90 Days (Recommended standard)</option>
+                      <option value={180}>Every 180 Days (Evergreen foundations)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Information Gain Evidence Pillars */}
+              <div className="bg-[#0D0D0D] border border-[#202020] rounded-xl p-5 space-y-4">
+                <div className="flex items-center space-x-2 pb-3 border-b border-[#1f1f1f]">
+                  <BookOpen className="w-4 h-4 text-[#C7FF4D]" />
+                  <div>
+                    <h3 className="text-sm font-bold text-white tracking-wide">
+                      Information Gain & Originality Evidence
+                    </h3>
+                    <p className="text-[11px] text-neutral-400">
+                      These fields provide unique value beyond generic regurgitation and directly power Google Information Gain & AI citation signals.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                    Firsthand Observations & Field Insights
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={firsthandObservations}
+                    onChange={e => setFirsthandObservations(e.target.value)}
+                    placeholder="Document direct observations from client projects, local trade dynamics, or real implementation encounters..."
+                    className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Real Project Examples & Scenarios
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={projectExamples}
+                      onChange={e => setProjectExamples(e.target.value)}
+                      placeholder="Actual technical challenges, architecture decisions, or website builds handled for clients..."
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Case Studies & Measurable Metrics
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={caseStudies}
+                      onChange={e => setCaseStudies(e.target.value)}
+                      placeholder="Documented before/after results, conversion rate improvements, speed gains, or traffic shifts..."
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Original Research Data / Internal Benchmarks
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={originalResearchData}
+                      onChange={e => setOriginalResearchData(e.target.value)}
+                      placeholder="Dawnexus performance audits, local cost distributions, test results, or primary survey data..."
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      Implementation Process / Methodology
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={implementationProcess}
+                      onChange={e => setImplementationProcess(e.target.value)}
+                      placeholder="The exact step-by-step engineering or SEO process used to deliver this outcome..."
+                      className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                    Limitations, Caveats & Lessons Learned
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={limitationsLessons}
+                    onChange={e => setLimitationsLessons(e.target.value)}
+                    placeholder="Engineering honesty: edge cases where this approach is not recommended, past failures, or tradeoffs..."
+                    className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                    Verified External Sources (One URL per line)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={externalSourcesInput}
+                    onChange={e => setExternalSourcesInput(e.target.value)}
+                    placeholder="https://developers.google.com/search/docs&#10;https://web.dev/vitals/"
+                    className="w-full px-3 py-2 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm font-mono text-xs focus:outline-none transition"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: CITATION ANSWER BLOCKS */}
+          {activeTab === 'citation_blocks' && (
+            <div className="bg-[#0D0D0D] border border-[#202020] rounded-xl p-5 space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-[#1f1f1f]">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <HelpCircle className="w-4 h-4 text-[#C7FF4D]" />
+                    <h3 className="text-sm font-bold text-white tracking-wide">
+                      AI Discovery Citation Answer Blocks
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-neutral-400 mt-1">
+                    Structured answer modules designed for direct citation by AI engines (Perplexity, ChatGPT, Claude, Google AI Overviews).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newBlock: CitationAnswerBlockConfig = {
+                      id: `cab_${Date.now()}`,
+                      heading_text: '',
+                      heading_level: 'h2',
+                      concise_answer: '',
+                      supporting_points: [],
+                      source_reference: 'Dawnexus Production Research'
+                    };
+                    setCitationBlocks([...citationBlocks, newBlock]);
+                  }}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#C7FF4D] hover:bg-[#b8f53a] text-black text-xs font-bold rounded-lg transition shadow"
+                >
+                  <Plus className="w-3.5 h-3.5 text-black" />
+                  <span>Add Answer Block</span>
+                </button>
+              </div>
+
+              {citationBlocks.length === 0 ? (
+                <div className="p-8 border border-dashed border-[#282828] rounded-xl text-center space-y-3">
+                  <HelpCircle className="w-8 h-8 text-neutral-500 mx-auto" />
+                  <div className="text-sm font-semibold text-neutral-300">No Citation Answer Blocks Defined</div>
+                  <p className="text-xs text-neutral-500 max-w-md mx-auto">
+                    Add concise, factual question-and-answer blocks (40-60 words) targeting high-intent questions. They automatically render on the article page and power AI search citations.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newBlock: CitationAnswerBlockConfig = {
+                        id: `cab_${Date.now()}`,
+                        heading_text: primaryKeyword ? `What is ${primaryKeyword}?` : 'Key Industry Question',
+                        heading_level: 'h2',
+                        concise_answer: '',
+                        supporting_points: [],
+                        source_reference: 'Dawnexus Production Benchmark'
+                      };
+                      setCitationBlocks([newBlock]);
+                    }}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#252525] border border-[#333] text-neutral-200 text-xs font-medium rounded-lg transition"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-[#C7FF4D]" />
+                    <span>Create First Answer Block</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {citationBlocks.map((block, idx) => {
+                    const wordCount = block.concise_answer
+                      ? block.concise_answer.trim().split(/\s+/).filter(Boolean).length
+                      : 0;
+                    const isOptimalLength = wordCount >= 40 && wordCount <= 60;
+
+                    return (
+                      <div
+                        key={block.id || idx}
+                        className="bg-[#121212] border border-[#252525] rounded-xl p-4 space-y-3.5"
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-[#1f1f1f]">
+                          <span className="text-xs font-bold text-[#C7FF4D] uppercase tracking-wider">
+                            Answer Block #{idx + 1}
+                          </span>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const snippet = `\n<div class="dawnexus-citation-block" data-citation-id="${block.id || idx}">\n  <${block.heading_level || 'h2'}>${block.heading_text}</${block.heading_level || 'h2'}>\n  <p><strong>Direct Answer:</strong> ${block.concise_answer}</p>\n</div>\n`;
+                                insertFormatting(snippet);
+                              }}
+                              className="text-[11px] px-2 py-0.5 rounded bg-[#1f1f1f] hover:bg-[#2a2a2a] text-neutral-300 transition"
+                              title="Paste citation HTML into article body"
+                            >
+                              Insert HTML
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCitationBlocks(citationBlocks.filter((_, i) => i !== idx));
+                              }}
+                              className="text-[11px] p-1 rounded hover:bg-red-500/10 text-red-400 transition"
+                              title="Remove Answer Block"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          <div className="md:col-span-3">
+                            <label className="block text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-1">
+                              Target Question / Heading Text
+                            </label>
+                            <input
+                              type="text"
+                              value={block.heading_text}
+                              onChange={e => {
+                                const updated = [...citationBlocks];
+                                updated[idx].heading_text = e.target.value;
+                                setCitationBlocks(updated);
+                              }}
+                              placeholder="e.g. How much does a custom business website cost in Coimbatore?"
+                              className="w-full px-3 py-1.5 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-1">
+                              Heading Level
+                            </label>
+                            <select
+                              value={block.heading_level || 'h2'}
+                              onChange={e => {
+                                const updated = [...citationBlocks];
+                                updated[idx].heading_level = e.target.value as 'h2' | 'h3';
+                                setCitationBlocks(updated);
+                              }}
+                              className="w-full px-3 py-1.5 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                            >
+                              <option value="h2">H2 (Major Section)</option>
+                              <option value="h3">H3 (Sub-section)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+                              Concise Direct Answer (Target: 40-60 words)
+                            </label>
+                            <span className={`text-[10px] font-mono ${
+                              isOptimalLength ? 'text-[#C7FF4D]' : 'text-neutral-500'
+                            }`}>
+                              {wordCount} words {isOptimalLength ? '✓ Optimal for AI' : '(40-60 recommended)'}
+                            </span>
+                          </div>
+                          <textarea
+                            rows={3}
+                            value={block.concise_answer}
+                            onChange={e => {
+                              const updated = [...citationBlocks];
+                              updated[idx].concise_answer = e.target.value;
+                              setCitationBlocks(updated);
+                            }}
+                            placeholder="Provide a definitive, factual, self-contained answer without fluff or generic filler..."
+                            className="w-full px-3 py-2 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-1">
+                              Supporting Points (One per line)
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={(block.supporting_points || []).join('\n')}
+                              onChange={e => {
+                                const updated = [...citationBlocks];
+                                updated[idx].supporting_points = e.target.value.split('\n').filter(Boolean);
+                                setCitationBlocks(updated);
+                              }}
+                              placeholder="Key factor 1&#10;Key factor 2"
+                              className="w-full px-3 py-1.5 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-1">
+                              Attribution / Source Reference
+                            </label>
+                            <input
+                              type="text"
+                              value={block.source_reference || ''}
+                              onChange={e => {
+                                const updated = [...citationBlocks];
+                                updated[idx].source_reference = e.target.value;
+                                setCitationBlocks(updated);
+                              }}
+                              placeholder="e.g. Dawnexus Coimbatore Web Pricing Benchmark 2026"
+                              className="w-full px-3 py-1.5 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TAB 2: SEO METADATA */}
           {activeTab === 'seo' && (
             <div className="bg-[#0D0D0D] border border-[#202020] rounded-xl p-5 space-y-5">
@@ -1100,6 +1585,39 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                 </div>
               )}
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-[#1f1f1f]">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                    Freshness Review Cycle
+                  </label>
+                  <select
+                    value={reviewCycleDays}
+                    onChange={e => setReviewCycleDays(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 bg-[#141414] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-sm focus:outline-none transition"
+                  >
+                    <option value={30}>Every 30 Days (Rapid market & price changes)</option>
+                    <option value={60}>Every 60 Days</option>
+                    <option value={90}>Every 90 Days (Standard SEO freshness)</option>
+                    <option value={180}>Every 180 Days (Evergreen pillars)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
+                    Last Verified / Reviewed At
+                  </label>
+                  <div className="px-3 py-2.5 bg-[#141414] border border-[#282828] rounded-lg text-xs text-neutral-300">
+                    {initialBlog?.last_reviewed_at
+                      ? new Date(initialBlog.last_reviewed_at).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })
+                      : 'Not yet recorded (will register upon review)'}
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
                   Internal Editorial Notes (Admin only)
@@ -1149,6 +1667,18 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                 search_intent: searchIntent,
                 seo_title: seoTitle,
                 meta_description: metaDescription
+              }}
+              blogData={{
+                firsthand_observations: firsthandObservations,
+                project_examples: projectExamples,
+                case_studies: caseStudies,
+                original_research_data: originalResearchData,
+                implementation_process: implementationProcess,
+                external_sources: externalSourcesInput.split('\n').map(s => s.trim()).filter(Boolean),
+                limitations_lessons: limitationsLessons,
+                author_role: authorRole,
+                author_credentials: authorCredentials,
+                citation_answer_blocks: citationBlocks
               }}
               onInsertText={snippet => insertFormatting(`\n${snippet}\n`)}
             />

@@ -41,7 +41,14 @@ import {
   persistEnquiryDeletion,
   persistClient,
   persistClientDeletion,
-  publishDueScheduledBlogsReliable
+  publishDueScheduledBlogsReliable,
+  getBlogsRequiringReview,
+  recordBlogReview,
+  getAiCitationObservations,
+  createAiCitationObservation,
+  deleteAiCitationObservation,
+  getContextualCtaConfigs,
+  upsertContextualCtaConfig
 } from '../db.js';
 import {
   sendOtpVerificationEmail,
@@ -60,6 +67,9 @@ import { MCP_TOOLS } from '../mcpServer.js';
 import { GscService } from '../gscService.js';
 import { Ga4Service } from '../ga4Service.js';
 import { GeminiService } from '../geminiService.js';
+import { assessInformationGain, detectContentOverlap } from '../seoQualityService.js';
+import { auditHtmlPayloads } from '../payloadAudit.js';
+import { generateServerJsonLd, validateJsonLdStructure } from '../jsonLdService.js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1633,19 +1643,19 @@ adminRouter.get('/diagnostics', async (req, res) => {
       details: { editableSlugs: pages.map(p => p.slug) }
     });
 
-    // 12. Claude MCP Platform Readiness (Version 8.0.0)
+    // 12. Claude & Remote MCP Platform Readiness (Version 8.3.0)
     checks.push({
       id: 'claude-mcp-readiness',
-      name: 'Claude MCP Platform Readiness (v8.0.0)',
+      name: 'Claude & Remote MCP Platform Readiness (v8.3.0)',
       category: 'mcp',
-      status: toolsCount === 53 ? 'Connected and verified' : 'Check failed',
-      message: 'All 53 Dawnexus MCP tools operational for authorized Claude Desktop, Claude Code, and web MCP clients over SSE and JSON-RPC.',
+      status: toolsCount === MCP_TOOLS.length ? 'Connected and verified' : 'Check failed',
+      message: `All ${toolsCount} Dawnexus MCP tools operational for authorized Claude Custom Connectors, Claude Desktop, and web MCP clients.`,
       lastTested,
       details: {
         toolsCount,
-        transports: ['SSE (/api/mcp/sse)', 'JSON-RPC (/api/mcp/rpc)', 'OpenAPI (/api/mcp/openapi.json)'],
+        transports: ['Streamable HTTP (/mcp)', 'SSE (/api/mcp/sse)', 'JSON-RPC (/api/mcp/rpc)', 'OpenAPI (/api/mcp/openapi.json)'],
         authSchemes: ['RFC 8414 OAuth 2.0 Bearer', 'x-mcp-api-key'],
-        targetClient: 'Claude Desktop / Claude Code / Web MCP'
+        targetClient: 'Claude Custom Connector / Claude Desktop / Web MCP'
       }
     });
 
@@ -1688,6 +1698,151 @@ adminRouter.get('/diagnostics', async (req, res) => {
     return res.status(500).json({ error: 'Failed to run integration diagnostics', details: error?.message });
   }
 });
+
+// ==========================================
+// DAWNEXUS VERSION 8.3.0 — ADVANCED SEO, AI DISCOVERY & CONVERSION
+// ==========================================
+
+// 1. Audit Blog for Information Gain, E-E-A-T & Overlap
+adminRouter.get('/seo-quality/audit/:id', (req, res) => {
+  try {
+    const blogId = Number(req.params.id);
+    const blog = getBlogById(blogId);
+    if (!blog) {
+      return res.status(404).json({ error: 'Blog not found' });
+    }
+
+    const audit = assessInformationGain(blog);
+    const allBlogs = getBlogs();
+    const overlap = detectContentOverlap(blog, allBlogs);
+
+    return res.json({
+      blogId: blog.id,
+      title: blog.title,
+      slug: blog.slug,
+      audit,
+      overlap
+    });
+  } catch (err: any) {
+    console.error('[SEO Quality Audit Error]:', err);
+    return res.status(500).json({ error: 'Failed to audit blog', details: err?.message });
+  }
+});
+
+// 2. Real-time Preview Audit for Editor
+adminRouter.post('/seo-quality/preview-audit', (req, res) => {
+  try {
+    const audit = assessInformationGain(req.body);
+    return res.json({ audit });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to analyze preview', details: err?.message });
+  }
+});
+
+// 3. Content Freshness & Editorial Review Schedule
+adminRouter.get('/seo-quality/freshness', (_req, res) => {
+  try {
+    const items = getBlogsRequiringReview();
+    return res.json({
+      total: items.length,
+      overdue: items.filter(i => i.is_overdue).length,
+      dueSoon: items.filter(i => !i.is_overdue && (i.review_cycle_days || 90) - i.days_since_review <= 14).length,
+      blogs: items
+    });
+  } catch (err: any) {
+    console.error('[SEO Freshness Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve freshness status', details: err?.message });
+  }
+});
+
+// 4. Record Maintenance Review (Preserves original published_at!)
+adminRouter.post('/seo-quality/freshness/:id/review', (req, res) => {
+  try {
+    const blogId = Number(req.params.id);
+    const notes = req.body.notes ? String(req.body.notes).trim() : undefined;
+    const updated = recordBlogReview(blogId, notes);
+    if (!updated) {
+      return res.status(404).json({ error: 'Blog not found' });
+    }
+
+    return res.json({
+      success: true,
+      message: `Freshness review recorded for article #${blogId}. Original publication date preserved.`,
+      blog: updated
+    });
+  } catch (err: any) {
+    console.error('[Record Blog Review Error]:', err);
+    return res.status(500).json({ error: 'Failed to record review', details: err?.message });
+  }
+});
+
+// 5. HTML Payload Size & Core Web Vitals Diagnostic (against 2 MB operational threshold)
+adminRouter.get('/seo-quality/payload-audit', async (_req, res) => {
+  try {
+    const audit = await auditHtmlPayloads();
+    return res.json(audit);
+  } catch (err: any) {
+    console.error('[Payload Audit Error]:', err);
+    return res.status(500).json({ error: 'Failed to run payload audit', details: err?.message });
+  }
+});
+
+// 6. AI Citation Observations (CRUD)
+adminRouter.get('/seo-quality/citations', (_req, res) => {
+  try {
+    const rows = getAiCitationObservations();
+    return res.json({ citations: rows });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to retrieve citations', details: err?.message });
+  }
+});
+
+adminRouter.post('/seo-quality/citations', (req, res) => {
+  try {
+    const { ai_platform, source_ai, query_prompt, cited_snippet, notes, article_slug } = req.body;
+    const observation = createAiCitationObservation({
+      article_slug: article_slug || 'general',
+      source_ai: ai_platform || source_ai || 'Google AI Overview',
+      query_prompt: query_prompt || 'Coimbatore web services',
+      observed_date: new Date().toISOString().split('T')[0],
+      citation_url: req.body.source_citation_url || 'https://www.dawnexus.in',
+      notes: cited_snippet || notes || ''
+    });
+    return res.status(201).json({ success: true, observation });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to record citation observation', details: err?.message });
+  }
+});
+
+adminRouter.delete('/seo-quality/citations/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const ok = deleteAiCitationObservation(id);
+    return res.json({ success: ok });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to delete citation', details: err?.message });
+  }
+});
+
+// 7. Contextual CTAs (Funnel Configuration)
+adminRouter.get('/seo-quality/ctas', (_req, res) => {
+  try {
+    const ctas = getContextualCtaConfigs();
+    return res.json({ ctas });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to retrieve CTAs', details: err?.message });
+  }
+});
+
+adminRouter.put('/seo-quality/ctas', (req, res) => {
+  try {
+    const updated = upsertContextualCtaConfig(req.body);
+    return res.json({ success: true, cta: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to update CTA', details: err?.message });
+  }
+});
+
 
 
 

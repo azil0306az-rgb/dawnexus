@@ -13,6 +13,17 @@ export interface SeoAnalysisInput {
   search_intent: string;
   seo_title: string;
   meta_description: string;
+  // Version 8.3.0 fields
+  firsthand_observations?: string;
+  project_examples?: string;
+  case_studies?: string;
+  original_research_data?: string;
+  implementation_process?: string;
+  external_sources?: string[] | string;
+  limitations_lessons?: string;
+  author_role?: string;
+  author_credentials?: string;
+  citation_answer_blocks?: any[] | string;
 }
 
 export function analyzeSeo(input: SeoAnalysisInput): SeoAuditResult {

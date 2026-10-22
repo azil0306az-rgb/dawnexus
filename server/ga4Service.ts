@@ -790,8 +790,8 @@ export class Ga4Service {
       engagementRate: finalRate,
       avgEngagementDurationSeconds: finalDuration,
       screenPageViews: finalViews,
-      eventCount: eventCount,
-      conversions: conversions
+      eventCount: finalEventCount,
+      conversions: finalConversions
     };
 
     const prevRow = prevRes.data?.rows?.[0]?.metricValues || [];

@@ -163,6 +163,21 @@ export function initDatabase() {
       admin_notes TEXT DEFAULT '',
       seo_report TEXT DEFAULT NULL,
       content_revision TEXT DEFAULT NULL,
+      firsthand_observations TEXT DEFAULT '',
+      project_examples TEXT DEFAULT '',
+      case_studies TEXT DEFAULT '',
+      original_research_data TEXT DEFAULT '',
+      implementation_process TEXT DEFAULT '',
+      external_sources TEXT DEFAULT '[]',
+      limitations_lessons TEXT DEFAULT '',
+      author_role TEXT DEFAULT 'Technical Architect & SEO Strategist',
+      author_bio TEXT DEFAULT '',
+      author_credentials TEXT DEFAULT '',
+      reviewer_name TEXT DEFAULT '',
+      editorial_notes TEXT DEFAULT '',
+      citation_answer_blocks TEXT DEFAULT '[]',
+      review_cycle_days INTEGER DEFAULT 90,
+      last_reviewed_at TEXT DEFAULT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -367,13 +382,57 @@ export function initDatabase() {
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_enquiries_estimate_ref ON enquiries(estimate_ref_id) WHERE estimate_ref_id IS NOT NULL;`);
   } catch {}
 
-  // Safe migrations for blogs table
-  try {
-    db.exec(`ALTER TABLE blogs ADD COLUMN seo_report TEXT DEFAULT NULL;`);
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE blogs ADD COLUMN content_revision TEXT DEFAULT NULL;`);
-  } catch {}
+  // Safe migrations for blogs table (Version 8.3.0)
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN seo_report TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN content_revision TEXT DEFAULT NULL;`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN firsthand_observations TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN project_examples TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN case_studies TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN original_research_data TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN implementation_process TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN external_sources TEXT DEFAULT '[]';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN limitations_lessons TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN author_role TEXT DEFAULT 'Technical Architect & SEO Strategist';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN author_bio TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN author_credentials TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN reviewer_name TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN editorial_notes TEXT DEFAULT '';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN citation_answer_blocks TEXT DEFAULT '[]';`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN review_cycle_days INTEGER DEFAULT 90;`); } catch {}
+  try { db.exec(`ALTER TABLE blogs ADD COLUMN last_reviewed_at TEXT DEFAULT NULL;`); } catch {}
+
+  // Version 8.3.0: AI Discovery & Citation Observations
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_citation_observations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      article_slug TEXT NOT NULL,
+      source_ai TEXT NOT NULL,
+      query_prompt TEXT NOT NULL,
+      observed_date TEXT NOT NULL,
+      citation_url TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      recorded_by TEXT DEFAULT 'admin',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_citations_slug ON ai_citation_observations(article_slug);
+  `);
+
+  // Version 8.3.0: Contextual CTA Configurations & Frequency
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contextual_cta_configs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_key TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      headline TEXT NOT NULL,
+      description TEXT NOT NULL,
+      button_text TEXT NOT NULL,
+      target_url TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      scroll_threshold INTEGER NOT NULL DEFAULT 50,
+      dwell_time_seconds INTEGER NOT NULL DEFAULT 20,
+      updated_at TEXT NOT NULL
+    );
+  `);
 
   // Table for Website Cost Estimator pricing configuration
   db.exec(`
@@ -1036,6 +1095,22 @@ export interface BlogRecord {
   admin_notes: string;
   seo_report?: string | null;
   content_revision?: string | null;
+  // Version 8.3.0: Information Gain, E-E-A-T & AI Citation Blocks
+  firsthand_observations?: string;
+  project_examples?: string;
+  case_studies?: string;
+  original_research_data?: string;
+  implementation_process?: string;
+  external_sources?: string; // JSON string array
+  limitations_lessons?: string;
+  author_role?: string;
+  author_bio?: string;
+  author_credentials?: string;
+  reviewer_name?: string;
+  editorial_notes?: string;
+  citation_answer_blocks?: string; // JSON string array
+  review_cycle_days?: number;
+  last_reviewed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1065,6 +1140,22 @@ export interface CreateBlogInput {
   admin_notes?: string;
   seo_report?: string | null;
   content_revision?: string | null;
+  // Version 8.3.0
+  firsthand_observations?: string;
+  project_examples?: string;
+  case_studies?: string;
+  original_research_data?: string;
+  implementation_process?: string;
+  external_sources?: string[] | string;
+  limitations_lessons?: string;
+  author_role?: string;
+  author_bio?: string;
+  author_credentials?: string;
+  reviewer_name?: string;
+  editorial_notes?: string;
+  citation_answer_blocks?: any[] | string;
+  review_cycle_days?: number;
+  last_reviewed_at?: string | null;
 }
 
 export function slugify(text: string): string {
@@ -1112,13 +1203,23 @@ export function createBlog(input: CreateBlogInput): BlogRecord {
       category, tags, primary_keyword, secondary_keywords, target_location,
       search_intent, target_audience, target_questions, seo_title,
       meta_description, canonical_url, status, scheduled_at, published_at,
-      publication_error, admin_notes, seo_report, content_revision, created_at, updated_at
+      publication_error, admin_notes, seo_report, content_revision,
+      firsthand_observations, project_examples, case_studies, original_research_data,
+      implementation_process, external_sources, limitations_lessons,
+      author_role, author_bio, author_credentials, reviewer_name, editorial_notes,
+      citation_answer_blocks, review_cycle_days, last_reviewed_at,
+      created_at, updated_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      '', ?, ?, ?, ?, ?
+      '', ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?
     )
   `);
 
@@ -1147,6 +1248,21 @@ export function createBlog(input: CreateBlogInput): BlogRecord {
     (input.admin_notes || '').trim(),
     input.seo_report !== undefined ? (typeof input.seo_report === 'string' ? input.seo_report : JSON.stringify(input.seo_report)) : null,
     input.content_revision || null,
+    (input.firsthand_observations || '').trim(),
+    (input.project_examples || '').trim(),
+    (input.case_studies || '').trim(),
+    (input.original_research_data || '').trim(),
+    (input.implementation_process || '').trim(),
+    typeof input.external_sources === 'string' ? input.external_sources : JSON.stringify(input.external_sources || []),
+    (input.limitations_lessons || '').trim(),
+    (input.author_role || 'Technical Architect & SEO Strategist').trim(),
+    (input.author_bio || '').trim(),
+    (input.author_credentials || '').trim(),
+    (input.reviewer_name || '').trim(),
+    (input.editorial_notes || '').trim(),
+    typeof input.citation_answer_blocks === 'string' ? input.citation_answer_blocks : JSON.stringify(input.citation_answer_blocks || []),
+    input.review_cycle_days || 90,
+    input.last_reviewed_at || null,
     now,
     now
   );
@@ -1211,7 +1327,7 @@ export interface GetBlogsQuery {
   limit?: number;
 }
 
-export function getBlogs(params: GetBlogsQuery) {
+export function getBlogs(params: GetBlogsQuery = {}) {
   const page = Math.max(1, params.page || 1);
   const limit = Math.max(1, Math.min(100, params.limit || 20));
   const offset = (page - 1) * limit;
@@ -1343,11 +1459,26 @@ export function updateBlog(id: number, updates: Partial<CreateBlogInput>): BlogR
       admin_notes = ?,
       seo_report = ?,
       content_revision = ?,
+      firsthand_observations = ?,
+      project_examples = ?,
+      case_studies = ?,
+      original_research_data = ?,
+      implementation_process = ?,
+      external_sources = ?,
+      limitations_lessons = ?,
+      author_role = ?,
+      author_bio = ?,
+      author_credentials = ?,
+      reviewer_name = ?,
+      editorial_notes = ?,
+      citation_answer_blocks = ?,
+      review_cycle_days = ?,
+      last_reviewed_at = ?,
       updated_at = ?
     WHERE id = ?
   `);
 
-  stmt.run(
+  (stmt as any).run(
     updates.title !== undefined ? updates.title.trim() : current.title,
     slug,
     updates.excerpt !== undefined ? updates.excerpt.trim() : current.excerpt,
@@ -1372,6 +1503,21 @@ export function updateBlog(id: number, updates: Partial<CreateBlogInput>): BlogR
     updates.admin_notes !== undefined ? updates.admin_notes.trim() : current.admin_notes,
     updates.seo_report !== undefined ? (typeof updates.seo_report === 'string' ? updates.seo_report : JSON.stringify(updates.seo_report)) : current.seo_report || null,
     updates.content_revision !== undefined ? updates.content_revision : current.content_revision || null,
+    updates.firsthand_observations !== undefined ? updates.firsthand_observations.trim() : (current.firsthand_observations || ''),
+    updates.project_examples !== undefined ? updates.project_examples.trim() : (current.project_examples || ''),
+    updates.case_studies !== undefined ? updates.case_studies.trim() : (current.case_studies || ''),
+    updates.original_research_data !== undefined ? updates.original_research_data.trim() : (current.original_research_data || ''),
+    updates.implementation_process !== undefined ? updates.implementation_process.trim() : (current.implementation_process || ''),
+    updates.external_sources !== undefined ? (typeof updates.external_sources === 'string' ? updates.external_sources : JSON.stringify(updates.external_sources)) : (current.external_sources || '[]'),
+    updates.limitations_lessons !== undefined ? updates.limitations_lessons.trim() : (current.limitations_lessons || ''),
+    updates.author_role !== undefined ? updates.author_role.trim() : (current.author_role || 'Technical Architect & SEO Strategist'),
+    updates.author_bio !== undefined ? updates.author_bio.trim() : (current.author_bio || ''),
+    updates.author_credentials !== undefined ? updates.author_credentials.trim() : (current.author_credentials || ''),
+    updates.reviewer_name !== undefined ? updates.reviewer_name.trim() : (current.reviewer_name || ''),
+    updates.editorial_notes !== undefined ? updates.editorial_notes.trim() : (current.editorial_notes || ''),
+    updates.citation_answer_blocks !== undefined ? (typeof updates.citation_answer_blocks === 'string' ? updates.citation_answer_blocks : JSON.stringify(updates.citation_answer_blocks)) : (current.citation_answer_blocks || '[]'),
+    updates.review_cycle_days !== undefined ? Number(updates.review_cycle_days) : (current.review_cycle_days || 90),
+    updates.last_reviewed_at !== undefined ? updates.last_reviewed_at : current.last_reviewed_at,
     now,
     id
   );
@@ -3087,6 +3233,226 @@ export function deleteEmailReplyDraft(id: number, adminUser: string = 'admin'): 
     deleteEmailReplyDraftFromSupabase(id).catch(() => {});
   }
   return ok;
+}
+
+// ----------------------------------------------------
+// VERSION 8.3.0: AI CITATIONS, CTAS & EDITORIAL MAINTENANCE
+// ----------------------------------------------------
+
+export interface AiCitationObservationRecord {
+  id: number;
+  article_slug: string;
+  source_ai: string;
+  query_prompt: string;
+  observed_date: string;
+  citation_url: string;
+  notes: string;
+  recorded_by: string;
+  created_at: string;
+}
+
+export function getAiCitationObservations(articleSlug?: string): AiCitationObservationRecord[] {
+  if (articleSlug) {
+    const stmt = db.prepare('SELECT * FROM ai_citation_observations WHERE article_slug = ? ORDER BY id DESC');
+    return stmt.all(articleSlug) as unknown as AiCitationObservationRecord[];
+  }
+  const stmt = db.prepare('SELECT * FROM ai_citation_observations ORDER BY id DESC');
+  return stmt.all() as unknown as AiCitationObservationRecord[];
+}
+
+export function createAiCitationObservation(input: {
+  article_slug: string;
+  source_ai: string;
+  query_prompt: string;
+  observed_date: string;
+  citation_url?: string;
+  notes?: string;
+  recorded_by?: string;
+}): AiCitationObservationRecord {
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO ai_citation_observations (
+      article_slug, source_ai, query_prompt, observed_date, citation_url, notes, recorded_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const res = stmt.run(
+    input.article_slug.trim(),
+    input.source_ai.trim(),
+    input.query_prompt.trim(),
+    input.observed_date.trim(),
+    (input.citation_url || '').trim(),
+    (input.notes || '').trim(),
+    (input.recorded_by || 'admin').trim(),
+    now
+  );
+  return db.prepare('SELECT * FROM ai_citation_observations WHERE id = ?').get(Number(res.lastInsertRowid)) as unknown as AiCitationObservationRecord;
+}
+
+export function deleteAiCitationObservation(id: number): boolean {
+  const stmt = db.prepare('DELETE FROM ai_citation_observations WHERE id = ?');
+  const res = stmt.run(id);
+  return Number(res.changes) > 0;
+}
+
+export interface ContextualCtaRecord {
+  id: number;
+  service_key: string;
+  title: string;
+  headline: string;
+  description: string;
+  button_text: string;
+  target_url: string;
+  is_active: number;
+  scroll_threshold: number;
+  dwell_time_seconds: number;
+  updated_at: string;
+}
+
+export const DEFAULT_CONTEXTUAL_CTAS: Array<Omit<ContextualCtaRecord, 'id' | 'updated_at'>> = [
+  {
+    service_key: 'website-design',
+    title: 'Custom Website Design & Engineering',
+    headline: 'Ready to modernize your digital presence with zero technical debt?',
+    description: 'Get a bespoke, conversion-architected website engineered for speed, mobile ergonomics, and local Coimbatore dominance.',
+    button_text: 'Estimate Project in Calculator',
+    target_url: '/website-cost-calculator',
+    is_active: 1,
+    scroll_threshold: 50,
+    dwell_time_seconds: 20
+  },
+  {
+    service_key: 'seo-services',
+    title: 'Evidence-Based Technical & Local SEO',
+    headline: 'Looking to turn organic search into an enduring customer acquisition channel?',
+    description: 'Our technical SEO audits eliminate indexing blocks, accelerate Core Web Vitals, and build verifiable local authority.',
+    button_text: 'Request Strategic SEO Audit',
+    target_url: '/services/seo-services#contact',
+    is_active: 1,
+    scroll_threshold: 50,
+    dwell_time_seconds: 20
+  },
+  {
+    service_key: 'ai-video-creation',
+    title: 'High-Velocity AI Video Production',
+    headline: 'Scale your marketing assets without expensive multi-week video shoots.',
+    description: 'Broadcast-grade digital avatars, automated video localization, and product explainers engineered for high conversion.',
+    button_text: 'Explore AI Video Packages',
+    target_url: '/services/ai-video-creation',
+    is_active: 1,
+    scroll_threshold: 50,
+    dwell_time_seconds: 20
+  },
+  {
+    service_key: 'digital-marketing',
+    title: 'Multi-Channel Growth & Demand Gen',
+    headline: 'Drive measurable ROI with privacy-first attribution & funnel architecture.',
+    description: 'Data-driven paid media, Google Ads optimization, and audience retention strategies designed for sustainable revenue.',
+    button_text: 'Book Strategy Consultation',
+    target_url: '/services/digital-marketing#contact',
+    is_active: 1,
+    scroll_threshold: 50,
+    dwell_time_seconds: 20
+  }
+];
+
+export function getContextualCtaConfigs(): ContextualCtaRecord[] {
+  const stmt = db.prepare('SELECT * FROM contextual_cta_configs ORDER BY id ASC');
+  const rows = stmt.all() as unknown as ContextualCtaRecord[];
+  if (rows.length === 0) {
+    // Seed default CTAs if empty
+    const now = new Date().toISOString();
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO contextual_cta_configs (
+        service_key, title, headline, description, button_text, target_url, is_active, scroll_threshold, dwell_time_seconds, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const d of DEFAULT_CONTEXTUAL_CTAS) {
+      insertStmt.run(d.service_key, d.title, d.headline, d.description, d.button_text, d.target_url, d.is_active, d.scroll_threshold, d.dwell_time_seconds, now);
+    }
+    return db.prepare('SELECT * FROM contextual_cta_configs ORDER BY id ASC').all() as unknown as ContextualCtaRecord[];
+  }
+  return rows;
+}
+
+export function upsertContextualCtaConfig(input: Partial<ContextualCtaRecord> & { service_key: string }): ContextualCtaRecord {
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT * FROM contextual_cta_configs WHERE service_key = ?').get(input.service_key) as ContextualCtaRecord | undefined;
+  if (existing) {
+    db.prepare(`
+      UPDATE contextual_cta_configs SET
+        title = ?, headline = ?, description = ?, button_text = ?, target_url = ?,
+        is_active = ?, scroll_threshold = ?, dwell_time_seconds = ?, updated_at = ?
+      WHERE service_key = ?
+    `).run(
+      input.title !== undefined ? input.title : existing.title,
+      input.headline !== undefined ? input.headline : existing.headline,
+      input.description !== undefined ? input.description : existing.description,
+      input.button_text !== undefined ? input.button_text : existing.button_text,
+      input.target_url !== undefined ? input.target_url : existing.target_url,
+      input.is_active !== undefined ? (input.is_active ? 1 : 0) : existing.is_active,
+      input.scroll_threshold !== undefined ? input.scroll_threshold : existing.scroll_threshold,
+      input.dwell_time_seconds !== undefined ? input.dwell_time_seconds : existing.dwell_time_seconds,
+      now,
+      input.service_key
+    );
+  } else {
+    db.prepare(`
+      INSERT INTO contextual_cta_configs (
+        service_key, title, headline, description, button_text, target_url, is_active, scroll_threshold, dwell_time_seconds, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      input.service_key,
+      input.title || 'Specialized Service',
+      input.headline || 'Work with Dawnexus',
+      input.description || 'Request a customized strategic consultation.',
+      input.button_text || 'Contact Us',
+      input.target_url || '/#contact',
+      input.is_active !== undefined ? (input.is_active ? 1 : 0) : 1,
+      input.scroll_threshold || 50,
+      input.dwell_time_seconds || 20,
+      now
+    );
+  }
+  return db.prepare('SELECT * FROM contextual_cta_configs WHERE service_key = ?').get(input.service_key) as unknown as ContextualCtaRecord;
+}
+
+export function getBlogsRequiringReview(): Array<BlogRecord & { days_since_review: number; is_overdue: boolean }> {
+  const published = db.prepare("SELECT * FROM blogs WHERE status = 'Published' ORDER BY id DESC").all() as unknown as BlogRecord[];
+  const now = Date.now();
+
+  return published.map(blog => {
+    const referenceDate = blog.last_reviewed_at || blog.updated_at || blog.published_at || blog.created_at;
+    const refMs = new Date(referenceDate).getTime();
+    const daysSince = Math.floor((now - refMs) / (1000 * 60 * 60 * 24));
+    const cycle = blog.review_cycle_days || 90;
+    return {
+      ...blog,
+      days_since_review: daysSince,
+      is_overdue: daysSince >= cycle
+    };
+  });
+}
+
+export function recordBlogReview(id: number, notes?: string): BlogRecord | null {
+  const now = new Date().toISOString();
+  const current = getBlogById(id);
+  if (!current) return null;
+
+  const editorialNote = notes
+    ? (current.editorial_notes ? `${current.editorial_notes}\n[Review ${now.split('T')[0]}]: ${notes}` : `[Review ${now.split('T')[0]}]: ${notes}`)
+    : current.editorial_notes;
+
+  (db.prepare(`
+    UPDATE blogs SET
+      last_reviewed_at = ?,
+      editorial_notes = ?,
+      updated_at = ?
+    WHERE id = ?
+  `) as any).run(now, editorialNote, now, id);
+
+  const updated = getBlogById(id)!;
+  pushBlogToSupabase(updated).catch(() => {});
+  return updated;
 }
 
 // Call initialization

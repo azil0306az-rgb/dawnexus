@@ -13,9 +13,13 @@ import {
   ChevronRight,
   Bookmark
 } from 'lucide-react';
-import { BlogRecord } from '../../types';
+import { BlogRecord, CitationAnswerBlockData } from '../../types';
 import { navigateTo } from '../../utils/navigation';
 import { usePageSeo } from '../../utils/seo';
+import { buildArticleJsonLd } from '../../utils/jsonLd';
+import { CitationAnswerBlock } from '../../components/public/CitationAnswerBlock';
+import { ContextualCtaBlock } from '../../components/public/ContextualCtaBlock';
+import { ShieldCheck, Award } from 'lucide-react';
 
 interface BlogPostPageProps {
   slug?: string;
@@ -37,32 +41,7 @@ export const BlogPostPage: React.FC<BlogPostPageProps> = ({ slug: propSlug }) =>
     description: blog ? (blog.meta_description || blog.excerpt) : 'Dawnexus digital marketing, web engineering and AI insights.',
     canonicalUrl: `https://www.dawnexus.in/blog/${currentSlug}`,
     ogImage: blog?.featured_image || 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
-    schema: blog ? {
-      '@context': 'https://schema.org',
-      '@type': 'BlogPosting',
-      'mainEntityOfPage': {
-        '@type': 'WebPage',
-        '@id': `https://www.dawnexus.in/blog/${blog.slug}`
-      },
-      'headline': blog.title,
-      'description': blog.meta_description || blog.excerpt,
-      'image': blog.featured_image || 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
-      'author': {
-        '@type': 'Organization',
-        'name': blog.author || 'Dawnexus Editorial',
-        'url': 'https://www.dawnexus.in/'
-      },
-      'publisher': {
-        '@type': 'Organization',
-        'name': 'Dawnexus',
-        'logo': {
-          '@type': 'ImageObject',
-          'url': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png'
-        }
-      },
-      'datePublished': blog.published_at || blog.created_at,
-      'dateModified': blog.updated_at || blog.published_at || blog.created_at
-    } : undefined
+    schema: blog ? buildArticleJsonLd(blog) : undefined
   });
 
   useEffect(() => {
@@ -143,6 +122,26 @@ export const BlogPostPage: React.FC<BlogPostPageProps> = ({ slug: propSlug }) =>
   } catch {
     //
   }
+
+  // Parse Citation Answer Blocks (Version 8.3.0)
+  let citationBlocks: CitationAnswerBlockData[] = [];
+  try {
+    citationBlocks = typeof blog.citation_answer_blocks === 'string'
+      ? JSON.parse(blog.citation_answer_blocks)
+      : (blog.citation_answer_blocks || []);
+  } catch {
+    //
+  }
+
+  // Map category to contextual service key
+  const getServiceKey = (cat: string): 'website-design' | 'seo-services' | 'ai-video-creation' | 'digital-marketing' => {
+    const c = (cat || '').toLowerCase();
+    if (c.includes('web') || c.includes('design') || c.includes('cost')) return 'website-design';
+    if (c.includes('seo') || c.includes('search') || c.includes('maps')) return 'seo-services';
+    if (c.includes('video') || c.includes('ai')) return 'ai-video-creation';
+    return 'digital-marketing';
+  };
+  const targetServiceKey = getServiceKey(blog.category);
 
   // Calculate approximate reading time
   const plainText = (blog.content || '').replace(/<[^>]*>/g, '');
@@ -293,6 +292,30 @@ export const BlogPostPage: React.FC<BlogPostPageProps> = ({ slug: propSlug }) =>
           </div>
         )}
 
+        {/* Citation Answer Blocks (Version 8.3.0 AI Discovery) */}
+        {citationBlocks.length > 0 && (
+          <section className="my-12 space-y-6" aria-label="Key Strategic Answers">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#C7FF4D]" />
+              <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                Key Strategic Direct Answers
+              </h3>
+            </div>
+            <div className="space-y-4">
+              {citationBlocks.map((block, idx) => (
+                <CitationAnswerBlock
+                  key={block.id || idx}
+                  question={block.question}
+                  answer={block.answer}
+                  supportingDetails={block.supporting_details}
+                  headingTag={block.heading_tag || 'h3'}
+                  categoryBadge={blog.category}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Tags */}
         {parsedTags.length > 0 && (
           <div className="pt-6 border-t border-[#202020] flex flex-wrap items-center gap-2">
@@ -308,50 +331,70 @@ export const BlogPostPage: React.FC<BlogPostPageProps> = ({ slug: propSlug }) =>
           </div>
         )}
 
-        {/* Author Bio Box */}
-        <div className="my-12 p-6 sm:p-8 rounded-2xl bg-[#0B0B0B] border border-[#252525] flex flex-col sm:flex-row items-center gap-6">
-          <div className="w-16 h-16 rounded-2xl bg-[#121212] border border-[#252525] flex items-center justify-center text-[#C7FF4D] shrink-0 font-extrabold text-2xl font-mono">
-            D
-          </div>
-          <div className="space-y-2 text-center sm:text-left">
-            <div className="text-xs font-mono text-[#C7FF4D] uppercase tracking-wider">
-              Published by
+        {/* E-E-A-T Author & Reviewer Credibility Box */}
+        <section className="my-12 p-6 sm:p-8 rounded-2xl bg-[#0B0B0B] border border-[#252525] space-y-5" aria-label="Author Credibility">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-[#141414] border border-[#2A2A2A] flex items-center justify-center text-[#C7FF4D] shrink-0 font-extrabold text-xl font-mono">
+              {blog.author.charAt(0).toUpperCase()}
             </div>
-            <h4 className="text-lg font-bold text-white">{blog.author}</h4>
-            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
-              Dawnexus is a performance-focused digital marketing and creative engineering agency delivering bespoke websites, high-velocity AI video pipelines, and organic SEO authority for ambitious brands.
-            </p>
+            <div className="space-y-1 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-mono text-[#C7FF4D] uppercase tracking-wider">
+                  Written by
+                </span>
+                <span className="text-neutral-500">•</span>
+                <h4 className="text-base sm:text-lg font-bold text-white">{blog.author}</h4>
+                {blog.author_role && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#181818] border border-[#303030] text-[11px] text-neutral-300">
+                    {blog.author_role}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed pt-1">
+                {blog.author_bio || 'Dawnexus delivers bespoke website design, performance technical SEO, AI video marketing, and digital growth systems for ambitious Indian SMBs and enterprises.'}
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Conversion CTA Box */}
-        <div className="my-12 p-8 sm:p-12 rounded-3xl bg-gradient-to-br from-[#0B0B0B] to-[#121212] border border-[#252525] relative overflow-hidden text-center space-y-6">
-          <div className="max-w-xl mx-auto space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#C7FF4D]/10 text-[#C7FF4D] border border-[#C7FF4D]/30 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>ARCHITECTURAL CONSULTATION</span>
+          {/* Verification Credentials & Reviewer Details */}
+          {(blog.author_credentials || blog.reviewer_name || blog.editorial_notes) && (
+            <div className="pt-4 border-t border-[#1C1C1C] grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {blog.author_credentials && (
+                <div className="flex items-center gap-2 text-neutral-300">
+                  <Award className="w-4 h-4 text-[#C7FF4D] shrink-0" />
+                  <span><strong>Credentials:</strong> {blog.author_credentials}</span>
+                </div>
+              )}
+              {blog.reviewer_name && (
+                <div className="flex items-center gap-2 text-neutral-300">
+                  <ShieldCheck className="w-4 h-4 text-[#C7FF4D] shrink-0" />
+                  <span><strong>Reviewed by:</strong> {blog.reviewer_name}</span>
+                </div>
+              )}
+              {blog.editorial_notes && (
+                <div className="sm:col-span-2 text-neutral-400 text-[11px] font-mono bg-[#111] p-2.5 rounded-lg border border-[#202020]">
+                  <strong>Editorial Note:</strong> {blog.editorial_notes}
+                </div>
+              )}
             </div>
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Ready to Implement These Growth Strategies?
-            </h3>
-            <p className="text-sm text-neutral-400 leading-relaxed">
-              Connect directly with our engineering and strategy team to design your conversion-first website or launch targeted organic SEO campaigns.
-            </p>
-          </div>
-          <div>
-            <a
-              href="/#contact"
-              onClick={e => {
-                e.preventDefault();
-                navigateTo('/#contact');
-              }}
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#C7FF4D] text-black font-bold text-sm transition hover:bg-[#d6ff73] shadow-lg shadow-[#C7FF4D]/10"
-            >
-              <span>Request Project Proposal</span>
-              <ArrowRight className="w-4 h-4" />
-            </a>
-          </div>
-        </div>
+          )}
+        </section>
+
+        {/* Contextual Conversion CTA (Version 8.3.0 Core Value Path) */}
+        <ContextualCtaBlock
+          serviceKey={targetServiceKey}
+          mode="inline"
+          pageSlug={blog.slug}
+        />
+
+        {/* Floating Contextual CTA (Triggered on Scroll/Dwell) */}
+        <ContextualCtaBlock
+          serviceKey={targetServiceKey}
+          mode="floating"
+          pageSlug={blog.slug}
+          scrollThreshold={50}
+          dwellTimeSeconds={25}
+        />
       </article>
 
       {/* Related Articles Section */}

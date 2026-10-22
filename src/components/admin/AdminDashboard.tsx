@@ -25,7 +25,8 @@ import {
   Calculator,
   BarChart3,
   Shield,
-  Mail
+  Mail,
+  Award
 } from 'lucide-react';
 import type { EnquiryRecord, EnquiryStats } from '../../types';
 import { EnquiryDetailModal } from './EnquiryDetailModal';
@@ -41,13 +42,14 @@ import { BehaviourAnalyticsDashboard } from './BehaviourAnalyticsDashboard';
 import { ContentEditor } from './ContentEditor';
 import { IntegrationDiagnostics } from './IntegrationDiagnostics';
 import { EmailAiDashboard } from './EmailAiDashboard';
+import { AdvancedSeoDashboard } from './AdvancedSeoDashboard';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'email-ai' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'advanced-seo' | 'email-ai' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -271,7 +273,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </a>
             <div className="mt-2 text-[11px] font-mono text-[#A5A5A5] flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#C7FF4D]" />
-              <span>Admin Dashboard • v8.2.0</span>
+              <span>Admin Dashboard • v8.3.0</span>
             </div>
           </div>
 
@@ -337,6 +339,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <FileText className="w-4 h-4" />
                 <span>Blogs & CMS</span>
               </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('advanced-seo')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'advanced-seo'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Award className="w-4 h-4" />
+                <span>Advanced SEO & AI</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                v8.3
+              </span>
             </button>
 
             <button
@@ -520,6 +539,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <ClientShowcaseManager />
         ) : activeTab === 'blogs' ? (
           <BlogManager />
+        ) : activeTab === 'advanced-seo' ? (
+          <AdvancedSeoDashboard />
         ) : activeTab === 'email-ai' ? (
           <EmailAiDashboard />
         ) : activeTab === 'gsc' ? (

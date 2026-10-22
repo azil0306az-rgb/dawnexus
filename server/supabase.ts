@@ -56,13 +56,23 @@ export async function syncFromSupabase(db: any): Promise<void> {
             category, tags, primary_keyword, secondary_keywords, target_location,
             search_intent, target_audience, target_questions, seo_title, meta_description,
             canonical_url, status, scheduled_at, published_at, publication_error,
-            admin_notes, seo_report, content_revision, created_at, updated_at
+            admin_notes, seo_report, content_revision,
+            firsthand_observations, project_examples, case_studies, original_research_data,
+            implementation_process, external_sources, limitations_lessons,
+            author_role, author_bio, author_credentials, reviewer_name, editorial_notes,
+            citation_answer_blocks, review_cycle_days, last_reviewed_at,
+            created_at, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?
           )
           ON CONFLICT(slug) DO UPDATE SET
             title = excluded.title,
@@ -75,6 +85,21 @@ export async function syncFromSupabase(db: any): Promise<void> {
             published_at = excluded.published_at,
             seo_report = excluded.seo_report,
             content_revision = excluded.content_revision,
+            firsthand_observations = excluded.firsthand_observations,
+            project_examples = excluded.project_examples,
+            case_studies = excluded.case_studies,
+            original_research_data = excluded.original_research_data,
+            implementation_process = excluded.implementation_process,
+            external_sources = excluded.external_sources,
+            limitations_lessons = excluded.limitations_lessons,
+            author_role = excluded.author_role,
+            author_bio = excluded.author_bio,
+            author_credentials = excluded.author_credentials,
+            reviewer_name = excluded.reviewer_name,
+            editorial_notes = excluded.editorial_notes,
+            citation_answer_blocks = excluded.citation_answer_blocks,
+            review_cycle_days = excluded.review_cycle_days,
+            last_reviewed_at = excluded.last_reviewed_at,
             updated_at = excluded.updated_at
         `).run(
           blog.id, blog.title, blog.slug, blog.excerpt || '', blog.content || '',
@@ -85,6 +110,15 @@ export async function syncFromSupabase(db: any): Promise<void> {
           blog.meta_description || '', blog.canonical_url || '', blog.status || 'Draft',
           blog.scheduled_at || null, blog.published_at || null, blog.publication_error || '',
           blog.admin_notes || '', blog.seo_report || null, blog.content_revision || null,
+          blog.firsthand_observations || '', blog.project_examples || '', blog.case_studies || '',
+          blog.original_research_data || '', blog.implementation_process || '',
+          typeof blog.external_sources === 'string' ? blog.external_sources : JSON.stringify(blog.external_sources || []),
+          blog.limitations_lessons || '',
+          blog.author_role || 'Technical Architect & SEO Strategist',
+          blog.author_bio || '', blog.author_credentials || '',
+          blog.reviewer_name || '', blog.editorial_notes || '',
+          typeof blog.citation_answer_blocks === 'string' ? blog.citation_answer_blocks : JSON.stringify(blog.citation_answer_blocks || []),
+          blog.review_cycle_days || 90, blog.last_reviewed_at || null,
           blog.created_at || new Date().toISOString(), blog.updated_at || new Date().toISOString()
         );
       }
@@ -395,7 +429,7 @@ export async function syncFromSupabase(db: any): Promise<void> {
       if (emailAccounts && Array.isArray(emailAccounts)) {
         for (const acc of emailAccounts) {
           db.prepare(`
-            INSERT INTO connected_email_accounts (
+            INSERT OR REPLACE INTO connected_email_accounts (
               id, admin_user, google_email, display_name, encrypted_tokens,
               scopes, connection_status, last_sync_at, last_attempt_at, last_error,
               created_at, updated_at
@@ -565,7 +599,22 @@ export async function pushBlogToSupabase(blog: any): Promise<void> {
   const extendedPayload = {
     ...basePayload,
     seo_report: blog.seo_report || null,
-    content_revision: blog.content_revision || null
+    content_revision: blog.content_revision || null,
+    firsthand_observations: blog.firsthand_observations || '',
+    project_examples: blog.project_examples || '',
+    case_studies: blog.case_studies || '',
+    original_research_data: blog.original_research_data || '',
+    implementation_process: blog.implementation_process || '',
+    external_sources: typeof blog.external_sources === 'string' ? blog.external_sources : JSON.stringify(blog.external_sources || []),
+    limitations_lessons: blog.limitations_lessons || '',
+    author_role: blog.author_role || 'Technical Architect & SEO Strategist',
+    author_bio: blog.author_bio || '',
+    author_credentials: blog.author_credentials || '',
+    reviewer_name: blog.reviewer_name || '',
+    editorial_notes: blog.editorial_notes || '',
+    citation_answer_blocks: typeof blog.citation_answer_blocks === 'string' ? blog.citation_answer_blocks : JSON.stringify(blog.citation_answer_blocks || []),
+    review_cycle_days: blog.review_cycle_days || 90,
+    last_reviewed_at: blog.last_reviewed_at || null
   };
 
   const { error } = await supabase.from('blogs').upsert(extendedPayload);

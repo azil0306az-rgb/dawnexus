@@ -144,6 +144,20 @@ class Tracker {
     });
   }
 
+  public track(eventType: string, properties?: Record<string, any>) {
+    if (typeof window === 'undefined' || window.location.pathname.startsWith('/admin')) return;
+
+    const mappedType = eventType === 'cta_displayed' ? 'visibility' : eventType === 'cta_clicked' ? 'cta_click' : (eventType as any);
+
+    this.queueEvent({
+      eventId: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      eventType: mappedType,
+      pagePath: window.location.pathname,
+      properties,
+      timestamp: new Date().toISOString()
+    });
+  }
+
   public trackFormStart(formId: string = 'contact_form') {
     this.queueEvent({
       eventId: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,

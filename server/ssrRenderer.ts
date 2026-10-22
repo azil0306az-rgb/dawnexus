@@ -5,6 +5,7 @@
 
 import { getBlogBySlug, getPublishedBlogsForSitemap } from './db.js';
 import { DEFAULT_SERVICE_PAGES } from './websiteContent.js';
+import { JsonLdService } from './jsonLdService.js';
 
 export interface PageMetadata {
   title: string;
@@ -30,15 +31,7 @@ export function resolvePageMetadata(pathname: string): PageMetadata {
       canonicalUrl: `${BASE_URL}/`,
       ogImage: DEFAULT_OG_IMAGE,
       ogType: 'website',
-      schema: {
-        '@context': 'https://schema.org',
-        '@type': 'ProfessionalService',
-        name: 'Dawnexus',
-        url: `${BASE_URL}/`,
-        logo: DEFAULT_OG_IMAGE,
-        image: DEFAULT_OG_IMAGE,
-        description: 'Professional website development, AI video creation, digital advertising, SEO, and Google Business Profile optimization.'
-      }
+      schema: JsonLdService.generateOrganizationSchema()
     };
   }
 
@@ -133,32 +126,7 @@ export function resolvePageMetadata(pathname: string): PageMetadata {
         canonicalUrl,
         ogImage,
         ogType: 'article',
-        schema: {
-          '@context': 'https://schema.org',
-          '@type': 'BlogPosting',
-          mainEntityOfPage: {
-            '@type': 'WebPage',
-            '@id': canonicalUrl
-          },
-          headline: blog.title,
-          description,
-          image: ogImage,
-          author: {
-            '@type': 'Organization',
-            name: blog.author || 'Dawnexus Editorial',
-            url: `${BASE_URL}/`
-          },
-          publisher: {
-            '@type': 'Organization',
-            name: 'Dawnexus',
-            logo: {
-              '@type': 'ImageObject',
-              url: DEFAULT_OG_IMAGE
-            }
-          },
-          datePublished: blog.published_at || blog.created_at,
-          dateModified: blog.updated_at || blog.published_at || blog.created_at
-        }
+        schema: JsonLdService.generateArticleSchema(blog)
       };
     } else {
       // Blog slug not found in CMS
