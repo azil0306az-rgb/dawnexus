@@ -15,7 +15,8 @@ import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
 import { performDatabaseHealthCheck } from './dbHealth.js';
 import { mcpRouter } from './mcpServer.js';
-import { getOAuthServerMetadata } from './mcpOAuth.js';
+import { mcpStreamableRouter } from './mcpStreamable.js';
+import { getOAuthServerMetadata, getOAuthProtectedResourceMetadata } from './mcpOAuth.js';
 
 // Initialize DB schema & tables
 initDatabase();
@@ -173,7 +174,15 @@ const handleOAuthDiscovery = (req: any, res: any) => {
 app.get('/.well-known/oauth-authorization-server', handleOAuthDiscovery);
 app.get('/.well-known/openid-configuration', handleOAuthDiscovery);
 
-// API route mounts
+// RFC 9728 OAuth 2.0 Protected Resource Metadata Discovery
+app.get('/.well-known/oauth-protected-resource', (req: any, res: any) => {
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const host = req.get('host') || 'www.dawnexus.in';
+  res.json(getOAuthProtectedResourceMetadata(`${protocol}://${host}`));
+});
+
+// MCP Remote Server (Streamable HTTP for Claude) & API route mounts
+app.use('/mcp', mcpStreamableRouter);
 app.use('/api/mcp', mcpRouter);
 app.use('/api', publicRouter);
 app.use('/api/admin', adminRouter);
@@ -183,8 +192,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     brand: 'Dawnexus',
-    version: '8.0.0',
-    release: '8.0.0 — Claude MCP Transition',
+    version: '8.1.0',
+    release: '8.1.0 — Remote MCP Integration',
     timestamp: new Date().toISOString()
   });
 });
@@ -204,9 +213,14 @@ if (fs.existsSync(distPath)) {
     }
   }));
 
-  // SPA fallback for /admin and any frontend routes
+  // SPA fallback for /admin and any frontend routes (excluding API, /mcp, and .well-known)
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) {
+    if (
+      req.path.startsWith('/api') ||
+      req.path === '/mcp' ||
+      req.path.startsWith('/mcp/') ||
+      req.path.startsWith('/.well-known')
+    ) {
       return next();
     }
     res.sendFile(path.join(distPath, 'index.html'));

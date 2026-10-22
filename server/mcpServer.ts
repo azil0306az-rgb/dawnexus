@@ -684,6 +684,234 @@ export const MCP_TOOLS: Tool[] = [
         limit: { type: 'number', description: 'Max enquiries to return (default 20, max 100)' }
       }
     }
+  },
+
+  // ==========================================
+  // VERSION 8.1.0: CLAUDE CANONICAL TOOLS
+  // ==========================================
+  {
+    name: 'search_website_content',
+    description: 'Search Dawnexus website pages, services, business capabilities, FAQs, case studies, and knowledge base.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query or question' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'get_website_page',
+    description: 'Retrieve full structured content and metadata for a website page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Page slug (e.g. website-design, seo-services, ai-video-creation, digital-marketing)' }
+      },
+      required: ['slug']
+    }
+  },
+  {
+    name: 'list_services',
+    description: 'List all official Dawnexus engineering and marketing services with summary overviews.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'get_service_details',
+    description: 'Retrieve in-depth specifications, features, deliverables, and tech stack for a specific service.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service_id: { type: 'string', description: 'Service slug or identifier (e.g. website-design, seo-services)' }
+      },
+      required: ['service_id']
+    }
+  },
+  {
+    name: 'search_published_blogs',
+    description: 'Search published blog posts by keyword, category, or search phrase.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        category: { type: 'string', description: 'Optional category filter' },
+        limit: { type: 'number', description: 'Max results (default 10)' }
+      }
+    }
+  },
+  {
+    name: 'get_blog_post',
+    description: 'Retrieve complete content, metadata, author, and SEO tags for a blog post by slug or ID.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Article slug' },
+        id: { type: 'number', description: 'Article ID' }
+      }
+    }
+  },
+  {
+    name: 'get_approved_business_information',
+    description: 'Retrieve verified corporate profile, headquarters address, contact channels, operating hours, and official business details for Dawnexus.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'get_approved_pricing_information',
+    description: 'Retrieve approved pricing ranges, estimation parameters, package tiers, and add-on costs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'Optional service category' },
+        complexity: { type: 'string', description: 'Optional complexity level' }
+      }
+    }
+  },
+  {
+    name: 'list_blog_posts',
+    description: 'List blog articles with status filtering (all, published, draft, scheduled) and pagination.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['all', 'published', 'draft', 'scheduled'], description: 'Status filter' },
+        category: { type: 'string', description: 'Category filter' },
+        limit: { type: 'number', description: 'Max results to return' },
+        page: { type: 'number', description: 'Page number' }
+      }
+    }
+  },
+  {
+    name: 'get_blog_post_status',
+    description: 'Retrieve publishing status, publication date, scheduled timestamp, and SEO audit score for a blog post.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Article ID' },
+        slug: { type: 'string', description: 'Article slug' }
+      }
+    }
+  },
+  {
+    name: 'schedule_blog_post',
+    description: 'Schedule an approved blog draft for future publication at an IST timestamp. Explicit approval flag (approved: true) is strictly required.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Blog post ID' },
+        scheduled_at: { type: 'string', description: 'Target ISO date/time or YYYY-MM-DD HH:mm IST' },
+        approved: { type: 'boolean', description: 'Human approval confirmation (must be true)' }
+      },
+      required: ['id', 'scheduled_at', 'approved']
+    }
+  },
+  {
+    name: 'publish_blog_post',
+    description: 'Publish an approved blog draft immediately live to the website. Explicit approval flag (approved: true) is strictly required.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Blog post ID' },
+        approved: { type: 'boolean', description: 'Human approval confirmation (must be true)' }
+      },
+      required: ['id', 'approved']
+    }
+  },
+  {
+    name: 'list_authorized_enquiries',
+    description: 'Retrieve authorized customer leads and project enquiries submitted to Dawnexus.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['All', 'New', 'Contacted', 'Proposal Sent', 'Won', 'Lost'], description: 'Enquiry status filter' },
+        limit: { type: 'number', description: 'Max records' }
+      }
+    }
+  },
+  {
+    name: 'get_authorized_enquiry',
+    description: 'Retrieve detailed record and communication history for a specific customer enquiry by ID.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Enquiry ID' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'create_enquiry',
+    description: 'Submit a new verified customer enquiry or project consultation request.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Full name' },
+        email: { type: 'string', description: 'Contact email' },
+        phone: { type: 'string', description: 'Contact phone' },
+        service: { type: 'string', description: 'Requested service' },
+        message: { type: 'string', description: 'Project requirements and details' },
+        budget: { type: 'string', description: 'Estimated budget range' }
+      },
+      required: ['name', 'email', 'service', 'message']
+    }
+  },
+  {
+    name: 'get_enquiry_submission_status',
+    description: 'Check delivery, assignment, and status of an enquiry submission.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Enquiry ID' },
+        email: { type: 'string', description: 'Customer email' }
+      }
+    }
+  },
+  {
+    name: 'get_visitor_analytics_overview',
+    description: 'Retrieve aggregated visitor volume, sessions, pageviews, and bounce rate metrics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to aggregate (default 30)' },
+        dateRange: { type: 'string', enum: ['7d', '28d', '90d', 'today'], description: 'Date range preset' }
+      }
+    }
+  },
+  {
+    name: 'get_conversion_funnel',
+    description: 'Retrieve commercial conversion funnel drop-offs and milestone completions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to analyze (default 30)' }
+      }
+    }
+  },
+  {
+    name: 'get_page_engagement',
+    description: 'Retrieve engagement duration, scroll depth completions, and interaction hotzones for a specific URL.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pageUrl: { type: 'string', description: 'Page path (e.g. /services/website-design)' },
+        days: { type: 'number', description: 'Days to aggregate (default 30)' }
+      },
+      required: ['pageUrl']
+    }
+  },
+  {
+    name: 'get_chatbot_analytics',
+    description: 'Retrieve chatbot conversation volume, resolution rate, and common customer query categories.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Days to analyze (default 30)' }
+      }
+    }
   }
 ];
 
@@ -867,6 +1095,103 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
     case 'website_rollback_content_version':
       return await McpService.websiteRollbackContentVersion(toolArgs);
 
+    // ==========================================
+    // VERSION 8.1.0: CLAUDE CANONICAL TOOLS
+    // ==========================================
+    case 'search_website_content':
+      return await McpService.chatbotGetPublicKnowledge({ query: toolArgs.query || toolArgs.search });
+
+    case 'get_website_page':
+      return await McpService.websiteGetPageContent({ slug: toolArgs.slug });
+
+    case 'list_services':
+      return McpService.listServices();
+
+    case 'get_service_details':
+      return await McpService.getServiceDetails(toolArgs.service_id || toolArgs.slug || toolArgs.id);
+
+    case 'search_published_blogs':
+      return await McpService.searchPublishedBlogs(toolArgs);
+
+    case 'get_blog_post':
+      return await McpService.getBlogPost(toolArgs);
+
+    case 'get_approved_business_information':
+      return McpService.getApprovedBusinessInformation();
+
+    case 'get_approved_pricing_information':
+      return McpService.getApprovedPricingInformation(toolArgs);
+
+    case 'list_blog_posts':
+      return await McpService.listBlogPosts(toolArgs);
+
+    case 'get_blog_post_status':
+      return await McpService.getBlogPostStatus(toolArgs);
+
+    case 'schedule_blog_post': {
+      const blogId = Number(toolArgs.id);
+      if (!blogId) throw new Error('Blog post ID is required for schedule_blog_post.');
+      return await McpService.scheduleBlogDraft(
+        {
+          id: blogId,
+          scheduled_at: toolArgs.scheduled_at,
+          approved: toolArgs.approved === true
+        },
+        callerIp
+      );
+    }
+
+    case 'publish_blog_post': {
+      const blogId = Number(toolArgs.id);
+      if (!blogId) throw new Error('Blog post ID is required for publish_blog_post.');
+      return await McpService.publishBlogPost(
+        {
+          id: blogId,
+          approved: toolArgs.approved === true
+        },
+        callerIp
+      );
+    }
+
+    case 'list_authorized_enquiries':
+      return await McpService.enquiriesAdminList(toolArgs);
+
+    case 'get_authorized_enquiry':
+      return McpService.getAuthorizedEnquiry(Number(toolArgs.id));
+
+    case 'create_enquiry': {
+      const requestedServices = Array.isArray(toolArgs.services)
+        ? toolArgs.services
+        : (toolArgs.service ? [toolArgs.service] : ['General Consultation']);
+      return await McpService.chatbotSubmitEnquiry(
+        {
+          full_name: toolArgs.name || toolArgs.full_name,
+          email: toolArgs.email,
+          phone: toolArgs.phone || '',
+          requested_services: requestedServices,
+          budget: toolArgs.budget || 'Flexible',
+          project_details: toolArgs.message || toolArgs.project_details || 'Enquiry submitted via Claude Remote MCP',
+          confirmed_by_user: true
+        },
+        callerIp
+      );
+    }
+
+    case 'get_enquiry_submission_status':
+      return McpService.getEnquirySubmissionStatus(toolArgs);
+
+    case 'get_visitor_analytics_overview':
+      return await McpService.analyticsGetOverview(toolArgs);
+
+    case 'get_conversion_funnel':
+      return await McpService.analyticsGetConversionFunnel(toolArgs);
+
+    case 'get_page_engagement':
+      return await McpService.analyticsGetPagePerformance(toolArgs);
+
+    case 'get_chatbot_analytics':
+      return McpService.getChatbotAnalytics(toolArgs);
+
     default:
       throw new Error(`Tool '${name}' is not recognized or permitted.`);
   }
@@ -879,7 +1204,7 @@ export function createDawnexusMcpServer(): Server {
   const server = new Server(
     {
       name: 'dawnexus-mcp-server',
-      version: '8.0.0'
+      version: '8.1.0'
     },
     {
       capabilities: {
@@ -940,8 +1265,8 @@ mcpRouter.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'Dawnexus MCP Server',
-    version: '8.0.0',
-    transport: ['SSE (/api/mcp/sse)', 'JSON-RPC POST (/api/mcp/rpc)', 'REST OpenAPI (/api/mcp/tools)'],
+    version: '8.1.0',
+    transport: ['Streamable HTTP (/mcp)', 'SSE (/api/mcp/sse)', 'JSON-RPC POST (/api/mcp/rpc)', 'REST OpenAPI (/api/mcp/tools)'],
     policy: 'Draft first. Human approval required. Claude MCP Integration.',
     toolsCount: MCP_TOOLS.length,
     timestamp: new Date().toISOString()
@@ -958,7 +1283,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
     openapi: '3.1.0',
     info: {
       title: 'Dawnexus MCP API',
-      version: '8.0.0',
+      version: '8.1.0',
       description: 'Dawnexus Model Context Protocol (MCP) and Action API for Claude and AI integrations to research, plan, draft, and audit SEO blog posts, inspect Search Console & GA4 analytics, monitor first-party visitor telemetry, and manage approved website content. All content creation is saved strictly as Drafts requiring human approval in the Admin panel.'
     },
     servers: [{ url: baseUrl }],
@@ -1588,7 +1913,7 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           capabilities: { tools: {} },
           serverInfo: {
             name: 'dawnexus-mcp-server',
-            version: '8.0.0'
+            version: '8.1.0'
           }
         }
       });

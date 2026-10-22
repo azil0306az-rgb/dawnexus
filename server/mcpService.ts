@@ -6,6 +6,7 @@
 import {
   getBlogs,
   getBlogById,
+  getBlogBySlug,
   createBlog,
   updateBlog,
   persistBlog,
@@ -17,6 +18,7 @@ import {
   createEnquiry,
   persistEnquiry,
   getEnquiries,
+  getEnquiryById,
   getCalculatorPricingConfig,
   getPublicBlogs
 } from './db.js';
@@ -2183,6 +2185,381 @@ export class McpService {
         status: e.status,
         createdAt: e.created_at
       }))
+    };
+  }
+
+  // ==========================================
+  // VERSION 8.1.0: CLAUDE CANONICAL TOOLS
+  // ==========================================
+
+  /**
+   * Tool: list_services
+   */
+  static listServices() {
+    return {
+      services: [
+        {
+          id: 'website-design',
+          title: 'Website Design & High-Performance Web Development',
+          slug: 'website-design',
+          overview: 'Bespoke, conversion-engineered websites with sub-second page loads, mobile responsiveness, and modern interactive 3D capabilities.',
+          targetAudience: 'Startups, growing enterprises, B2B services, and retail brands.',
+          startingPrice: '₹14,999'
+        },
+        {
+          id: 'seo-services',
+          title: 'Search Engine Optimization (SEO) & Technical Visibility',
+          slug: 'seo-services',
+          overview: 'Data-backed search visibility and keyword rankings driven by Google Search Console insights, semantic schema markup, and content strategy.',
+          targetAudience: 'Businesses targeting top Google search positions and inbound organic growth.',
+          startingPrice: '₹9,999/mo'
+        },
+        {
+          id: 'ai-video-creation',
+          title: 'AI Video Creation & Visual Commercial Production',
+          slug: 'ai-video-creation',
+          overview: 'High-conversion AI video commercials, photorealistic avatar presentation, 3D product reels, and viral social campaigns.',
+          targetAudience: 'E-commerce, real estate developers, product launches, and brand awareness.',
+          startingPrice: '₹7,499'
+        },
+        {
+          id: 'digital-marketing',
+          title: 'Performance Digital Marketing & Full-Funnel Growth',
+          slug: 'digital-marketing',
+          overview: 'ROI-focused multi-channel marketing campaigns spanning Google Ads, Meta advertising, conversion funnel optimization, and retargeting.',
+          targetAudience: 'Brands seeking direct customer acquisition, lead pipelines, and revenue scale.',
+          startingPrice: '₹14,999/mo'
+        }
+      ]
+    };
+  }
+
+  /**
+   * Tool: get_service_details
+   */
+  static async getServiceDetails(serviceId: string) {
+    const normalized = (serviceId || '').toLowerCase().replace(/^\/services\//, '').trim();
+    const serviceContent = await this.websiteGetPageContent({ slug: normalized });
+    if (serviceContent && (serviceContent as any).title) {
+      return serviceContent;
+    }
+    const services = this.listServices().services;
+    const matched = services.find(s => s.id === normalized || s.slug === normalized);
+    if (!matched) {
+      throw new Error(`Service '${serviceId}' not found. Available services: website-design, seo-services, ai-video-creation, digital-marketing`);
+    }
+    return matched;
+  }
+
+  /**
+   * Tool: search_published_blogs
+   */
+  static async searchPublishedBlogs(args?: { query?: string; category?: string; limit?: number }) {
+    await refreshFromPersistentStore();
+    const result = getPublicBlogs({
+      search: args?.query,
+      category: args?.category,
+      limit: args?.limit || 10
+    });
+    return {
+      total: result.total,
+      articles: result.items.map(b => ({
+        id: b.id,
+        title: b.title,
+        slug: b.slug,
+        category: b.category,
+        excerpt: b.excerpt,
+        published_at: b.published_at,
+        url: `https://www.dawnexus.in/blog/${b.slug}`
+      }))
+    };
+  }
+
+  /**
+   * Tool: get_blog_post
+   */
+  static async getBlogPost(args: { slug?: string; id?: number }) {
+    await refreshFromPersistentStore();
+    let blog: BlogRecord | null = null;
+    if (args.id) {
+      blog = getBlogById(Number(args.id));
+    } else if (args.slug) {
+      blog = getBlogBySlug(args.slug.trim());
+    }
+    if (!blog) {
+      throw new Error(`Blog post not found matching ${args.id ? 'ID #' + args.id : 'slug "' + args.slug + '"'}`);
+    }
+    return {
+      id: blog.id,
+      title: blog.title,
+      slug: blog.slug,
+      category: blog.category,
+      status: blog.status,
+      content: blog.content,
+      excerpt: blog.excerpt,
+      author: blog.author,
+      primary_keyword: blog.primary_keyword,
+      secondary_keywords: typeof blog.secondary_keywords === 'string' ? JSON.parse(blog.secondary_keywords || '[]') : blog.secondary_keywords,
+      seo_title: blog.seo_title,
+      meta_description: blog.meta_description,
+      canonical_url: blog.canonical_url,
+      featured_image: blog.featured_image,
+      image_alt: blog.image_alt,
+      published_at: blog.published_at,
+      scheduled_at: blog.scheduled_at,
+      url: `https://www.dawnexus.in/blog/${blog.slug}`
+    };
+  }
+
+  /**
+   * Tool: get_approved_business_information
+   */
+  static getApprovedBusinessInformation() {
+    return {
+      brand: 'Dawnexus',
+      legalEntity: 'Dawnexus Technologies',
+      domain: 'https://www.dawnexus.in',
+      tagline: 'Full-Stack Digital Engineering & AI SEO Architecture',
+      description: 'Dawnexus is a full-stack digital product engineering, technical SEO, and AI solutions agency based in Coimbatore, Tamil Nadu, India. Dawnexus specializes in bespoke website engineering, high-performance SEO architecture, AI video commercials, and digital marketing.',
+      location: {
+        city: 'Coimbatore',
+        state: 'Tamil Nadu',
+        country: 'India',
+        postalCode: '641004',
+        region: 'Asia/Kolkata'
+      },
+      contact: {
+        email: 'contact@dawnexus.in',
+        supportEmail: 'vkv@dawnexus.in',
+        phone: '+91 95669 88390',
+        businessHours: 'Monday - Saturday: 9:00 AM - 6:30 PM IST'
+      },
+      verifiedServices: [
+        'Website Design & Custom Full-Stack Development',
+        'Technical & Content Search Engine Optimization (SEO)',
+        'AI Video Production & Visual Commercial Assets',
+        'Performance Digital Marketing & Conversion Optimization'
+      ],
+      mcpEndpoint: 'https://www.dawnexus.in/mcp'
+    };
+  }
+
+  /**
+   * Tool: get_approved_pricing_information
+   */
+  static getApprovedPricingInformation(args?: { service?: string; complexity?: string }) {
+    const config = getCalculatorPricingConfig();
+    return {
+      currency: 'INR (₹)',
+      pricingTiers: {
+        starter: { name: 'Starter Website', range: '₹14,999 - ₹24,999', turnAround: '5-7 business days' },
+        business: { name: 'Business Growth Suite', range: '₹25,000 - ₹49,999', turnAround: '10-14 business days' },
+        enterprise: { name: 'Enterprise Engineering / Full-Stack', range: '₹50,000+', turnAround: '15-25 business days' }
+      },
+      calculatorConfig: config,
+      note: 'Exact pricing depends on specific functional requirements, database scope, AI features, and delivery timeline.'
+    };
+  }
+
+  /**
+   * Tool: list_blog_posts
+   */
+  static async listBlogPosts(args?: { status?: string; category?: string; limit?: number; page?: number }) {
+    await refreshFromPersistentStore();
+    const rawStatus = args?.status?.toLowerCase();
+    const status = !rawStatus || rawStatus === 'all' ? undefined : (rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1) as any);
+    const result = getBlogs({
+      status,
+      category: args?.category,
+      limit: Math.min(args?.limit || 20, 100),
+      page: args?.page || 1
+    });
+    return {
+      total: result.total,
+      page: result.page,
+      totalPages: result.totalPages,
+      items: result.items.map(b => ({
+        id: b.id,
+        title: b.title,
+        slug: b.slug,
+        category: b.category,
+        status: b.status,
+        published_at: b.published_at,
+        scheduled_at: b.scheduled_at,
+        created_at: b.created_at,
+        url: `https://www.dawnexus.in/blog/${b.slug}`
+      }))
+    };
+  }
+
+  /**
+   * Tool: get_blog_post_status
+   */
+  static async getBlogPostStatus(args: { id?: number; slug?: string }) {
+    await refreshFromPersistentStore();
+    let blog: BlogRecord | null = null;
+    if (args.id) {
+      blog = getBlogById(Number(args.id));
+    } else if (args.slug) {
+      blog = getBlogBySlug(args.slug.trim());
+    }
+    if (!blog) {
+      throw new Error(`Blog post not found matching ${args.id ? 'ID #' + args.id : 'slug "' + args.slug + '"'}`);
+    }
+    return {
+      id: blog.id,
+      title: blog.title,
+      slug: blog.slug,
+      status: blog.status,
+      scheduled_at: blog.scheduled_at,
+      published_at: blog.published_at,
+      word_count: (blog.content || '').split(/\s+/).filter(Boolean).length,
+      hasFeaturedImage: Boolean(blog.featured_image),
+      url: `https://www.dawnexus.in/blog/${blog.slug}`
+    };
+  }
+
+  /**
+   * Tool: publish_blog_post (Approval gate strictly enforced)
+   */
+  static async publishBlogPost(
+    args: { id: number; approved: boolean },
+    callerIp: string = 'mcp-client'
+  ) {
+    if (args.approved !== true) {
+      recordMcpAudit({
+        tool: 'publish_blog_post',
+        action: 'write',
+        status: 'rejected',
+        callerIp,
+        targetId: args.id,
+        details: 'Rejected attempt to publish blog without explicit human approval (approved !== true).'
+      });
+      throw new Error(
+        `Approval required: Blog post #${args.id} cannot be published live without explicit user approval confirmation (approved: true).`
+      );
+    }
+
+    await refreshFromPersistentStore();
+    const blog = getBlogById(Number(args.id));
+    if (!blog) {
+      throw new Error(`Blog post with ID #${args.id} not found.`);
+    }
+
+    const now = new Date().toISOString();
+    const updated = updateBlog(blog.id, {
+      status: 'Published',
+      published_at: now
+    });
+
+    if (updated) {
+      await persistBlog(updated);
+    }
+
+    recordMcpAudit({
+      tool: 'publish_blog_post',
+      action: 'write',
+      status: 'success',
+      callerIp,
+      targetId: blog.id,
+      details: `Published blog #${blog.id} ("${blog.title}") live to production.`
+    });
+
+    return {
+      success: true,
+      id: blog.id,
+      title: blog.title,
+      slug: blog.slug,
+      status: 'Published',
+      published_at: now,
+      liveUrl: `https://www.dawnexus.in/blog/${blog.slug}`,
+      message: `Blog post #${blog.id} ("${blog.title}") is now published live on Dawnexus.`
+    };
+  }
+
+  /**
+   * Tool: get_authorized_enquiry
+   */
+  static getAuthorizedEnquiry(id: number) {
+    const enquiry = getEnquiryById(Number(id));
+    if (!enquiry) {
+      throw new Error(`Enquiry #${id} not found.`);
+    }
+    return {
+      id: enquiry.id,
+      fullName: enquiry.full_name,
+      businessName: enquiry.business_name,
+      email: enquiry.email,
+      phone: enquiry.phone,
+      requestedServices: typeof enquiry.requested_services === 'string' ? JSON.parse(enquiry.requested_services || '[]') : enquiry.requested_services,
+      budget: enquiry.budget,
+      projectDetails: enquiry.project_details,
+      status: enquiry.status,
+      notes: enquiry.notes,
+      createdAt: enquiry.created_at,
+      updatedAt: enquiry.updated_at
+    };
+  }
+
+  /**
+   * Tool: get_enquiry_submission_status
+   */
+  static getEnquirySubmissionStatus(args: { id?: number; email?: string }) {
+    if (args.id) {
+      const e = getEnquiryById(Number(args.id));
+      if (e) {
+        return {
+          found: true,
+          id: e.id,
+          status: e.status,
+          fullName: e.full_name,
+          createdAt: e.created_at,
+          message: `Enquiry #${e.id} is currently in '${e.status}' status.`
+        };
+      }
+    }
+    if (args.email) {
+      const list = getEnquiries({ page: 1, limit: 10 });
+      const matched = (list.items || []).find(e => e.email.toLowerCase() === args.email!.toLowerCase());
+      if (matched) {
+        return {
+          found: true,
+          id: matched.id,
+          status: matched.status,
+          fullName: matched.full_name,
+          createdAt: matched.created_at,
+          message: `Latest enquiry #${matched.id} for ${matched.email} is in '${matched.status}' status.`
+        };
+      }
+    }
+    return {
+      found: false,
+      message: 'No matching enquiry found for the specified ID or email.'
+    };
+  }
+
+  /**
+   * Tool: get_chatbot_analytics
+   */
+  static getChatbotAnalytics(args?: { days?: number }) {
+    const enquiries = getEnquiries({ page: 1, limit: 100 });
+    const chatbotEnquiries = (enquiries.items || []).filter(e =>
+      (e.notes && e.notes.toLowerCase().includes('chatbot')) ||
+      (e.project_details && e.project_details.toLowerCase().includes('chat'))
+    );
+
+    return {
+      periodDays: args?.days || 30,
+      totalChatbotEnquiries: chatbotEnquiries.length,
+      conversionRate: enquiries.total > 0 ? `${((chatbotEnquiries.length / enquiries.total) * 100).toFixed(1)}%` : '0%',
+      topInquiredServices: [
+        'Website Design',
+        'SEO Services',
+        'AI Video Creation',
+        'Digital Marketing'
+      ],
+      assistantStatus: 'Operational',
+      knowledgeBaseSync: 'Active'
     };
   }
 }

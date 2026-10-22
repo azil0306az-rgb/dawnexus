@@ -97,11 +97,19 @@ export function verifyOAuthAccessToken(token: string): boolean {
 
 /**
  * Issues temporary authorization code (valid 10 minutes)
+ * Includes RFC 7636 PKCE code_challenge and code_challenge_method
  */
-export function issueAuthCode(clientId: string, redirectUri: string): string {
+export function issueAuthCode(
+  clientId: string,
+  redirectUri: string,
+  codeChallenge?: string,
+  codeChallengeMethod?: string
+): string {
   const payload = {
     sub: clientId,
     ruri: redirectUri,
+    cch: codeChallenge || '',
+    cm: codeChallengeMethod || (codeChallenge ? 'S256' : ''),
     exp: Math.floor(Date.now() / 1000) + 600
   };
   const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -112,7 +120,13 @@ export function issueAuthCode(clientId: string, redirectUri: string): string {
 /**
  * Verifies temporary authorization code
  */
-export function verifyAuthCode(code: string): { valid: boolean; clientId?: string } {
+export function verifyAuthCode(code: string): {
+  valid: boolean;
+  clientId?: string;
+  redirectUri?: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
+} {
   try {
     const parts = code.split('.');
     if (parts.length !== 2) return { valid: false };
@@ -126,7 +140,13 @@ export function verifyAuthCode(code: string): { valid: boolean; clientId?: strin
       return { valid: false };
     }
 
-    return { valid: true, clientId: payload.sub };
+    return {
+      valid: true,
+      clientId: payload.sub,
+      redirectUri: payload.ruri,
+      codeChallenge: payload.cch,
+      codeChallengeMethod: payload.cm
+    };
   } catch {
     return { valid: false };
   }
@@ -138,7 +158,7 @@ export function verifyAuthCode(code: string): { valid: boolean; clientId?: strin
 
 /**
  * GET /api/mcp/oauth/authorize
- * Standard OAuth 2.0 Authorization Endpoint
+ * Standard OAuth 2.0 Authorization Endpoint with RFC 7636 PKCE support
  */
 mcpOAuthRouter.get('/authorize', (req: Request, res: Response) => {
   const clientId = (req.query.client_id as string) || '';
@@ -146,12 +166,14 @@ mcpOAuthRouter.get('/authorize', (req: Request, res: Response) => {
   const responseType = (req.query.response_type as string) || 'code';
   const state = (req.query.state as string) || '';
   const scope = (req.query.scope as string) || 'mcp:tools';
+  const codeChallenge = (req.query.code_challenge as string) || '';
+  const codeChallengeMethod = ((req.query.code_challenge_method as string) || (codeChallenge ? 'S256' : '')).toUpperCase();
 
   if (responseType !== 'code') {
     return res.status(400).json({ error: 'unsupported_response_type', error_description: 'response_type must be code' });
   }
 
-  const code = issueAuthCode(clientId, redirectUri);
+  const code = issueAuthCode(clientId, redirectUri, codeChallenge, codeChallengeMethod);
 
   // If redirect_uri is specified, automatically redirect back to the client
   if (redirectUri) {
@@ -186,7 +208,7 @@ mcpOAuthRouter.get('/authorize', (req: Request, res: Response) => {
   <div class="card">
     <div class="badge">Dawnexus OAuth 2.0</div>
     <h1>Authorize MCP Server</h1>
-    <p>Google Gemini is requesting access to execute Dawnexus MCP tools.</p>
+    <p>Claude or AI assistant is requesting access to execute Dawnexus MCP tools.</p>
     <div class="scope">Scope: ${scope}</div>
     <p style="font-size:12px; color:#888;">Authorization Code:</p>
     <div class="code-box">${code}</div>
@@ -202,11 +224,11 @@ mcpOAuthRouter.get('/authorize', (req: Request, res: Response) => {
 /**
  * POST /api/mcp/oauth/token
  * Standard OAuth 2.0 Token Endpoint
- * Handles client_credentials, authorization_code, and refresh_token
+ * Handles client_credentials, authorization_code (with PKCE support), and refresh_token
  */
 mcpOAuthRouter.post('/token', (req: Request, res: Response) => {
   // Support application/x-www-form-urlencoded and application/json
-  let { grant_type, client_id, client_secret, code, refresh_token, scope } = req.body || {};
+  let { grant_type, client_id, client_secret, code, refresh_token, scope, code_verifier } = req.body || {};
 
   // Extract Basic Authorization header if present
   const authHeader = req.headers['authorization'];
@@ -241,7 +263,7 @@ mcpOAuthRouter.post('/token', (req: Request, res: Response) => {
     });
   }
 
-  // 2. Grant Type: authorization_code
+  // 2. Grant Type: authorization_code (supports standard and PKCE)
   if (grant_type === 'authorization_code') {
     if (!code) {
       return res.status(400).json({ error: 'invalid_request', error_description: 'code is required' });
@@ -252,6 +274,38 @@ mcpOAuthRouter.post('/token', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization code is invalid or expired' });
     }
 
+    // Verify PKCE if code_challenge was recorded
+    if (check.codeChallenge) {
+      if (!code_verifier) {
+        return res.status(400).json({
+          error: 'invalid_grant',
+          error_description: 'PKCE code_verifier is required for this authorization code.'
+        });
+      }
+
+      let challengeMatches = false;
+      if (check.codeChallengeMethod === 'S256') {
+        const hash = crypto.createHash('sha256').update(code_verifier).digest('base64url');
+        challengeMatches = hash === check.codeChallenge;
+      } else {
+        // Plain
+        challengeMatches = code_verifier === check.codeChallenge;
+      }
+
+      if (!challengeMatches) {
+        return res.status(400).json({
+          error: 'invalid_grant',
+          error_description: 'PKCE verification failed: code_verifier does not match code_challenge.'
+        });
+      }
+    } else {
+      // If not using PKCE, client_secret is required if provided
+      if (client_secret && !validateClientCredentials(client_id, client_secret)) {
+        return res.status(401).json({ error: 'invalid_client', error_description: 'Client authentication failed' });
+      }
+    }
+
+    // If client_secret is provided with PKCE, still validate if present
     if (client_secret && !validateClientCredentials(client_id, client_secret)) {
       return res.status(401).json({ error: 'invalid_client', error_description: 'Client authentication failed' });
     }
@@ -298,11 +352,24 @@ export function getOAuthServerMetadata(baseUrl: string) {
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/api/mcp/oauth/authorize`,
     token_endpoint: `${baseUrl}/api/mcp/oauth/token`,
-    token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+    token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
     grant_types_supported: ['authorization_code', 'client_credentials', 'refresh_token'],
     response_types_supported: ['code'],
+    code_challenge_methods_supported: ['S256', 'plain'],
     scopes_supported: ['mcp:tools', 'read', 'write'],
     service_documentation: `${baseUrl}/api/mcp/status`
+  };
+}
+
+/**
+ * Standard RFC 9728 OAuth 2.0 Protected Resource Metadata
+ */
+export function getOAuthProtectedResourceMetadata(baseUrl: string) {
+  return {
+    resource: `${baseUrl}/mcp`,
+    authorization_servers: [baseUrl],
+    scopes_supported: ['mcp:tools', 'read', 'write'],
+    bearer_methods_supported: ['header', 'query']
   };
 }
 

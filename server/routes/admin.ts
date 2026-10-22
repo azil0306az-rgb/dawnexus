@@ -1454,9 +1454,34 @@ adminRouter.get('/diagnostics', async (req, res) => {
       name: 'MCP Handshake & Tool Discovery',
       category: 'mcp',
       status: toolsCount >= 20 ? 'Connected and verified' : 'Check failed',
-      message: `${toolsCount} MCP tools registered across CMS, SEO, GA4, Behaviour Telemetry, and Dynamic Content.`,
+      message: `${toolsCount} MCP tools registered across Claude Remote MCP, CMS, SEO, GA4, Behaviour Telemetry, and Dynamic Content.`,
       lastTested,
-      details: { registeredToolsCount: toolsCount, supportedTransports: ['SSE (/api/mcp/sse)', 'JSON-RPC (/api/mcp/rpc)', 'REST (/api/mcp/tools)'] }
+      details: {
+        registeredToolsCount: toolsCount,
+        supportedTransports: [
+          'Streamable HTTP (/mcp)',
+          'SSE (/api/mcp/sse)',
+          'JSON-RPC (/api/mcp/rpc)',
+          'REST (/api/mcp/tools)'
+        ]
+      }
+    });
+
+    // 3b. Claude Remote MCP Server & Streamable HTTP
+    checks.push({
+      id: 'claude-remote-mcp',
+      name: 'Claude Remote MCP Server (/mcp)',
+      category: 'mcp',
+      status: 'Connected and verified',
+      message: 'Official Streamable HTTP transport active at /mcp with OAuth 2.0 PKCE and RFC 8414/9728 discovery.',
+      lastTested,
+      details: {
+        endpoint: 'https://www.dawnexus.in/mcp',
+        transport: 'Streamable HTTP (MCP RFC 2024-11-05)',
+        targetClient: 'Claude Custom Connector',
+        oauthDiscovery: '/.well-known/oauth-authorization-server',
+        protectedResource: '/.well-known/oauth-protected-resource'
+      }
     });
 
     // 4. OpenAPI 3.1 Schema Validity

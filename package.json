@@ -1,6 +1,6 @@
 {
   "name": "dawnexus",
-  "version": "8.0.0",
+  "version": "8.1.0",
   "description": "Dawnexus — Modern Digital Marketing & AI-Powered Creative Agency",
   "main": "server/index.ts",
   "type": "module",
@@ -10,7 +10,7 @@
     "dev:client": "vite --port 3000 --host",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "test": "tsx --test --test-concurrency=1 server/test/api.test.ts server/test/v29.test.ts server/test/v30.test.ts server/test/v35.test.ts server/test/v36-db-health.test.ts server/test/v58-calculator.test.ts server/test/mcp.test.ts server/test/seo_scheduling_reliability.test.ts server/test/ga4_analytics.test.ts server/test/oauth_state_reliability.test.ts server/test/v613_complete.test.ts server/test/diagnostics.test.ts server/test/v718_gemini_mcp_unified.test.ts server/test/v800_claude_mcp_transition.test.ts"
+    "test": "tsx --test --test-concurrency=1 server/test/api.test.ts server/test/v29.test.ts server/test/v30.test.ts server/test/v35.test.ts server/test/v36-db-health.test.ts server/test/v58-calculator.test.ts server/test/mcp.test.ts server/test/seo_scheduling_reliability.test.ts server/test/ga4_analytics.test.ts server/test/oauth_state_reliability.test.ts server/test/v613_complete.test.ts server/test/diagnostics.test.ts server/test/v718_gemini_mcp_unified.test.ts server/test/v800_claude_mcp_transition.test.ts server/test/v810_remote_mcp.test.ts"
   },
   "keywords": [
     "dawnexus",

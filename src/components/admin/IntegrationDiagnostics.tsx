@@ -154,12 +154,12 @@ export const IntegrationDiagnostics: React.FC = () => {
               <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
                 <span>Integration Health & Diagnostics</span>
                 <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-lime-400/10 text-lime-400 border border-lime-400/30">
-                  v8.0.0
+                  v8.1.0
                 </span>
               </h1>
             </div>
             <p className="mt-2 text-sm text-zinc-400 max-w-2xl leading-relaxed">
-              Real-time diagnostic verification of Dawnexus Claude MCP Platform. Monitors MCP handshake, OpenAPI schemas, Supabase persistence, Search Console, GA4, and visitor telemetry.
+              Real-time diagnostic verification of Dawnexus Claude Remote MCP Platform (/mcp). Monitors Streamable HTTP transport, RFC 8414/9728 metadata, OAuth PKCE, Supabase persistence, Search Console, GA4, and visitor telemetry.
             </p>
           </div>
 
@@ -193,7 +193,7 @@ export const IntegrationDiagnostics: React.FC = () => {
             </div>
             <div className="bg-white/[0.02] rounded-xl p-4 border border-white/5">
               <span className="text-xs text-zinc-400 block font-medium">MCP Tool Registry</span>
-              <span className="text-xl font-bold text-lime-400 mt-1 block">42 Active Tools</span>
+              <span className="text-xl font-bold text-lime-400 mt-1 block">73 Active Tools</span>
             </div>
             <div className="bg-white/[0.02] rounded-xl p-4 border border-white/5">
               <span className="text-xs text-zinc-400 block font-medium">Last Tested</span>
