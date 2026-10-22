@@ -23,6 +23,10 @@ import {
   createEmailReplyDraft,
   updateEmailReplyDraft,
   deleteEmailReplyDraft,
+  persistConnectedEmailAccount,
+  persistConnectedEmailAccountDeletion,
+  persistEmailReplyDraft,
+  persistEmailReplyDraftDeletion,
   ConnectedEmailAccountRecord,
   EmailReplyDraftRecord,
   CreateEmailReplyDraftInput,
@@ -276,7 +280,7 @@ export class EmailAiService {
     const encryptedTokens = encryptPayload(JSON.stringify(tokenData));
 
     // Upsert into connected_email_accounts
-    upsertConnectedEmailAccount({
+    const saved = upsertConnectedEmailAccount({
       admin_user: expectedAdminUser,
       google_email: googleEmail,
       display_name: displayName,
@@ -284,6 +288,9 @@ export class EmailAiService {
       scopes: tokenData.scope || EMAIL_OAUTH_SCOPES,
       connection_status: 'Connected'
     });
+
+    // Explicitly await cloud PostgreSQL synchronization so the tokens are guaranteed persisted before redirect
+    await persistConnectedEmailAccount(saved);
 
     return {
       success: true,

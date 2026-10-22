@@ -10,6 +10,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createDawnexusMcpServer, MCP_TOOLS } from './mcpServer.js';
 import { mcpAuthMiddleware } from './mcpAuth.js';
+import { refreshFromPersistentStore } from './db.js';
 
 export const mcpStreamableRouter = Router();
 
@@ -118,6 +119,7 @@ mcpStreamableRouter.get('/', (req: Request, res: Response, next: NextFunction) =
  */
 mcpStreamableRouter.post('/', mcpAuthMiddleware, async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     // Normalize Accept header to ensure both application/json and text/event-stream are recognized by SDK
     const rawAccept = (req.headers['accept'] || '') as string;
     if (!rawAccept.includes('text/event-stream') || !rawAccept.includes('application/json')) {

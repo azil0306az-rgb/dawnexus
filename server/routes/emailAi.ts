@@ -9,6 +9,7 @@
 import { Router, Request, Response } from 'express';
 import { EmailAiService } from '../emailAiService.js';
 import { requireAuth } from '../auth.js';
+import { refreshFromPersistentStore } from '../db.js';
 
 export const emailAiRouter = Router();
 
@@ -61,8 +62,9 @@ emailAiRouter.use(requireAuth);
  * GET /api/admin/email-ai/accounts
  * List all connected Gmail / Google Workspace accounts
  */
-emailAiRouter.get('/accounts', (req: Request, res: Response) => {
+emailAiRouter.get('/accounts', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const accounts = EmailAiService.listAccounts('admin');
     return res.json({ accounts });
   } catch (err: any) {
@@ -90,6 +92,7 @@ emailAiRouter.get('/google/auth-url', (req: Request, res: Response) => {
  */
 emailAiRouter.post('/accounts/:id/refresh', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Valid account ID required' });
     const result = await EmailAiService.refreshAccount(id, 'admin');
@@ -105,6 +108,7 @@ emailAiRouter.post('/accounts/:id/refresh', async (req: Request, res: Response) 
  */
 emailAiRouter.delete('/accounts/:id', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Valid account ID required' });
     const result = await EmailAiService.disconnectAccount(id, 'admin');
@@ -120,6 +124,7 @@ emailAiRouter.delete('/accounts/:id', async (req: Request, res: Response) => {
  */
 emailAiRouter.get('/search', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const accountId = req.query.accountId ? Number(req.query.accountId) : undefined;
     const query = typeof req.query.query === 'string' ? req.query.query : undefined;
     const unreadOnly = req.query.unreadOnly === 'true';
@@ -148,8 +153,9 @@ emailAiRouter.get('/search', async (req: Request, res: Response) => {
  */
 emailAiRouter.get('/threads/:accountId/:threadId', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const accountId = Number(req.params.accountId);
-    const threadId = req.params.threadId;
+    const threadId = String(req.params.threadId || '');
     if (!accountId || !threadId) {
       return res.status(400).json({ error: 'Account ID and thread ID are required' });
     }
@@ -167,8 +173,9 @@ emailAiRouter.get('/threads/:accountId/:threadId', async (req: Request, res: Res
  */
 emailAiRouter.get('/messages/:accountId/:messageId', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const accountId = Number(req.params.accountId);
-    const messageId = req.params.messageId;
+    const messageId = String(req.params.messageId || '');
     if (!accountId || !messageId) {
       return res.status(400).json({ error: 'Account ID and message ID are required' });
     }
@@ -184,8 +191,9 @@ emailAiRouter.get('/messages/:accountId/:messageId', async (req: Request, res: R
  * GET /api/admin/email-ai/drafts
  * List reply drafts with filters
  */
-emailAiRouter.get('/drafts', (req: Request, res: Response) => {
+emailAiRouter.get('/drafts', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const accountId = req.query.accountId ? Number(req.query.accountId) : undefined;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
@@ -210,8 +218,9 @@ emailAiRouter.get('/drafts', (req: Request, res: Response) => {
  * POST /api/admin/email-ai/drafts
  * Create a new email reply draft (idempotent)
  */
-emailAiRouter.post('/drafts', (req: Request, res: Response) => {
+emailAiRouter.post('/drafts', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const {
       account_id,
       thread_id,
@@ -250,8 +259,9 @@ emailAiRouter.post('/drafts', (req: Request, res: Response) => {
  * GET /api/admin/email-ai/drafts/:id
  * Retrieve a specific draft
  */
-emailAiRouter.get('/drafts/:id', (req: Request, res: Response) => {
+emailAiRouter.get('/drafts/:id', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Valid draft ID required' });
     const draft = EmailAiService.getReplyDraft(id, 'admin');
@@ -265,8 +275,9 @@ emailAiRouter.get('/drafts/:id', (req: Request, res: Response) => {
  * PUT /api/admin/email-ai/drafts/:id
  * Update an existing draft
  */
-emailAiRouter.put('/drafts/:id', (req: Request, res: Response) => {
+emailAiRouter.put('/drafts/:id', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Valid draft ID required' });
 
@@ -290,6 +301,7 @@ emailAiRouter.put('/drafts/:id', (req: Request, res: Response) => {
  */
 emailAiRouter.post('/drafts/:id/save-to-gmail', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Valid draft ID required' });
 
@@ -304,8 +316,9 @@ emailAiRouter.post('/drafts/:id/save-to-gmail', async (req: Request, res: Respon
  * DELETE /api/admin/email-ai/drafts/:id
  * Delete or archive a draft
  */
-emailAiRouter.delete('/drafts/:id', (req: Request, res: Response) => {
+emailAiRouter.delete('/drafts/:id', async (req: Request, res: Response) => {
   try {
+    await refreshFromPersistentStore();
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Valid draft ID required' });
     const ok = EmailAiService.deleteReplyDraft(id, 'admin');

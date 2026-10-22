@@ -14,6 +14,7 @@ import {
 import { McpService } from './mcpService.js';
 import { mcpAuthMiddleware, getMcpAuditTrail, getExpectedMcpKey } from './mcpAuth.js';
 import { mcpOAuthRouter } from './mcpOAuth.js';
+import { refreshFromPersistentStore } from './db.js';
 
 export const mcpRouter = Router();
 
@@ -1036,6 +1037,7 @@ export const MCP_TOOLS: Tool[] = [
  * Central execution logic for SSE, JSON-RPC, REST /tools/call, and server-side Gemini function calling.
  */
 export async function executeMcpTool(name: string, args: any = {}, callerIp: string = 'mcp-system'): Promise<any> {
+  await refreshFromPersistentStore();
   const toolArgs = args || {};
 
   switch (name) {

@@ -1766,6 +1766,26 @@ export async function persistCalculatorPricingConfig(config: CalculatorPricingCo
   await pushCalculatorPricingConfigToSupabase(config);
 }
 
+export async function persistConnectedEmailAccount(account: ConnectedEmailAccountRecord): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await pushConnectedEmailAccountToSupabase(account);
+}
+
+export async function persistConnectedEmailAccountDeletion(id: number): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await deleteConnectedEmailAccountFromSupabase(id);
+}
+
+export async function persistEmailReplyDraft(draft: EmailReplyDraftRecord): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await pushEmailReplyDraftToSupabase(draft);
+}
+
+export async function persistEmailReplyDraftDeletion(id: number): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await deleteEmailReplyDraftFromSupabase(id);
+}
+
 export function getPublishedBlogsForSitemap(): { slug: string; updated_at: string; published_at: string }[] {
   const stmt = db.prepare("SELECT slug, updated_at, published_at FROM blogs WHERE status = 'Published' AND slug IS NOT NULL AND TRIM(slug) != '' ORDER BY published_at DESC");
   return stmt.all() as { slug: string; updated_at: string; published_at: string }[];
@@ -2771,7 +2791,7 @@ export function getConnectedEmailAccounts(adminUser: string = 'admin'): Connecte
     WHERE admin_user = ? 
     ORDER BY id ASC
   `);
-  return stmt.all(adminUser) as ConnectedEmailAccountRecord[];
+  return stmt.all(adminUser) as unknown as ConnectedEmailAccountRecord[];
 }
 
 export function getConnectedEmailAccountById(id: number, adminUser: string = 'admin'): ConnectedEmailAccountRecord | undefined {
@@ -3008,7 +3028,7 @@ export function getEmailReplyDrafts(filters: {
     WHERE ${whereClause}
     ORDER BY id DESC
     LIMIT ? OFFSET ?
-  `).all(...params, limit, offset) as EmailReplyDraftRecord[];
+  `).all(...params, limit, offset) as unknown as EmailReplyDraftRecord[];
 
   return { drafts, total };
 }
