@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { trackPageView } from './analytics';
 
 export interface PageSeoConfig {
   title: string;
@@ -62,6 +63,9 @@ export function usePageSeo(config: PageSeoConfig) {
     } else if (scriptEl) {
       scriptEl.remove();
     }
+
+    // 6. SPA GA4 Page View Dispatch
+    trackPageView(config.title, window.location.pathname, config.canonicalUrl);
 
     return () => {
       // Cleanup script on unmount

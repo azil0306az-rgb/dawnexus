@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Send, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import type { EnquiryFormData } from '../../types';
 import { tracker } from '../../utils/tracker';
+import { trackFormStart, trackFormSubmit, trackGenerateLead } from '../../utils/analytics';
 
 const availableServices = [
   'Website Design & Development',
@@ -69,6 +70,7 @@ export const ContactForm: React.FC = () => {
     if (!hasStartedForm) {
       setHasStartedForm(true);
       tracker.trackFormStart('contact_form');
+      trackFormStart('contact_form');
     }
   };
 
@@ -210,6 +212,12 @@ export const ContactForm: React.FC = () => {
 
       // Success - Record verified conversion without any PII in tracker
       tracker.trackFormSubmit(data.enquiryId ? String(data.enquiryId) : undefined, 'contact_form');
+      trackGenerateLead({
+        enquiryId: data.enquiryId,
+        service: formData.requested_services.join(', ') || 'General Enquiry',
+        budget: formData.budget || 'Not specified',
+        source: 'contact_form'
+      });
       setSubmitSuccess(true);
       sessionStorage.removeItem('dawnexus_contact_draft');
       // Reset form

@@ -34,6 +34,7 @@ import {
 } from '../../types';
 import { usePageSeo } from '../../utils/seo';
 import { generateEstimatePdf } from '../../utils/generateEstimatePdf';
+import { trackQuoteRequest, trackGenerateLead } from '../../utils/analytics';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   Sparkles: <Sparkles className="w-6 h-6 text-[#C7FF4D]" />,
@@ -239,7 +240,21 @@ export const WebsiteCostCalculatorPage: React.FC = () => {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setSubmittedRefId(data.estimate?.referenceId || estimate?.referenceId || 'DNX-EST');
+        const refId = data.estimate?.referenceId || estimate?.referenceId || 'DNX-EST';
+        setSubmittedRefId(refId);
+        trackQuoteRequest({
+          referenceId: refId,
+          websiteType: estimate?.websiteType.name || 'Website',
+          estimatedAmount: estimate?.subtotalOneTime,
+          isCustomQuote: estimate?.isCustomQuoteRequired
+        });
+        trackGenerateLead({
+          enquiryId: data.enquiryId || refId,
+          service: `Website Cost Calculator: ${estimate?.websiteType.name || 'Website'}`,
+          budget: estimate?.subtotalOneTime ? `₹${estimate.subtotalOneTime.toLocaleString('en-IN')}` : 'Custom Quote',
+          source: 'website_cost_calculator',
+          value: estimate?.subtotalOneTime || 0
+        });
         setSubmissionSuccess(true);
       } else {
         setEnquiryErrors({ form: data.error || 'Failed to submit enquiry. Please try again.' });
