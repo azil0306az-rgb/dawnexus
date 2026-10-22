@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogsReliable, getPublishedBlogsForSitemap, refreshFromPersistentStore } from './db.js';
+import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogsReliable, getPublishedBlogsForSitemap, refreshFromPersistentStore, getBlogRedirect } from './db.js';
 import { publicRouter } from './routes/api.js';
 import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
@@ -17,6 +17,7 @@ import { performDatabaseHealthCheck } from './dbHealth.js';
 import { mcpRouter } from './mcpServer.js';
 import { mcpStreamableRouter } from './mcpStreamable.js';
 import { getOAuthServerMetadata, getOAuthProtectedResourceMetadata, mcpOAuthRouter } from './mcpOAuth.js';
+import { resolvePageMetadata, injectPageMetadata } from './ssrRenderer.js';
 
 // Initialize DB schema & tables
 initDatabase();
@@ -40,6 +41,24 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // Trust proxy headers from Vercel / reverse proxy (enables accurate req.protocol & req.ip)
 app.set('trust proxy', 1);
+
+// Enforce single canonical host (https://www.dawnexus.in) and single-hop 301 redirects
+app.use((req, res, next) => {
+  const host = (req.get('x-forwarded-host') || req.get('host') || '').toLowerCase().split(':')[0];
+  if (host === 'dawnexus.in') {
+    return res.redirect(301, `https://www.dawnexus.in${req.originalUrl}`);
+  }
+
+  // Handle dynamic blog 301 redirects (e.g. /blog/local-seo-google-maps-playbook)
+  if (req.path.startsWith('/blog/')) {
+    const redirectRecord = getBlogRedirect(req.path);
+    if (redirectRecord) {
+      return res.redirect(redirectRecord.status_code || 301, redirectRecord.new_path);
+    }
+  }
+
+  next();
+});
 
 // Basic security middleware
 app.use(
@@ -194,8 +213,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     brand: 'Dawnexus',
-    version: '8.1.0',
-    release: '8.1.0 — Remote MCP Integration',
+    version: '8.2.0',
+    release: '8.2.0 — Complete Website, SEO, Google Search Console & GA4 Audit and Repair',
     timestamp: new Date().toISOString()
   });
 });
@@ -214,21 +233,53 @@ if (fs.existsSync(distPath)) {
       }
     }
   }));
-
-  // SPA fallback for /admin and any frontend routes (excluding API, /mcp, and .well-known)
-  app.use((req, res, next) => {
-    if (
-      req.path.startsWith('/api') ||
-      req.path === '/mcp' ||
-      req.path.startsWith('/mcp/') ||
-      req.path.startsWith('/.well-known') ||
-      req.path.startsWith('/oauth')
-    ) {
-      return next();
-    }
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
 }
+
+// In-memory cache for base HTML template
+let cachedIndexHtml: string | null = null;
+const getIndexHtml = (): string | null => {
+  if (cachedIndexHtml) return cachedIndexHtml;
+  const candidates = [
+    path.join(distPath, 'index.html'),
+    path.resolve(process.cwd(), 'dist', 'index.html'),
+    path.resolve(process.cwd(), 'index.html')
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      cachedIndexHtml = fs.readFileSync(p, 'utf-8');
+      return cachedIndexHtml;
+    }
+  }
+  return null;
+};
+
+// Dynamic SSR meta & canonical injection for frontend routes and crawlers
+export const handlePageHtmlRequest = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (
+    req.path.startsWith('/api') ||
+    req.path === '/mcp' ||
+    req.path.startsWith('/mcp/') ||
+    req.path.startsWith('/.well-known') ||
+    req.path.startsWith('/oauth')
+  ) {
+    return next();
+  }
+
+  const rawHtml = getIndexHtml();
+  if (!rawHtml) {
+    return res.status(200).send('<!DOCTYPE html><html><head><title>Dawnexus</title></head><body><div id="root"></div></body></html>');
+  }
+
+  const meta = resolvePageMetadata(req.path);
+  const renderedHtml = injectPageMetadata(rawHtml, meta);
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  return res.status(meta.status || 200).send(renderedHtml);
+};
+
+// Mount HTML handler for all frontend routes
+app.use(handlePageHtmlRequest);
 
 // 404 handler for API routes
 app.use('/api', (req, res) => {

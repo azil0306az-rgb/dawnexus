@@ -53,43 +53,43 @@ export const CATEGORY_DEFINITIONS: CategoryInfo[] = [
     id: 'website-design',
     name: 'Website Design',
     description: 'Modern, high-performance website architecture, conversion UI/UX, responsive engineering, and brand websites.',
-    targetServices: ['https://dawnexus.in/services/website-design', 'https://dawnexus.in/website-cost-calculator']
+    targetServices: ['https://www.dawnexus.in/services/website-design', 'https://www.dawnexus.in/website-cost-calculator']
   },
   {
     id: 'seo-strategy',
     name: 'SEO Strategy',
     description: 'Technical SEO, search ranking signals, search intent, topical authority, local visibility, and organic search growth.',
-    targetServices: ['https://dawnexus.in/services/seo-services']
+    targetServices: ['https://www.dawnexus.in/services/seo-services']
   },
   {
     id: 'ai-creative',
     name: 'AI Creative',
     description: 'Generative media workflows, AI commercial video production, interactive 3D visualizations, and modern creative technology.',
-    targetServices: ['https://dawnexus.in/services/ai-video-creation']
+    targetServices: ['https://www.dawnexus.in/services/ai-video-creation']
   },
   {
     id: 'digital-marketing',
     name: 'Digital Marketing',
     description: 'Paid search, social acquisition, performance funnels, multi-channel growth campaigns, and customer journey optimization.',
-    targetServices: ['https://dawnexus.in/services/digital-marketing']
+    targetServices: ['https://www.dawnexus.in/services/digital-marketing']
   },
   {
     id: 'digital-strategy',
     name: 'Digital Strategy',
     description: 'Executive business transformation, digital ROI planning, technology roadmaps, and competitive market positioning.',
-    targetServices: ['https://dawnexus.in/']
+    targetServices: ['https://www.dawnexus.in/']
   },
   {
     id: 'conversion-optimization',
     name: 'Conversion Optimization',
     description: 'Landing page conversion rate optimization (CRO), user journey analytics, heatmaps, and funnel drop-off mitigation.',
-    targetServices: ['https://dawnexus.in/services/website-design', 'https://dawnexus.in/website-cost-calculator']
+    targetServices: ['https://www.dawnexus.in/services/website-design', 'https://www.dawnexus.in/website-cost-calculator']
   },
   {
     id: 'case-studies',
     name: 'Case Studies',
     description: 'Deep-dive client implementation analyses, architectural walkthroughs, and measurable verified outcomes.',
-    targetServices: ['https://dawnexus.in/']
+    targetServices: ['https://www.dawnexus.in/']
   }
 ];
 
@@ -140,20 +140,20 @@ export class McpService {
 
     // Build authentic internal link targets
     const coreTargets = [
-      { title: 'Dawnexus Homepage', url: 'https://dawnexus.in/', category: 'Core' },
-      { title: 'Website Design & Development', url: 'https://dawnexus.in/services/website-design', category: 'Services' },
-      { title: 'Search Engine Optimization', url: 'https://dawnexus.in/services/seo-services', category: 'Services' },
-      { title: 'AI Video Creation & Marketing', url: 'https://dawnexus.in/services/ai-video-creation', category: 'Services' },
-      { title: 'Digital Marketing & Growth', url: 'https://dawnexus.in/services/digital-marketing', category: 'Services' },
-      { title: 'Interactive Website Cost Calculator', url: 'https://dawnexus.in/website-cost-calculator', category: 'Tools' },
-      { title: 'Dawnexus Insights & Knowledge Hub', url: 'https://dawnexus.in/blog', category: 'Blog' }
+      { title: 'Dawnexus Homepage', url: 'https://www.dawnexus.in/', category: 'Core' },
+      { title: 'Website Design & Development', url: 'https://www.dawnexus.in/services/website-design', category: 'Services' },
+      { title: 'Search Engine Optimization', url: 'https://www.dawnexus.in/services/seo-services', category: 'Services' },
+      { title: 'AI Video Creation & Marketing', url: 'https://www.dawnexus.in/services/ai-video-creation', category: 'Services' },
+      { title: 'Digital Marketing & Growth', url: 'https://www.dawnexus.in/services/digital-marketing', category: 'Services' },
+      { title: 'Interactive Website Cost Calculator', url: 'https://www.dawnexus.in/website-cost-calculator', category: 'Tools' },
+      { title: 'Dawnexus Insights & Knowledge Hub', url: 'https://www.dawnexus.in/blog', category: 'Blog' }
     ];
 
     const publishedBlogTargets = items
       .filter(b => b.status === 'Published')
       .map(b => ({
         title: b.title,
-        url: `https://dawnexus.in/blog/${b.slug}`,
+        url: `https://www.dawnexus.in/blog/${b.slug}`,
         category: b.category
       }));
 
@@ -185,7 +185,7 @@ export class McpService {
     }>;
   }> {
     const conn = getSeoConnection();
-    const targetProperty = conn?.selected_property || 'https://dawnexus.in/';
+    const targetProperty = conn?.selected_property || 'https://www.dawnexus.in/';
 
     const { accessToken, selectedProperty, error } = await GscService.getValidAccessToken();
 
@@ -216,7 +216,7 @@ export class McpService {
           property: selectedProperty,
           hasLiveMetrics: false,
           diagnosticMessage: `Google Search Console API returned: ${gscRes.error}. The connected Google account may not have verified owner/viewer permissions for the property ${selectedProperty} in Google Search Console.`,
-          resolution: 'Ensure the Google account authorized in Dawnexus Admin has been added as a Verified Owner or Full User in Google Search Console for https://dawnexus.in/.',
+          resolution: 'Ensure the Google account authorized in Dawnexus Admin has been added as a Verified Owner or Full User in Google Search Console for https://www.dawnexus.in/.',
           opportunities: []
         };
       }
@@ -323,16 +323,16 @@ export class McpService {
     const gscResult = await this.getSearchConsoleOpportunities();
 
     const linkTargets = [
-      { title: 'Dawnexus Homepage', url: 'https://dawnexus.in/', category: 'Core' },
-      { title: 'Website Design & Development', url: 'https://dawnexus.in/services/website-design', category: 'Services' },
-      { title: 'Search Engine Optimization', url: 'https://dawnexus.in/services/seo-services', category: 'Services' },
-      { title: 'AI Video Creation & Marketing', url: 'https://dawnexus.in/services/ai-video-creation', category: 'Services' },
-      { title: 'Digital Marketing & Growth', url: 'https://dawnexus.in/services/digital-marketing', category: 'Services' },
-      { title: 'Interactive Website Cost Calculator', url: 'https://dawnexus.in/website-cost-calculator', category: 'Tools' },
-      { title: 'Dawnexus Insights & Knowledge Hub', url: 'https://dawnexus.in/blog', category: 'Blog' },
+      { title: 'Dawnexus Homepage', url: 'https://www.dawnexus.in/', category: 'Core' },
+      { title: 'Website Design & Development', url: 'https://www.dawnexus.in/services/website-design', category: 'Services' },
+      { title: 'Search Engine Optimization', url: 'https://www.dawnexus.in/services/seo-services', category: 'Services' },
+      { title: 'AI Video Creation & Marketing', url: 'https://www.dawnexus.in/services/ai-video-creation', category: 'Services' },
+      { title: 'Digital Marketing & Growth', url: 'https://www.dawnexus.in/services/digital-marketing', category: 'Services' },
+      { title: 'Interactive Website Cost Calculator', url: 'https://www.dawnexus.in/website-cost-calculator', category: 'Tools' },
+      { title: 'Dawnexus Insights & Knowledge Hub', url: 'https://www.dawnexus.in/blog', category: 'Blog' },
       ...publishedArticles.map(p => ({
         title: p.title,
-        url: `https://dawnexus.in/blog/${p.slug}`,
+        url: `https://www.dawnexus.in/blog/${p.slug}`,
         category: p.category
       }))
     ];
@@ -1063,7 +1063,7 @@ export class McpService {
     const imageUrl = blog.featured_image.trim();
     let testUrl = imageUrl;
     if (testUrl.startsWith('/')) {
-      testUrl = `https://dawnexus.in${testUrl}`;
+      testUrl = `https://www.dawnexus.in${testUrl}`;
     }
 
     try {

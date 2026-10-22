@@ -1,5 +1,5 @@
 /**
- * Dawnexus Version 8.1.0 — Remote MCP Server for Claude
+ * Dawnexus Version 8.2.0 — Remote MCP Server for Claude
  * Implements official Streamable HTTP transport via @modelcontextprotocol/sdk
  * Endpoint: https://www.dawnexus.in/mcp
  */
@@ -70,7 +70,7 @@ mcpStreamableRouter.get('/', (req: Request, res: Response, next: NextFunction) =
       transport: 'Streamable HTTP (MCP RFC 2024-11-05)',
       protocol: 'Model Context Protocol',
       server: 'dawnexus-mcp-server',
-      version: '8.1.0',
+      version: '8.2.0',
       client_target: 'Claude Custom Connector',
       auth: {
         supported: ['bearer_token', 'x-mcp-api-key', 'oauth2_pkce'],

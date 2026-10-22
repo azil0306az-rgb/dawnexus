@@ -80,7 +80,7 @@ export const MCP_TOOLS: Tool[] = [
         target_audience: { type: 'string', description: 'Target audience description' },
         seo_title: { type: 'string', description: 'SERP title tag (under 60 characters)' },
         meta_description: { type: 'string', description: 'Meta description (120-160 characters)' },
-        canonical_url: { type: 'string', description: 'Canonical URL (defaults to https://dawnexus.in/blog/<slug>)' },
+        canonical_url: { type: 'string', description: 'Canonical URL (defaults to https://www.dawnexus.in/blog/<slug>)' },
         featured_image: { type: 'string', description: 'Featured image URL or base64 data URL' },
         image_alt: { type: 'string', description: 'Descriptive alt text for featured image' }
       },
@@ -1204,7 +1204,7 @@ export function createDawnexusMcpServer(): Server {
   const server = new Server(
     {
       name: 'dawnexus-mcp-server',
-      version: '8.1.0'
+      version: '8.2.0'
     },
     {
       capabilities: {
@@ -1265,7 +1265,7 @@ mcpRouter.get('/status', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'Dawnexus MCP Server',
-    version: '8.1.0',
+    version: '8.2.0',
     transport: ['Streamable HTTP (/mcp)', 'SSE (/api/mcp/sse)', 'JSON-RPC POST (/api/mcp/rpc)', 'REST OpenAPI (/api/mcp/tools)'],
     policy: 'Draft first. Human approval required. Claude MCP Integration.',
     toolsCount: MCP_TOOLS.length,
@@ -1275,7 +1275,7 @@ mcpRouter.get('/status', (req: Request, res: Response) => {
 
 // 2. OpenAPI 3.1 Specification for ChatGPT Custom GPT Actions
 mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
-  const host = req.get('host') || 'dawnexus.in';
+  const host = req.get('host') || 'www.dawnexus.in';
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
   const baseUrl = `${protocol}://${host}/api/mcp`;
 
@@ -1283,7 +1283,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
     openapi: '3.1.0',
     info: {
       title: 'Dawnexus MCP API',
-      version: '8.1.0',
+      version: '8.2.0',
       description: 'Dawnexus Model Context Protocol (MCP) and Action API for Claude and AI integrations to research, plan, draft, and audit SEO blog posts, inspect Search Console & GA4 analytics, monitor first-party visitor telemetry, and manage approved website content. All content creation is saved strictly as Drafts requiring human approval in the Admin panel.'
     },
     servers: [{ url: baseUrl }],
@@ -1913,7 +1913,7 @@ mcpRouter.post('/rpc', async (req: Request, res: Response) => {
           capabilities: { tools: {} },
           serverInfo: {
             name: 'dawnexus-mcp-server',
-            version: '8.1.0'
+            version: '8.2.0'
           }
         }
       });
