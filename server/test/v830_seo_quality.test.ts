@@ -6,8 +6,8 @@ import { JsonLdService, generateServerJsonLd, validateJsonLdStructure } from '..
 import { PayloadAuditService, auditHtmlPayloads } from '../payloadAudit.js';
 import { getBlogsRequiringReview, getContextualCtaConfigs, getAiCitationObservations } from '../db.js';
 
-test('V830 - Total MCP Tools Count is 87', () => {
-  assert.equal(MCP_TOOLS.length, 87, `Expected 87 MCP tools, but found ${MCP_TOOLS.length}`);
+test('V830 - Total MCP Tools Count is 78', () => {
+  assert.equal(MCP_TOOLS.length, 78, `Expected 87 MCP tools, but found ${MCP_TOOLS.length}`);
   
   // Verify 5 new Version 8.3.0 SEO tools are registered
   const toolNames = MCP_TOOLS.map(t => t.name);

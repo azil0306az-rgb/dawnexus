@@ -13,20 +13,15 @@ import { initDatabase, cleanupExpiredSessions, publishDueScheduledBlogsReliable,
 import { publicRouter } from './routes/api.js';
 import { adminRouter } from './routes/admin.js';
 import { handleGoogleOAuthCallback } from './routes/seoResearch.js';
-import { emailAiRouter, handleGoogleEmailOAuthCallback } from './routes/emailAi.js';
 import { performDatabaseHealthCheck } from './dbHealth.js';
 import { mcpRouter } from './mcpServer.js';
 import { mcpStreamableRouter } from './mcpStreamable.js';
 import { getOAuthServerMetadata, getOAuthProtectedResourceMetadata, mcpOAuthRouter } from './mcpOAuth.js';
 import { resolvePageMetadata, injectPageMetadata } from './ssrRenderer.js';
-import { ensurePostgresEmailTables } from './scripts/migrate_email_tables_postgres.js';
 import { ensurePostgresV830Schema } from './scripts/migrate_v830_postgres.js';
 
 // Initialize DB schema & tables
 initDatabase();
-ensurePostgresEmailTables().catch((err: any) => {
-  console.warn('[Postgres Email Tables Notice]:', err?.message || err);
-});
 ensurePostgresV830Schema().catch((err: any) => {
   console.warn('[Postgres v8.3.0 Schema Notice]:', err?.message || err);
 });
@@ -192,7 +187,6 @@ app.get('/api/sitemap.xml', handleSitemapRequest);
 
 // Google OAuth 2.0 callback endpoint (needs to be reachable by Google redirection without requiring pre-existing admin cookie)
 app.get('/api/admin/seo-research/google/callback', handleGoogleOAuthCallback);
-app.get('/api/admin/email-ai/google/callback', handleGoogleEmailOAuthCallback);
 
 // RFC 8414 OAuth 2.0 Authorization Server Metadata Discovery
 const handleOAuthDiscovery = (req: any, res: any) => {
@@ -216,7 +210,6 @@ app.use('/oauth', mcpOAuthRouter);
 app.use('/api/oauth', mcpOAuthRouter);
 app.use('/api/mcp', mcpRouter);
 app.use('/api', publicRouter);
-app.use('/api/admin/email-ai', emailAiRouter);
 app.use('/api/admin', adminRouter);
 
 // Health check endpoint

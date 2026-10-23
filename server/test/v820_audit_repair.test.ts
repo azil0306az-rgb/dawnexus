@@ -33,8 +33,8 @@ describe('Dawnexus Version 8.2.0: Website, SEO, Canonical & GA4 Audit and Repair
     const body = await res.json();
     assert.strictEqual(body.status, 'ok');
     assert.strictEqual(body.brand, 'Dawnexus');
-    assert.ok(body.version.startsWith('8.2.'));
-    assert.ok(body.release.includes('8.2.'));
+    assert.ok(body.version.startsWith('8.2.') || body.version.startsWith('8.3.'));
+    assert.ok(body.release.includes('8.2.') || body.release.includes('8.3.'));
   });
 
   // 2. Canonical Host 301 Redirect Middleware

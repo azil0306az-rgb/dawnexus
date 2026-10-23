@@ -41,7 +41,6 @@ import { Ga4Dashboard } from './Ga4Dashboard';
 import { BehaviourAnalyticsDashboard } from './BehaviourAnalyticsDashboard';
 import { ContentEditor } from './ContentEditor';
 import { IntegrationDiagnostics } from './IntegrationDiagnostics';
-import { EmailAiDashboard } from './EmailAiDashboard';
 import { AdvancedSeoDashboard } from './AdvancedSeoDashboard';
 
 interface AdminDashboardProps {
@@ -49,7 +48,7 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'advanced-seo' | 'email-ai' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'advanced-seo' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -132,9 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'email-ai') {
-        setActiveTab('email-ai');
-      } else if (tabParam === 'seo-ai' || tabParam === 'ai-optimization') {
+      if (tabParam === 'seo-ai' || tabParam === 'ai-optimization') {
         setActiveTab('blogs');
         window.history.replaceState({}, '', '/admin');
       }
@@ -359,23 +356,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('email-ai')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                activeTab === 'email-ai'
-                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
-                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Mail className="w-4 h-4" />
-                <span>Email AI</span>
-              </div>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
-                NEW
-              </span>
-            </button>
-
-            <button
               onClick={() => setActiveTab('gsc')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'gsc'
@@ -541,8 +521,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <BlogManager />
         ) : activeTab === 'advanced-seo' ? (
           <AdvancedSeoDashboard />
-        ) : activeTab === 'email-ai' ? (
-          <EmailAiDashboard />
         ) : activeTab === 'gsc' ? (
           <GscDashboard />
         ) : activeTab === 'analytics' ? (
