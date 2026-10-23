@@ -77,23 +77,41 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
   const [imageAlt, setImageAlt] = useState(initialBlog?.image_alt || '');
   const [author, setAuthor] = useState(initialBlog?.author || 'Dawnexus Editorial');
   const [category, setCategory] = useState(initialBlog?.category || 'Website Design');
-  const [tagsInput, setTagsInput] = useState(
-    initialBlog ? JSON.parse(initialBlog.tags || '[]').join(', ') : ''
-  );
+  const [tagsInput, setTagsInput] = useState(() => {
+    if (!initialBlog?.tags) return '';
+    try {
+      const parsed = typeof initialBlog.tags === 'string' ? JSON.parse(initialBlog.tags) : initialBlog.tags;
+      return Array.isArray(parsed) ? parsed.join(', ') : String(initialBlog.tags);
+    } catch {
+      return String(initialBlog.tags);
+    }
+  });
 
   // SEO & Intent
   const [primaryKeyword, setPrimaryKeyword] = useState(initialBlog?.primary_keyword || '');
-  const [secondaryKeywordsInput, setSecondaryKeywordsInput] = useState(
-    initialBlog ? JSON.parse(initialBlog.secondary_keywords || '[]').join(', ') : ''
-  );
+  const [secondaryKeywordsInput, setSecondaryKeywordsInput] = useState(() => {
+    if (!initialBlog?.secondary_keywords) return '';
+    try {
+      const parsed = typeof initialBlog.secondary_keywords === 'string' ? JSON.parse(initialBlog.secondary_keywords) : initialBlog.secondary_keywords;
+      return Array.isArray(parsed) ? parsed.join(', ') : String(initialBlog.secondary_keywords);
+    } catch {
+      return String(initialBlog.secondary_keywords);
+    }
+  });
   const [targetLocation, setTargetLocation] = useState(
     initialBlog?.target_location || 'Coimbatore, Tamil Nadu, India'
   );
   const [searchIntent, setSearchIntent] = useState(initialBlog?.search_intent || 'Informational');
   const [targetAudience, setTargetAudience] = useState(initialBlog?.target_audience || '');
-  const [targetQuestionsInput, setTargetQuestionsInput] = useState(
-    initialBlog ? JSON.parse(initialBlog.target_questions || '[]').join('\n') : ''
-  );
+  const [targetQuestionsInput, setTargetQuestionsInput] = useState(() => {
+    if (!initialBlog?.target_questions) return '';
+    try {
+      const parsed = typeof initialBlog.target_questions === 'string' ? JSON.parse(initialBlog.target_questions) : initialBlog.target_questions;
+      return Array.isArray(parsed) ? parsed.join('\n') : String(initialBlog.target_questions);
+    } catch {
+      return String(initialBlog.target_questions);
+    }
+  });
   const [seoTitle, setSeoTitle] = useState(initialBlog?.seo_title || '');
   const [metaDescription, setMetaDescription] = useState(initialBlog?.meta_description || '');
   const [canonicalUrl, setCanonicalUrl] = useState(initialBlog?.canonical_url || '');

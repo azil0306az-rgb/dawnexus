@@ -15,8 +15,8 @@ const BOILERPLATE_PATTERNS = [
   /game-?changer for businesses/i
 ];
 
-export function analyzeInformationGain(article: {
-  title: string;
+export function analyzeInformationGain(articleInput: string | {
+  title?: string;
   content: string;
   firsthand_observations?: string;
   project_examples?: string;
@@ -29,6 +29,9 @@ export function analyzeInformationGain(article: {
   author_credentials?: string;
   citation_answer_blocks?: any[] | string;
 }): InformationGainReport {
+  const article = typeof articleInput === 'string'
+    ? { title: '', content: articleInput }
+    : (articleInput || { title: '', content: '' });
   const content = article.content || '';
   const plainText = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   const words = plainText ? plainText.split(/\s+/).length : 0;
@@ -315,7 +318,7 @@ export function analyzeInformationGain(article: {
     ai_readiness_score: Math.min(100, Math.round((answerBlocks.length * 35) + (hasData ? 30 : 0))),
     answer_blocks_count: answerBlocks.length,
     has_original_data: hasData,
-    boilerplate_penalty: boilerplateCount * 5,
+    boilerplate_penalty: fillerCount * 5,
     criteria: enrichedCriteria,
     strengths,
     missingEvidence,

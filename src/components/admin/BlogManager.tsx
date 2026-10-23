@@ -11,16 +11,38 @@ import {
   RefreshCw,
   Trash2,
   AlertTriangle,
-  X
+  X,
+  Loader2,
+  ArrowLeft
 } from 'lucide-react';
 import { BlogRecord, BlogStats, BlogInput } from '../../types';
 import { BlogList } from './BlogList';
 import { BlogEditor } from './BlogEditor';
 import { BlogCalendar } from './BlogCalendar';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
-export const BlogManager: React.FC = () => {
-  const [subView, setSubView] = useState<'list' | 'calendar' | 'editor'>('list');
+interface BlogManagerProps {
+  initialBlogId?: string | number | null;
+  initialIsNew?: boolean;
+}
+
+export const BlogManager: React.FC<BlogManagerProps> = ({
+  initialBlogId,
+  initialIsNew
+}) => {
+  const getInitialSubView = (): 'list' | 'calendar' | 'editor' => {
+    if (initialIsNew || initialBlogId) return 'editor';
+    if (typeof window !== 'undefined' && window.location.search.includes('view=calendar')) {
+      return 'calendar';
+    }
+    return 'list';
+  };
+
+  const [subView, setSubView] = useState<'list' | 'calendar' | 'editor'>(getInitialSubView);
   const [editingBlog, setEditingBlog] = useState<BlogRecord | null>(null);
+  const [isLoadingBlog, setIsLoadingBlog] = useState<boolean>(Boolean(initialBlogId));
+  const [blogLoadError, setBlogLoadError] = useState<string | null>(null);
+
   const [blogs, setBlogs] = useState<BlogRecord[]>([]);
   const [calendarBlogs, setCalendarBlogs] = useState<BlogRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -48,10 +70,47 @@ export const BlogManager: React.FC = () => {
   // Pre-filled date for new post when created from calendar
   const [initialDateForNew, setInitialDateForNew] = useState<string | null>(null);
 
+  // Fetch single blog by ID or slug
+  const fetchSingleBlog = useCallback(async (idOrSlug: string | number) => {
+    setIsLoadingBlog(true);
+    setBlogLoadError(null);
+    try {
+      const res = await fetch(`/api/admin/blogs/${encodeURIComponent(String(idOrSlug))}`, {
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+
+      if (res.status === 404) {
+        setBlogLoadError(`Article #${idOrSlug} was not found in the database.`);
+        setEditingBlog(null);
+        return;
+      }
+
+      if (!res.ok) {
+        setBlogLoadError(`Failed to load article #${idOrSlug} (Server returned HTTP ${res.status}).`);
+        setEditingBlog(null);
+        return;
+      }
+
+      const blogData = await res.json();
+      setEditingBlog(blogData);
+      setSubView('editor');
+    } catch (err: any) {
+      console.error('[BlogManager Fetch Single Blog Error]:', err);
+      setBlogLoadError(err.message || 'Network connection failed while fetching article.');
+      setEditingBlog(null);
+    } finally {
+      setIsLoadingBlog(false);
+    }
+  }, []);
+
   // Fetch Stats
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/blogs/stats');
+      const res = await fetch('/api/admin/blogs/stats', {
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -74,11 +133,14 @@ export const BlogManager: React.FC = () => {
       if (statusFilter !== 'All') q.set('status', statusFilter);
       if (categoryFilter !== 'All') q.set('category', categoryFilter);
 
-      const res = await fetch(`/api/admin/blogs?${q.toString()}`);
+      const res = await fetch(`/api/admin/blogs?${q.toString()}`, {
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
-        setBlogs(data.items);
-        setTotal(data.total);
+        setBlogs(data.items || []);
+        setTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
       }
     } catch (err) {
@@ -91,15 +153,29 @@ export const BlogManager: React.FC = () => {
   // Fetch all blogs for calendar view (up to 100)
   const fetchCalendarBlogs = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/blogs?limit=100');
+      const res = await fetch('/api/admin/blogs?limit=100', {
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
-        setCalendarBlogs(data.items);
+        setCalendarBlogs(data.items || []);
       }
     } catch (err) {
       console.error('Failed to fetch calendar blogs:', err);
     }
   }, []);
+
+  // Sync with initial props
+  useEffect(() => {
+    if (initialBlogId) {
+      fetchSingleBlog(initialBlogId);
+    } else if (initialIsNew) {
+      setEditingBlog(null);
+      setBlogLoadError(null);
+      setSubView('editor');
+    }
+  }, [initialBlogId, initialIsNew, fetchSingleBlog]);
 
   useEffect(() => {
     fetchStats();
@@ -112,6 +188,78 @@ export const BlogManager: React.FC = () => {
     }
   }, [subView, fetchCalendarBlogs]);
 
+  // Handle browser Back and Forward navigation inside BlogManager
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+      const segments = path.split('/').filter(s => s !== 'admin');
+      const searchParams = window.location.search;
+
+      if (segments[0] === 'blogs' || segments[0] === 'blog') {
+        if (segments[1] === 'new') {
+          setEditingBlog(null);
+          setBlogLoadError(null);
+          setSubView('editor');
+        } else if (segments[1]) {
+          fetchSingleBlog(segments[1]);
+        } else if (searchParams.includes('view=calendar')) {
+          setSubView('calendar');
+          setEditingBlog(null);
+          setBlogLoadError(null);
+        } else {
+          setSubView('list');
+          setEditingBlog(null);
+          setBlogLoadError(null);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [fetchSingleBlog]);
+
+  // Navigation action handlers with URL synchronization
+  const handleSelectBlog = (blog: BlogRecord) => {
+    setEditingBlog(blog);
+    setBlogLoadError(null);
+    setSubView('editor');
+    const targetUrl = `/admin/blogs/${blog.id}`;
+    if (window.location.pathname !== targetUrl) {
+      window.history.pushState(null, '', targetUrl);
+    }
+  };
+
+  const handleCreateNew = () => {
+    setEditingBlog(null);
+    setBlogLoadError(null);
+    setInitialDateForNew(null);
+    setSubView('editor');
+    const targetUrl = '/admin/blogs/new';
+    if (window.location.pathname !== targetUrl) {
+      window.history.pushState(null, '', targetUrl);
+    }
+  };
+
+  const handleReturnToList = () => {
+    setEditingBlog(null);
+    setBlogLoadError(null);
+    setSubView('list');
+    const targetUrl = '/admin/blogs';
+    if (window.location.pathname !== targetUrl) {
+      window.history.pushState(null, '', targetUrl);
+    }
+  };
+
+  const handleSwitchToCalendar = () => {
+    setEditingBlog(null);
+    setBlogLoadError(null);
+    setSubView('calendar');
+    const targetUrl = '/admin/blogs?view=calendar';
+    if (window.location.pathname + window.location.search !== targetUrl) {
+      window.history.pushState(null, '', targetUrl);
+    }
+  };
+
   // Save Blog Handler
   const handleSave = async (data: BlogInput, id?: number): Promise<boolean> => {
     try {
@@ -120,6 +268,7 @@ export const BlogManager: React.FC = () => {
 
       const res = await fetch(url, {
         method,
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
@@ -127,6 +276,9 @@ export const BlogManager: React.FC = () => {
       if (res.ok) {
         const result = await res.json();
         setEditingBlog(result.blog);
+        if (!id && result.blog?.id) {
+          window.history.replaceState(null, '', `/admin/blogs/${result.blog.id}`);
+        }
         fetchStats();
         fetchBlogs();
         fetchCalendarBlogs();
@@ -142,13 +294,19 @@ export const BlogManager: React.FC = () => {
   // Duplicate Blog Handler
   const handleDuplicate = async (id: number) => {
     try {
-      const res = await fetch(`/api/admin/blogs/${id}/duplicate`, { method: 'POST' });
+      const res = await fetch(`/api/admin/blogs/${id}/duplicate`, {
+        method: 'POST',
+        credentials: 'include'
+      });
       if (res.ok) {
         const data = await res.json();
         fetchStats();
         fetchBlogs();
         setEditingBlog(data.blog);
         setSubView('editor');
+        if (data.blog?.id) {
+          window.history.pushState(null, '', `/admin/blogs/${data.blog.id}`);
+        }
       }
     } catch (err) {
       console.error('Error duplicating blog:', err);
@@ -160,12 +318,15 @@ export const BlogManager: React.FC = () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/admin/blogs/${deleteTarget.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/blogs/${deleteTarget.id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
       if (res.ok) {
+        const deletedId = deleteTarget.id;
         setDeleteTarget(null);
-        if (editingBlog?.id === deleteTarget.id) {
-          setEditingBlog(null);
-          setSubView('list');
+        if (editingBlog?.id === deletedId) {
+          handleReturnToList();
         }
         fetchStats();
         fetchBlogs();
@@ -225,11 +386,8 @@ export const BlogManager: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button
             type="button"
-            onClick={() => {
-              setSubView('list');
-              setEditingBlog(null);
-            }}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${
+            onClick={handleReturnToList}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
               subView === 'list'
                 ? 'bg-[#181818] text-[#C7FF4D] border border-[#2a2a2a]'
                 : 'text-neutral-400 hover:text-white'
@@ -241,11 +399,8 @@ export const BlogManager: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => {
-              setSubView('calendar');
-              setEditingBlog(null);
-            }}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition ${
+            onClick={handleSwitchToCalendar}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
               subView === 'calendar'
                 ? 'bg-[#181818] text-[#C7FF4D] border border-[#2a2a2a]'
                 : 'text-neutral-400 hover:text-white'
@@ -257,7 +412,7 @@ export const BlogManager: React.FC = () => {
 
           {subView === 'editor' && (
             <div className="flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-[#181818] text-[#C7FF4D] border border-[#2a2a2a]">
-              <span>{editingBlog ? 'Edit Article' : 'New Article'}</span>
+              <span>{editingBlog ? `Edit: ${editingBlog.title.slice(0, 32)}${editingBlog.title.length > 32 ? '...' : ''}` : 'New Article'}</span>
             </div>
           )}
         </div>
@@ -265,12 +420,8 @@ export const BlogManager: React.FC = () => {
         {subView !== 'editor' && (
           <button
             type="button"
-            onClick={() => {
-              setEditingBlog(null);
-              setInitialDateForNew(null);
-              setSubView('editor');
-            }}
-            className="flex items-center space-x-1.5 px-3.5 py-2 bg-[#C7FF4D] hover:bg-[#d6ff73] text-black font-semibold text-xs rounded-lg transition shadow-md shadow-[#C7FF4D]/10"
+            onClick={handleCreateNew}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-[#C7FF4D] hover:bg-[#d6ff73] text-black font-semibold text-xs rounded-lg transition shadow-md shadow-[#C7FF4D]/10 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Article</span>
@@ -278,8 +429,52 @@ export const BlogManager: React.FC = () => {
         )}
       </div>
 
+      {/* Single Blog Loading State */}
+      {isLoadingBlog && (
+        <div className="min-h-[400px] flex flex-col items-center justify-center p-12 text-center space-y-4 bg-[#0D0D0D] border border-[#202020] rounded-2xl">
+          <Loader2 className="w-8 h-8 animate-spin text-[#C7FF4D]" />
+          <div className="space-y-1">
+            <h4 className="text-base font-semibold text-white">Loading Article</h4>
+            <p className="text-xs font-mono text-neutral-400">Retrieving article data and editorial metadata...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Single Blog Error / Not Found State */}
+      {blogLoadError && !isLoadingBlog && (
+        <div className="min-h-[350px] flex flex-col items-center justify-center p-8 text-center space-y-5 bg-[#0D0D0D] border border-amber-500/30 rounded-2xl max-w-xl mx-auto my-6 shadow-xl">
+          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div className="space-y-1.5">
+            <h4 className="text-lg font-bold text-white">Unable to Open Article</h4>
+            <p className="text-sm text-neutral-400 leading-relaxed">{blogLoadError}</p>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (initialBlogId) fetchSingleBlog(initialBlogId);
+              }}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#C7FF4D] hover:bg-[#d6ff73] text-black font-semibold text-xs rounded-xl transition cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleReturnToList}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#181818] hover:bg-[#222] text-neutral-300 hover:text-white font-medium text-xs rounded-xl border border-[#2e2e2e] transition cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to All Articles</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* View Switch */}
-      {subView === 'list' && (
+      {subView === 'list' && !isLoadingBlog && !blogLoadError && (
         <BlogList
           blogs={blogs}
           total={total}
@@ -295,30 +490,22 @@ export const BlogManager: React.FC = () => {
           sortBy={sortBy}
           onSortByChange={setSortBy}
           onPageChange={setPage}
-          onSelectBlog={blog => {
-            setEditingBlog(blog);
-            setSubView('editor');
-          }}
-          onCreateNew={() => {
-            setEditingBlog(null);
-            setSubView('editor');
-          }}
+          onSelectBlog={handleSelectBlog}
+          onCreateNew={handleCreateNew}
           onDuplicate={handleDuplicate}
           onDelete={blog => setDeleteTarget(blog)}
         />
       )}
 
-      {subView === 'calendar' && (
+      {subView === 'calendar' && !isLoadingBlog && !blogLoadError && (
         <BlogCalendar
           blogs={calendarBlogs}
-          onSelectBlog={blog => {
-            setEditingBlog(blog);
-            setSubView('editor');
-          }}
+          onSelectBlog={handleSelectBlog}
           onCreateBlogForDate={dateStr => {
             setEditingBlog(null);
             setInitialDateForNew(dateStr);
             setSubView('editor');
+            window.history.pushState(null, '', '/admin/blogs/new');
           }}
           onRefresh={() => {
             fetchStats();
@@ -327,52 +514,56 @@ export const BlogManager: React.FC = () => {
         />
       )}
 
-      {subView === 'editor' && (
-        <BlogEditor
-          initialBlog={
-            editingBlog ||
-            (initialDateForNew
-              ? ({
-                  id: 0,
-                  title: '',
-                  slug: '',
-                  excerpt: '',
-                  content: '',
-                  featured_image: '',
-                  image_alt: '',
-                  author: 'Dawnexus Editorial',
-                  category: 'Website Design',
-                  tags: '[]',
-                  primary_keyword: '',
-                  secondary_keywords: '[]',
-                  target_location: 'Coimbatore, Tamil Nadu, India',
-                  search_intent: 'Informational',
-                  target_audience: '',
-                  target_questions: '[]',
-                  seo_title: '',
-                  meta_description: '',
-                  canonical_url: '',
-                  status: 'Scheduled',
-                  scheduled_at: `${initialDateForNew}T09:00:00Z`,
-                  published_at: null,
-                  publication_error: '',
-                  admin_notes: '',
-                  created_at: '',
-                  updated_at: ''
-                } as BlogRecord)
-              : null)
-          }
-          onSave={handleSave}
-          onCancel={() => {
-            setSubView('list');
-            setEditingBlog(null);
-          }}
-          onDuplicate={handleDuplicate}
-          onDelete={async id => {
-            const b = blogs.find(item => item.id === id) || editingBlog;
-            if (b) setDeleteTarget(b);
-          }}
-        />
+      {subView === 'editor' && !isLoadingBlog && !blogLoadError && (
+        <ErrorBoundary
+          fallbackTitle="Article Editor Error"
+          resetButtonText="Return to Article List"
+          onReset={handleReturnToList}
+        >
+          <BlogEditor
+            key={editingBlog?.id || 'new'}
+            initialBlog={
+              editingBlog ||
+              (initialDateForNew
+                ? ({
+                    id: 0,
+                    title: '',
+                    slug: '',
+                    excerpt: '',
+                    content: '',
+                    featured_image: '',
+                    image_alt: '',
+                    author: 'Dawnexus Editorial',
+                    category: 'Website Design',
+                    tags: '[]',
+                    primary_keyword: '',
+                    secondary_keywords: '[]',
+                    target_location: 'Coimbatore, Tamil Nadu, India',
+                    search_intent: 'Informational',
+                    target_audience: '',
+                    target_questions: '[]',
+                    seo_title: '',
+                    meta_description: '',
+                    canonical_url: '',
+                    status: 'Scheduled',
+                    scheduled_at: `${initialDateForNew}T09:00:00Z`,
+                    published_at: null,
+                    publication_error: '',
+                    admin_notes: '',
+                    created_at: '',
+                    updated_at: ''
+                  } as BlogRecord)
+                : null)
+            }
+            onSave={handleSave}
+            onCancel={handleReturnToList}
+            onDuplicate={handleDuplicate}
+            onDelete={async id => {
+              const b = blogs.find(item => item.id === id) || editingBlog;
+              if (b) setDeleteTarget(b);
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Delete Confirmation Modal */}

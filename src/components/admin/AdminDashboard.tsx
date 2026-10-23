@@ -43,12 +43,121 @@ import { ContentEditor } from './ContentEditor';
 import { IntegrationDiagnostics } from './IntegrationDiagnostics';
 import { AdvancedSeoDashboard } from './AdvancedSeoDashboard';
 
+export type AdminTab =
+  | 'overview'
+  | 'enquiries'
+  | 'clients'
+  | 'blogs'
+  | 'advanced-seo'
+  | 'gsc'
+  | 'analytics'
+  | 'behaviour'
+  | 'content-editor'
+  | 'calculator'
+  | 'notifications'
+  | 'db-health'
+  | 'diagnostics';
+
+const ALL_ADMIN_TABS: AdminTab[] = [
+  'overview',
+  'enquiries',
+  'clients',
+  'blogs',
+  'advanced-seo',
+  'gsc',
+  'analytics',
+  'behaviour',
+  'content-editor',
+  'calculator',
+  'notifications',
+  'db-health',
+  'diagnostics'
+];
+
+export interface AdminRouteInfo {
+  tab: AdminTab;
+  blogId?: string | null;
+  isNewBlog?: boolean;
+}
+
+export function parseAdminRoute(pathname: string, search: string): AdminRouteInfo {
+  const urlParams = new URLSearchParams(search);
+  const tabParam = urlParams.get('tab')?.toLowerCase();
+  const idParam = urlParams.get('id');
+
+  let decodedPath = pathname;
+  try {
+    decodedPath = decodeURIComponent(pathname);
+  } catch {
+    decodedPath = pathname;
+  }
+
+  // Remove duplicate/trailing slashes and trim
+  const cleanPath = decodedPath.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+  const segments = cleanPath.split('/').map(s => s.trim().toLowerCase());
+
+  // Filter out any duplicated 'admin' prefixes (e.g. /admin/admin/blogs -> ['blogs'])
+  const nonAdminSegments = segments.filter(s => s !== 'admin');
+
+  let tab: AdminTab = 'overview';
+  let blogId: string | null = idParam || null;
+  let isNewBlog = false;
+
+  const firstSeg = nonAdminSegments[0];
+  const secondSeg = nonAdminSegments[1];
+
+  if (firstSeg) {
+    if (firstSeg === 'blogs' || firstSeg === 'blog' || firstSeg === 'blogs and cms' || firstSeg === 'blogs & cms') {
+      tab = 'blogs';
+      if (secondSeg === 'new') {
+        isNewBlog = true;
+      } else if (secondSeg) {
+        blogId = nonAdminSegments[1];
+      }
+    } else if (ALL_ADMIN_TABS.includes(firstSeg as AdminTab)) {
+      tab = firstSeg as AdminTab;
+    }
+  }
+
+  // Check query parameter ?tab=...
+  if (tabParam) {
+    if (tabParam === 'blogs' || tabParam === 'blog' || tabParam === 'blogs and cms' || tabParam === 'blogs & cms') {
+      tab = 'blogs';
+      if (urlParams.get('action') === 'new') {
+        isNewBlog = true;
+      }
+    } else if (tabParam === 'seo-ai' || tabParam === 'ai-optimization') {
+      tab = 'blogs';
+    } else if (ALL_ADMIN_TABS.includes(tabParam as AdminTab)) {
+      tab = tabParam as AdminTab;
+    }
+  }
+
+  return { tab, blogId, isNewBlog };
+}
+
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'enquiries' | 'clients' | 'blogs' | 'advanced-seo' | 'gsc' | 'analytics' | 'behaviour' | 'content-editor' | 'calculator' | 'notifications' | 'db-health' | 'diagnostics'>('overview');
+  const initialRoute = typeof window !== 'undefined'
+    ? parseAdminRoute(window.location.pathname, window.location.search)
+    : { tab: 'overview' as AdminTab, blogId: null, isNewBlog: false };
+
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialRoute.tab);
+  const [currentBlogId, setCurrentBlogId] = useState<string | null>(initialRoute.blogId || null);
+  const [isNewBlogRoute, setIsNewBlogRoute] = useState<boolean>(Boolean(initialRoute.isNewBlog));
+
+  const handleTabChange = useCallback((tab: AdminTab) => {
+    setActiveTab(tab);
+    setCurrentBlogId(null);
+    setIsNewBlogRoute(false);
+    const targetUrl = tab === 'overview' ? '/admin' : `/admin/${tab}`;
+    if (typeof window !== 'undefined' && window.location.pathname !== targetUrl) {
+      window.history.pushState(null, '', targetUrl);
+    }
+  }, []);
   const [stats, setStats] = useState<EnquiryStats>({
     total: 0,
     new: 0,
@@ -127,16 +236,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     fetchStats();
     fetchEnquiries();
 
-    // Gracefully handle legacy deep-links to retired AI Studio tabs
+    // Listen to browser Back and Forward navigation
+    const handlePopState = () => {
+      const route = parseAdminRoute(window.location.pathname, window.location.search);
+      setActiveTab(route.tab);
+      setCurrentBlogId(route.blogId || null);
+      setIsNewBlogRoute(Boolean(route.isNewBlog));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    // Normalize URL if entered with duplicate /admin/admin or unencoded spaces
     if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tabParam = urlParams.get('tab');
-      if (tabParam === 'seo-ai' || tabParam === 'ai-optimization') {
-        setActiveTab('blogs');
-        window.history.replaceState({}, '', '/admin');
+      const pathname = window.location.pathname;
+      const cleanPath = pathname.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+      const segments = cleanPath.split('/').map(s => s.trim().toLowerCase());
+      const adminCount = segments.filter(s => s === 'admin').length;
+      if (adminCount > 1 || pathname.includes('%20') || pathname.includes(' ')) {
+        const canonicalUrl = activeTab === 'overview' ? '/admin' : `/admin/${activeTab}`;
+        window.history.replaceState({}, '', canonicalUrl);
       }
     }
-  }, [fetchStats, fetchEnquiries]);
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [fetchStats, fetchEnquiries, activeTab]);
 
   // Automatic periodic polling every 15s to keep leads and stats up to date
   useEffect(() => {
@@ -277,7 +400,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           {/* Navigation Links */}
           <nav className="space-y-1.5">
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => handleTabChange('overview')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'overview'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -289,7 +412,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('enquiries')}
+              onClick={() => handleTabChange('enquiries')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'enquiries'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -308,7 +431,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('clients')}
+              onClick={() => handleTabChange('clients')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'clients'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -325,7 +448,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('blogs')}
+              onClick={() => handleTabChange('blogs')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'blogs'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -339,7 +462,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('advanced-seo')}
+              onClick={() => handleTabChange('advanced-seo')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'advanced-seo'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -356,7 +479,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('gsc')}
+              onClick={() => handleTabChange('gsc')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'gsc'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -373,7 +496,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('analytics')}
+              onClick={() => handleTabChange('analytics')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'analytics'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -390,7 +513,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('behaviour')}
+              onClick={() => handleTabChange('behaviour')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'behaviour'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -407,7 +530,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('content-editor')}
+              onClick={() => handleTabChange('content-editor')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'content-editor'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -424,7 +547,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('calculator')}
+              onClick={() => handleTabChange('calculator')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'calculator'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -441,7 +564,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('notifications')}
+              onClick={() => handleTabChange('notifications')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'notifications'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -455,7 +578,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('db-health')}
+              onClick={() => handleTabChange('db-health')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'db-health'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -472,7 +595,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
-              onClick={() => setActiveTab('diagnostics')}
+              onClick={() => handleTabChange('diagnostics')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'diagnostics'
                   ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
@@ -518,7 +641,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeTab === 'clients' ? (
           <ClientShowcaseManager />
         ) : activeTab === 'blogs' ? (
-          <BlogManager />
+          <BlogManager
+            initialBlogId={currentBlogId}
+            initialIsNew={isNewBlogRoute}
+          />
         ) : activeTab === 'advanced-seo' ? (
           <AdvancedSeoDashboard />
         ) : activeTab === 'gsc' ? (

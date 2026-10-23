@@ -157,12 +157,19 @@ export interface BlogInput {
 }
 
 export interface CitationAnswerBlockData {
-  id: string;
-  question: string;
-  answer: string;
+  id?: string;
+  question?: string;
+  heading_text?: string;
+  answer?: string;
+  concise_answer?: string;
   supporting_details?: string;
+  supporting_points?: string[];
   heading_tag?: 'h2' | 'h3';
+  heading_level?: 'h2' | 'h3';
+  source_reference?: string;
 }
+
+export type CitationAnswerBlockConfig = CitationAnswerBlockData;
 
 export interface InformationGainCriterion {
   id: string;
@@ -199,16 +206,6 @@ export interface InformationGainReport {
   topical_depth?: string;
   disclaimer?: string;
 }
-
-export interface CitationAnswerBlockConfig {
-  id?: string;
-  heading_text: string;
-  heading_level?: 'h2' | 'h3';
-  concise_answer: string;
-  supporting_points?: string[];
-  source_reference?: string;
-}
-export type CitationAnswerBlockData = CitationAnswerBlockConfig;
 
 export interface AiCitationObservation {
   id: number;

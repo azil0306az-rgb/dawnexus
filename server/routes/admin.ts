@@ -15,6 +15,7 @@ import {
   getAllEnquiriesForExport,
   getBlogs,
   getBlogById,
+  getBlogBySlug,
   createBlog,
   updateBlog,
   deleteBlog,
@@ -180,14 +181,21 @@ adminRouter.post('/blogs/publish-due', async (req, res) => {
 adminRouter.get('/blogs/:id', async (req, res) => {
   try {
     await refreshFromPersistentStore();
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id) || id <= 0) {
-      return res.status(400).json({ error: 'Invalid blog ID' });
+    const rawParam = req.params.id ? String(req.params.id).trim() : '';
+    if (!rawParam) {
+      return res.status(400).json({ error: 'Blog identifier is required' });
     }
 
-    const blog = getBlogById(id);
+    const numId = parseInt(rawParam, 10);
+    let blog = null;
+    if (!isNaN(numId) && numId > 0 && String(numId) === rawParam) {
+      blog = getBlogById(numId);
+    }
     if (!blog) {
-      return res.status(404).json({ error: 'Blog not found' });
+      blog = getBlogBySlug(rawParam);
+    }
+    if (!blog) {
+      return res.status(404).json({ error: `Blog not found for identifier "${rawParam}"` });
     }
 
     return res.json(blog);
