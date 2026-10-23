@@ -859,8 +859,8 @@ export const MCP_TOOLS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        slug: { type: 'string', description: 'Article slug' },
-        id: { description: 'Article ID (number or numeric string)', anyOf: [{ type: 'number' }, { type: 'string' }] }
+        id: { type: 'number', description: 'Article ID (integer, e.g. 698)' },
+        slug: { type: 'string', description: 'Article slug (e.g. website-visitors-few-enquiries-conversion-audit)' }
       }
     }
   },
@@ -938,7 +938,7 @@ export const MCP_TOOLS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        id: { description: 'Article ID (number or numeric string)', anyOf: [{ type: 'number' }, { type: 'string' }] },
+        id: { type: 'number', description: 'Article ID (integer, e.g. 698)' },
         slug: { type: 'string', description: 'Article slug' },
         draft: {
           type: 'object',
@@ -1346,8 +1346,10 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
     case 'search_published_blogs':
       return await McpService.searchPublishedBlogs(toolArgs);
 
-    case 'get_blog_post':
-      return await McpService.getBlogPost(toolArgs);
+    case 'get_blog_post': {
+      const argsObj = typeof toolArgs === 'object' && toolArgs !== null ? toolArgs : { id: toolArgs };
+      return await McpService.getBlogPost(argsObj);
+    }
 
     case 'get_approved_business_information':
       return McpService.getApprovedBusinessInformation();
@@ -1774,7 +1776,7 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
         AuditBlogArticleRequest: {
           type: 'object',
           properties: {
-            id: { anyOf: [{ type: 'integer' }, { type: 'string' }], description: 'Article ID' },
+            id: { type: 'integer', description: 'Article ID' },
             slug: { type: 'string', description: 'Article slug' },
             draft: { type: 'object', description: 'Draft payload to evaluate directly without saving' }
           }
@@ -1855,6 +1857,94 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
                 content: { type: 'string' },
                 primary_keyword: { type: 'string' }
               }
+            }
+          }
+        },
+        BlogArticleResponse: {
+          type: 'object',
+          description: 'Full 360-degree blog article record with metadata, SEO scores, and E-E-A-T evidence fields',
+          properties: {
+            id: { type: 'integer', description: 'Unique article ID' },
+            title: { type: 'string', description: 'Article title' },
+            slug: { type: 'string', description: 'URL slug' },
+            status: { type: 'string', enum: ['Draft', 'Scheduled', 'Published'], description: 'Publication status' },
+            scheduled_at: { type: 'string', description: 'Publication schedule timestamp (ISO 8601)' },
+            published_at: { type: 'string', description: 'Published timestamp (ISO 8601)' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' },
+            content: { type: 'string', description: 'Article body in Markdown or HTML' },
+            excerpt: { type: 'string', description: 'Summary excerpt' },
+            category: { type: 'string', description: 'CMS category' },
+            author: { type: 'string', description: 'Author name' },
+            author_role: { type: 'string', description: 'Author professional role' },
+            author_bio: { type: 'string', description: 'Author biography' },
+            author_credentials: { type: 'string', description: 'Author credentials and certifications' },
+            reviewer_name: { type: 'string', description: 'Expert technical/editorial reviewer name' },
+            editorial_notes: { type: 'string', description: 'Internal editorial notes' },
+            primary_keyword: { type: 'string', description: 'Target primary keyword' },
+            secondary_keywords: { type: 'array', items: { type: 'string' }, description: 'Secondary keywords' },
+            target_location: { type: 'string', description: 'Target geographic location' },
+            search_intent: { type: 'string', description: 'Search intent' },
+            target_audience: { type: 'string', description: 'Target audience persona' },
+            target_questions: { type: 'array', items: { type: 'string' }, description: 'Target user questions' },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Topic tags' },
+            seo_title: { type: 'string', description: 'SEO page title tag' },
+            meta_description: { type: 'string', description: 'SERP meta description' },
+            canonical_url: { type: 'string', description: 'Canonical URL' },
+            featured_image: { type: 'string', description: 'Featured image URL' },
+            image_alt: { type: 'string', description: 'Featured image alt text' },
+            caption: { type: 'string', description: 'Featured image caption' },
+            internal_links: { type: 'array', items: { type: 'string' }, description: 'Extracted internal links' },
+            external_links: { type: 'array', items: { type: 'string' }, description: 'Extracted external links' },
+            firsthand_observations: { type: 'string', description: 'Direct practitioner observations' },
+            project_examples: { description: 'Project examples', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+            case_studies: { description: 'Case study evidence with metrics', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+            original_research_data: { description: 'Original research data or benchmark statistics', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+            implementation_process: { type: 'string', description: 'Detailed implementation methodology' },
+            limitations_lessons: { type: 'string', description: 'Trade-offs, limitations, and lessons learned' },
+            external_sources: { type: 'array', items: { type: 'object' }, description: 'Authoritative external citations' },
+            citation_answer_blocks: {
+              type: 'array',
+              description: 'Direct AI-discovery citation and answer blocks',
+              items: {
+                type: 'object',
+                properties: {
+                  heading_text: { type: 'string' },
+                  concise_answer: { type: 'string' },
+                  key_takeaways: { type: 'array', items: { type: 'string' } },
+                  heading_level: { type: 'string' }
+                }
+              }
+            },
+            review_cycle_days: { type: 'integer', description: 'Review cycle period in days' },
+            last_reviewed_at: { type: 'string', description: 'Timestamp of last audit/review' },
+            content_revision: { type: 'string', description: 'Content revision identifier' },
+            revision: { type: 'string', description: 'Current article revision' },
+            technical_seo_score: { type: 'number', description: 'Deterministic 100-point Technical SEO score' },
+            information_gain_score: { type: 'number', description: 'Information Gain & E-E-A-T depth score (0-100)' },
+            admin_notes: { type: 'string', description: 'Administrative notes' },
+            url: { type: 'string', description: 'Full canonical live URL' }
+          }
+        },
+        BlogListResponse: {
+          type: 'object',
+          description: 'Paginated list of blog articles with status summary',
+          properties: {
+            countsByStatus: {
+              type: 'object',
+              properties: {
+                all: { type: 'integer' },
+                published: { type: 'integer' },
+                draft: { type: 'integer' },
+                scheduled: { type: 'integer' }
+              }
+            },
+            total: { type: 'integer' },
+            page: { type: 'integer' },
+            totalPages: { type: 'integer' },
+            items: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/BlogArticleResponse' }
             }
           }
         }
@@ -1954,7 +2044,19 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           summary: 'Get draft or article details by ID',
           description: 'Returns the full 360-degree blog record including all metadata, author info, and evidence fields.',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
-          responses: { '200': { description: 'Blog details' }, '404': { description: 'Blog not found' } }
+          responses: {
+            '200': {
+              description: 'Blog details',
+              content: {
+                'application/json': {
+                  schema: {
+                    $ref: '#/components/schemas/BlogArticleResponse'
+                  }
+                }
+              }
+            },
+            '404': { description: 'Blog not found' }
+          }
         },
         patch: {
           operationId: 'update_blog_draft',
@@ -1977,15 +2079,28 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
       '/tools/blogs': {
         get: {
           operationId: 'list_blog_posts',
-          summary: 'List blog articles with status and category filtering',
-          description: 'Returns articles, pagination metadata, and counts by status (all, published, draft, scheduled).',
+          summary: 'List blog articles with status and category filtering or retrieve single article by id/slug',
+          description: 'Returns articles, pagination metadata, and counts by status (all, published, draft, scheduled). If id or slug query parameter is provided, returns the complete 360-degree article record.',
           parameters: [
+            { name: 'id', in: 'query', schema: { type: 'integer' }, description: 'Optional article ID to retrieve single complete article' },
+            { name: 'slug', in: 'query', schema: { type: 'string' }, description: 'Optional article slug to retrieve single complete article' },
             { name: 'status', in: 'query', schema: { type: 'string', enum: ['all', 'published', 'draft', 'scheduled'] } },
             { name: 'category', in: 'query', schema: { type: 'string' } },
             { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 } },
             { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } }
           ],
-          responses: { '200': { description: 'List of blog articles and status counts' } }
+          responses: {
+            '200': {
+              description: 'List of blog articles and status counts, or single article if id/slug query passed',
+              content: {
+                'application/json': {
+                  schema: {
+                    $ref: '#/components/schemas/BlogListResponse'
+                  }
+                }
+              }
+            }
+          }
         }
       },
       '/tools/blogs/{id}': {
@@ -1993,8 +2108,20 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           operationId: 'get_blog_post',
           summary: 'Get 360-degree blog article details',
           description: 'Returns full article content, SEO metadata, 15+ evidence fields, citation answer blocks, extracted links, and audit scores.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-          responses: { '200': { description: 'Complete article record' }, '404': { description: 'Article not found' } }
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Article ID (e.g. 698) or slug' }],
+          responses: {
+            '200': {
+              description: 'Complete article record',
+              content: {
+                'application/json': {
+                  schema: {
+                    $ref: '#/components/schemas/BlogArticleResponse'
+                  }
+                }
+              }
+            },
+            '404': { description: 'Article not found' }
+          }
         },
         patch: {
           operationId: 'update_blog_article',
@@ -2564,10 +2691,20 @@ mcpRouter.patch('/tools/drafts/:id', async (req: Request, res: Response) => {
 
 mcpRouter.get('/tools/blogs', async (req: Request, res: Response) => {
   try {
+    if (req.query.id || req.query.slug) {
+      const rawId = req.query.id !== undefined ? String(req.query.id).trim() : '';
+      const rawSlug = req.query.slug !== undefined ? String(req.query.slug).trim() : '';
+      const numId = parseInt(rawId, 10);
+      const result = await McpService.getBlogPost(
+        !isNaN(numId) && String(numId) === rawId ? { id: numId } : { slug: rawSlug || rawId }
+      );
+      return res.json(result);
+    }
     const result = await McpService.listBlogPosts(req.query);
     res.json(result);
   } catch (err: any) {
-    res.status(400).json({ error: err?.message || 'Failed to list blogs' });
+    const isNotFound = err?.message?.includes('not found');
+    res.status(isNotFound ? 404 : 400).json({ error: err?.message || 'Failed to retrieve blogs' });
   }
 });
 

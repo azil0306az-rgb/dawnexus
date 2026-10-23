@@ -2354,10 +2354,16 @@ export class McpService {
    * Tool: get_blog_post
    * Complete 360-degree article retrieval including all metadata, links, E-E-A-T evidence, citations, and SEO scores.
    */
-  static async getBlogPost(args: { slug?: string; id?: number | string }) {
+  static async getBlogPost(args: { slug?: string; id?: number | string; blog_id?: number | string; article_id?: number | string }) {
     await refreshFromPersistentStore();
-    const rawId = args?.id !== undefined ? String(args.id).trim() : '';
-    const rawSlug = args?.slug !== undefined ? String(args.slug).trim() : '';
+    const rawId = args?.id !== undefined && args.id !== null
+      ? String(args.id).trim()
+      : (args?.blog_id !== undefined && args.blog_id !== null
+          ? String(args.blog_id).trim()
+          : (args?.article_id !== undefined && args.article_id !== null
+              ? String(args.article_id).trim()
+              : ''));
+    const rawSlug = args?.slug !== undefined && args.slug !== null ? String(args.slug).trim() : '';
 
     if (!rawId && !rawSlug) {
       throw new Error('Please provide either an article ID or slug to retrieve.');
