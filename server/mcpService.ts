@@ -579,17 +579,17 @@ export class McpService {
   }
 
   /**
-   * Tool: update_blog_article
-   * Allows authorized updates across Draft, Scheduled, and Published blogs with status-specific safeguards.
+   * Tool 6: update_blog_draft
+   * Updates an existing blog draft. Prohibits editing published, scheduled, or archived articles through MCP.
    */
-  static async updateBlogArticle(
-    input: {
-      id: number;
-      expected_revision?: string;
+  static async updateBlogDraft(
+    id: number,
+    updates: {
       title?: string;
-      content?: string;
-      excerpt?: string;
       category?: string;
+      content?: string;
+      slug?: string;
+      excerpt?: string;
       primary_keyword?: string;
       secondary_keywords?: string[] | string;
       target_location?: string;
@@ -603,41 +603,20 @@ export class McpService {
       featured_image?: string;
       image_alt?: string;
       status?: string;
-      firsthand_observations?: string;
-      project_examples?: string;
-      case_studies?: string;
-      original_research_data?: string;
-      implementation_process?: string;
-      limitations_lessons?: string;
-      external_sources?: any;
-      citation_answer_blocks?: any;
-      author?: string;
-      author_role?: string;
-      author_bio?: string;
-      author_credentials?: string;
-      reviewer_name?: string;
-      editorial_notes?: string;
-      review_cycle_days?: number;
-      last_reviewed_at?: string;
+      [key: string]: any;
     },
     callerIp: string = 'mcp-client'
   ): Promise<{
     success: boolean;
     blog: BlogRecord;
-    technicalSeo: SeoAuditReport;
-    evidenceReport: any;
+    seoReport: SeoAuditReport;
     message: string;
   }> {
     await refreshFromPersistentStore();
-    const id = Number(input.id);
-    if (!id) {
-      throw new Error('Valid numeric article ID is required.');
-    }
-
     const existing = getBlogById(id);
     if (!existing) {
       recordMcpAudit({
-        tool: 'update_blog_article',
+        tool: 'update_blog_draft',
         action: 'write',
         status: 'rejected',
         callerIp,
@@ -647,24 +626,31 @@ export class McpService {
       throw new Error(`Article with ID #${id} not found.`);
     }
 
-    // Optimistic concurrency protection
-    if (input.expected_revision && existing.content_revision && input.expected_revision !== existing.content_revision) {
+    // Strict constraint: Only Draft records may be edited through MCP
+    if (existing.status !== 'Draft') {
       recordMcpAudit({
-        tool: 'update_blog_article',
+        tool: 'update_blog_draft',
         action: 'write',
         status: 'rejected',
         callerIp,
         targetId: id,
-        details: `Revision conflict on #${id}: Expected '${input.expected_revision}', found '${existing.content_revision}'.`
+        details: `Rejected attempt to modify article #${id} with status '${existing.status}'. Only 'Draft' articles can be modified via MCP.`
       });
       throw new Error(
-        `Revision conflict: Expected revision '${input.expected_revision}' does not match current database revision '${existing.content_revision}'. Please re-fetch the latest article before modifying.`
+        `Action prohibited: Article #${id} has status '${existing.status}'. The MCP connector is strictly prohibited from modifying published, scheduled, or archived articles. Edits must be made directly in the Dawnexus Admin panel.`
       );
     }
 
-    // Category validation if updating category
-    if (input.category) {
-      const cleanCat = input.category.trim();
+    // Prohibit status alteration to Published or Scheduled
+    if (updates.status && updates.status !== 'Draft') {
+      throw new Error(
+        `Action prohibited: Cannot change article status to '${updates.status}' via MCP. Articles must be approved and scheduled by an admin in the Admin panel.`
+      );
+    }
+
+    // Validate category if updating category
+    if (updates.category) {
+      const cleanCat = updates.category.trim();
       if (!(VALID_CATEGORIES as readonly string[]).includes(cleanCat)) {
         throw new Error(
           `Validation error: Category '${cleanCat}' is invalid. Must be one of: ${VALID_CATEGORIES.join(', ')}.`
@@ -672,48 +658,33 @@ export class McpService {
       }
     }
 
-    // Status-specific safeguards
-    const updatesToApply: any = { ...input };
-    delete updatesToApply.id;
-    delete updatesToApply.expected_revision;
+    const updated = updateBlog(id, {
+      ...updates,
+      status: 'Draft',
+      admin_notes: `${existing.admin_notes || ''}\n[MCP AI SEO Studio] Updated via ChatGPT connector on ${new Date().toISOString()}`.trim()
+    });
 
-    if (existing.status === 'Scheduled') {
-      // SAFEGUARD FOR SCHEDULED ARTICLES:
-      // Preserve scheduled_at timestamp, original slug, and Scheduled status!
-      updatesToApply.status = 'Scheduled';
-      updatesToApply.scheduled_at = existing.scheduled_at;
-      updatesToApply.slug = existing.slug;
-      updatesToApply.canonical_url = existing.canonical_url || `https://www.dawnexus.in/blog/${existing.slug}`;
-    } else if (existing.status === 'Published') {
-      // SAFEGUARD FOR PUBLISHED ARTICLES:
-      // Preserve live URL, canonical URL, Published status, and published_at!
-      updatesToApply.status = 'Published';
-      updatesToApply.published_at = existing.published_at;
-      updatesToApply.slug = existing.slug;
-      updatesToApply.canonical_url = existing.canonical_url || `https://www.dawnexus.in/blog/${existing.slug}`;
-    } else if (existing.status === 'Draft') {
-      if (updatesToApply.status && updatesToApply.status !== 'Draft') {
-        throw new Error(
-          `Action prohibited: Direct status promotion to '${updatesToApply.status}' via MCP update is disallowed. Use schedule_blog_draft for scheduling.`
-        );
-      }
-      updatesToApply.status = 'Draft';
-    }
-
-    // Append revision audit log to admin_notes
-    const prevRevision = existing.content_revision || 'init';
-    const auditStamp = `[MCP AI Improvement] Updated by ${callerIp} on ${new Date().toISOString()}. Prev revision: ${prevRevision}`;
-    updatesToApply.admin_notes = existing.admin_notes ? `${existing.admin_notes}\n${auditStamp}` : auditStamp;
-
-    // Apply update to SQLite
-    const updated = updateBlog(id, updatesToApply);
     if (!updated) {
-      throw new Error(`Failed to update article #${id}.`);
+      throw new Error(`Failed to update draft #${id}.`);
     }
 
-    // Recalculate Technical SEO score
+    // Persist synchronously to Supabase
+    try {
+      await persistBlog(updated);
+    } catch (persistErr: any) {
+      recordMcpAudit({
+        tool: 'update_blog_draft',
+        action: 'write',
+        status: 'failed',
+        callerIp,
+        targetId: id,
+        details: `Supabase persistence failed on update: ${persistErr?.message}`
+      });
+      throw new Error(`Supabase persistence failed on update: ${persistErr?.message}`);
+    }
+
     const { items: allBlogs } = getBlogs({ limit: 100 });
-    const publishedSlugs = allBlogs.filter(b => b.status === 'Published' && b.id !== id).map(b => b.slug);
+    const publishedSlugs = allBlogs.filter(b => b.status === 'Published').map(b => b.slug);
     const seoReport = normalizeSeoReport(
       calculateSeoScore(
         {
@@ -738,73 +709,31 @@ export class McpService {
       )
     );
 
-    // Recalculate Information Gain & E-E-A-T
-    const evidenceReport = assessInformationGain(updated);
-
-    // Persist new SEO report and revision hash
-    const finalUpdated = updateBlog(id, {
+    const withSeo = updateBlog(id, {
       seo_report: JSON.stringify(seoReport),
       content_revision: seoReport.contentRevision
     }) || updated;
 
-    // Persist to Supabase
     try {
-      await persistBlog(finalUpdated);
-    } catch (persistErr: any) {
-      recordMcpAudit({
-        tool: 'update_blog_article',
-        action: 'write',
-        status: 'failed',
-        callerIp,
-        targetId: id,
-        details: `Supabase persistence failed on update: ${persistErr?.message}`
-      });
-      throw new Error(`Supabase persistence failed on update: ${persistErr?.message}`);
-    }
-
-    // Read-after-write verification
-    const verified = getBlogById(id);
-    if (!verified) {
-      throw new Error(`Read-after-write verification failed: Article #${id} could not be retrieved after write.`);
+      await persistBlog(withSeo);
+    } catch {
+      // Non-fatal
     }
 
     recordMcpAudit({
-      tool: 'update_blog_article',
+      tool: 'update_blog_draft',
       action: 'write',
       status: 'success',
       callerIp,
       targetId: id,
-      details: `Article #${id} (${verified.status}) successfully updated and verified. Technical SEO: ${seoReport.totalScore}/100, Evidence Quality: ${evidenceReport.overallScore}/100.`
+      details: `Updated draft #${id}. New SEO score: ${seoReport.totalScore}/100.`
     });
 
     return {
       success: true,
-      blog: verified,
-      technicalSeo: seoReport,
-      evidenceReport,
-      message: `Article #${id} (${verified.status}) updated and verified successfully.`
-    };
-  }
-
-  /**
-   * Tool 6: update_blog_draft (Alias for update_blog_article)
-   */
-  static async updateBlogDraft(
-    id: number,
-    updates: any,
-    callerIp: string = 'mcp-client'
-  ): Promise<{
-    success: boolean;
-    blog: BlogRecord;
-    seoReport: SeoAuditReport;
-    message: string;
-  }> {
-    const res = await McpService.updateBlogArticle({ id, ...updates }, callerIp);
-    return {
-      success: res.success,
-      blog: res.blog,
-      seoReport: res.technicalSeo,
-      message: res.message
+      blog: withSeo,
+      seoReport,
+      message: `Draft #${id} updated successfully.`
     };
   }
 
@@ -2581,343 +2510,6 @@ export class McpService {
         content_revision: b.content_revision,
         url: `https://www.dawnexus.in/blog/${b.slug}`
       }))
-    };
-  }
-
-  /**
-   * Tool: audit_blog_article
-   * Executes dual Technical SEO (100-pt rubric) and Information Gain / E-E-A-T quality audit.
-   */
-  static async auditBlogArticle(args: { id?: number | string; slug?: string; draft?: BlogAuditInput }) {
-    await refreshFromPersistentStore();
-    let blog: any = null;
-    if (args.draft) {
-      blog = args.draft;
-    } else if (args.id) {
-      const numId = parseInt(String(args.id).trim(), 10);
-      blog = getBlogById(numId);
-    } else if (args.slug) {
-      blog = getBlogBySlug(args.slug.trim());
-    }
-
-    if (!blog) {
-      throw new Error(`Article not found for audit matching ${args.id ? 'ID #' + args.id : 'slug "' + args.slug + '"'}`);
-    }
-
-    const { items: allBlogs } = getBlogs({ limit: 100 });
-    const publishedSlugs = allBlogs.filter(b => b.status === 'Published' && b.id !== blog.id).map(b => b.slug);
-
-    // 1. Technical SEO Audit (100-point rubric)
-    const technicalSeo = normalizeSeoReport(
-      calculateSeoScore(
-        {
-          title: blog.title,
-          slug: blog.slug,
-          content: blog.content,
-          excerpt: blog.excerpt,
-          category: blog.category,
-          primary_keyword: blog.primary_keyword,
-          secondary_keywords: blog.secondary_keywords,
-          search_intent: blog.search_intent,
-          target_audience: blog.target_audience,
-          seo_title: blog.seo_title,
-          meta_description: blog.meta_description || blog.excerpt,
-          canonical_url: blog.canonical_url,
-          featured_image: blog.featured_image,
-          image_alt: blog.image_alt
-        },
-        publishedSlugs,
-        90,
-        blog.id
-      )
-    );
-
-    // 2. Information Gain & E-E-A-T Quality Audit
-    const infoGain = assessInformationGain(blog);
-
-    // 3. Evidence-aware completeness breakdown
-    const hasFirsthand = Boolean((blog.firsthand_observations || '').trim().length >= 80);
-    const hasCaseStudy = Boolean((blog.case_studies || '').trim().length >= 80 || (blog.original_research_data || '').trim().length >= 80);
-    const hasImplementation = Boolean((blog.implementation_process || '').trim().length >= 80);
-    let parsedExtSources: any[] = [];
-    try {
-      parsedExtSources = typeof blog.external_sources === 'string' ? JSON.parse(blog.external_sources || '[]') : (blog.external_sources || []);
-    } catch {}
-    let parsedCitationBlocks: any[] = [];
-    try {
-      parsedCitationBlocks = typeof blog.citation_answer_blocks === 'string' ? JSON.parse(blog.citation_answer_blocks || '[]') : (blog.citation_answer_blocks || []);
-    } catch {}
-
-    const evidenceSummary = {
-      firsthand_evidence: hasFirsthand ? 'complete_verified' : (blog.firsthand_observations?.trim() ? 'supplied_unverified' : 'missing'),
-      case_study_data: hasCaseStudy ? 'complete_verified' : (blog.case_studies?.trim() ? 'supplied_unverified' : 'missing'),
-      implementation_detail: hasImplementation ? 'complete_verified' : (blog.implementation_process?.trim() ? 'supplied_unverified' : 'missing'),
-      primary_citations: parsedExtSources.length > 0 ? 'complete_verified' : 'missing',
-      limitations_uncertainty: blog.limitations_lessons?.trim() ? 'complete_verified' : 'missing',
-      citation_answer_blocks: parsedCitationBlocks.length > 0 ? 'complete_verified' : 'missing',
-      author_credentials: (blog.author_role?.trim() && blog.author_credentials?.trim()) ? 'complete_verified' : (blog.author_role?.trim() ? 'supplied_unverified' : 'missing')
-    };
-
-    return {
-      id: blog.id,
-      title: blog.title,
-      slug: blog.slug,
-      status: blog.status,
-      content_revision: technicalSeo.contentRevision,
-      technical_seo: {
-        score: technicalSeo.totalScore,
-        max_score: technicalSeo.maxScore,
-        percentage: technicalSeo.percentage,
-        meets_threshold: technicalSeo.meetsThreshold,
-        passed_checks: technicalSeo.passedChecks,
-        failed_checks: technicalSeo.failedChecks,
-        warnings: technicalSeo.warnings,
-        required_fixes: technicalSeo.requiredFixes
-      },
-      technicalSeo: {
-        score: technicalSeo.totalScore,
-        maxScore: technicalSeo.maxScore,
-        percentage: technicalSeo.percentage,
-        meetsThreshold: technicalSeo.meetsThreshold,
-        passedChecks: technicalSeo.passedChecks,
-        failedChecks: technicalSeo.failedChecks,
-        warnings: technicalSeo.warnings,
-        requiredFixes: technicalSeo.requiredFixes
-      },
-      evidence_audit: {
-        overall_score: infoGain.overallScore,
-        ai_readiness_score: (infoGain as any).ai_readiness_score || 0,
-        criteria: infoGain.criteria,
-        strengths: infoGain.strengths,
-        missing_evidence: infoGain.missingEvidence,
-        actionable_fixes: infoGain.actionableFixes
-      },
-      informationGain: infoGain,
-      summary: {
-        strengths: infoGain.strengths,
-        criticalGaps: infoGain.missingEvidence,
-        technicalFixes: technicalSeo.requiredFixes
-      },
-      evidence_completeness_summary: evidenceSummary,
-      recommendations: [
-        ...technicalSeo.requiredFixes.map(f => `[Technical SEO Fix]: ${f}`),
-        ...infoGain.actionableFixes.map(f => `[E-E-A-T & Evidence Fix]: ${f}`)
-      ]
-    };
-  }
-
-  /**
-   * Tool: audit_information_gain
-   * Executes the exact Information Gain & AI readiness audit used by the admin editor.
-   */
-  static async auditInformationGain(args: { id?: number | string; slug?: string; draft?: any }) {
-    await refreshFromPersistentStore();
-    let blog: any = null;
-    if (args.draft) {
-      blog = args.draft;
-    } else if (args.id) {
-      const numId = parseInt(String(args.id).trim(), 10);
-      blog = getBlogById(numId);
-    } else if (args.slug) {
-      blog = getBlogBySlug(args.slug.trim());
-    }
-    if (!blog) {
-      throw new Error(`Article not found for Information Gain audit matching ${args.id ? 'ID #' + args.id : 'slug "' + args.slug + '"'}`);
-    }
-    const assessment = assessInformationGain(blog);
-    return {
-      id: blog.id,
-      title: blog.title,
-      slug: blog.slug,
-      status: blog.status,
-      overall_score: assessment.overallScore,
-      ai_readiness_score: (assessment as any).ai_readiness_score || 0,
-      answer_blocks_count: (assessment as any).answer_blocks_count || 0,
-      has_original_data: (assessment as any).has_original_data || false,
-      criteria: assessment.criteria,
-      strengths: assessment.strengths,
-      missing_evidence: assessment.missingEvidence,
-      actionable_fixes: assessment.actionableFixes,
-      recommendations: assessment.actionableFixes,
-      disclaimer: assessment.disclaimer
-    };
-  }
-
-  /**
-   * Tool: bulk_audit_blogs
-   * Executes dual audits in controlled batches with pagination.
-   */
-  static async bulkAuditBlogs(args: {
-    status?: string;
-    category?: string;
-    ids?: number[];
-    page?: number;
-    limit?: number;
-  }) {
-    await refreshFromPersistentStore();
-    const { items: allBlogs } = getBlogs({ limit: 500 });
-    let filtered = allBlogs;
-
-    if (args.status && args.status.toLowerCase() !== 'all') {
-      filtered = filtered.filter(b => b.status.toLowerCase() === args.status!.toLowerCase());
-    }
-    if (args.category) {
-      filtered = filtered.filter(b => b.category.toLowerCase() === args.category!.toLowerCase());
-    }
-    if (Array.isArray(args.ids) && args.ids.length > 0) {
-      filtered = filtered.filter(b => args.ids!.includes(b.id));
-    }
-
-    const page = Math.max(1, args.page || 1);
-    const limit = Math.min(50, Math.max(1, args.limit || 10));
-    const offset = (page - 1) * limit;
-    const pageItems = filtered.slice(offset, offset + limit);
-
-    const results = [];
-    for (const blog of pageItems) {
-      try {
-        const audit = await McpService.auditBlogArticle({ id: blog.id });
-        results.push({
-          id: blog.id,
-          title: blog.title,
-          slug: blog.slug,
-          status: blog.status,
-          technical_seo_score: audit.technical_seo.score,
-          evidence_score: audit.evidence_audit.overall_score,
-          content_revision: audit.content_revision,
-          evidence_summary: audit.evidence_completeness_summary,
-          top_recommendations: audit.recommendations.slice(0, 3)
-        });
-      } catch (err: any) {
-        results.push({
-          id: blog.id,
-          title: blog.title,
-          status: blog.status,
-          error: err?.message || 'Audit failed'
-        });
-      }
-    }
-
-    return {
-      total: filtered.length,
-      totalAudited: results.length,
-      page,
-      limit,
-      totalPages: Math.ceil(filtered.length / limit),
-      summary: {
-        total: filtered.length,
-        audited: results.length,
-        passed: results.filter(r => !r.error).length
-      },
-      results
-    };
-  }
-
-  /**
-   * Tool: bulk_improve_blogs
-   * Processes blog improvements with dry-run support, optimistic concurrency, and validation.
-   */
-  static async bulkImproveBlogs(
-    args: {
-      improvements: Array<{
-        id: number;
-        expected_revision?: string;
-        updates: any;
-      }>;
-      dry_run?: boolean;
-    },
-    callerIp: string = 'mcp-client'
-  ) {
-    const isDryRun = args.dry_run !== false; // Default to true for safety
-    const results = [];
-
-    for (const item of args.improvements || []) {
-      const blogId = Number(item.id);
-      if (!blogId) {
-        results.push({ id: item.id, status: 'error', error: 'Invalid article ID' });
-        continue;
-      }
-
-      const existing = getBlogById(blogId);
-      if (!existing) {
-        results.push({ id: blogId, status: 'error', error: `Article #${blogId} not found` });
-        continue;
-      }
-
-      // Concurrency check
-      if (item.expected_revision && existing.content_revision && item.expected_revision !== existing.content_revision) {
-        results.push({
-          id: blogId,
-          status: 'conflict',
-          error: `Content revision conflict: expected '${item.expected_revision}', found '${existing.content_revision}'`
-        });
-        continue;
-      }
-
-      if (isDryRun) {
-        const simulated = { ...existing, ...item.updates };
-        if (existing.status === 'Scheduled') {
-          simulated.status = 'Scheduled';
-          simulated.scheduled_at = existing.scheduled_at;
-          simulated.slug = existing.slug;
-        } else if (existing.status === 'Published') {
-          simulated.status = 'Published';
-          simulated.published_at = existing.published_at;
-          simulated.slug = existing.slug;
-        }
-
-        const simulatedAudit = await McpService.auditBlogArticle({ draft: simulated as any });
-        results.push({
-          id: blogId,
-          title: existing.title,
-          status: existing.status,
-          mode: 'dry_run (not saved)',
-          applied: false,
-          current_seo_score: (existing.seo_report ? JSON.parse(existing.seo_report)?.totalScore : null),
-          projected_seo_score: simulatedAudit.technical_seo.score,
-          projected_evidence_score: simulatedAudit.evidence_audit.overall_score,
-          evidence_summary: simulatedAudit.evidence_completeness_summary,
-          validation: 'passed',
-          fields_to_update: Object.keys(item.updates || {})
-        });
-      } else {
-        try {
-          const outcome = await McpService.updateBlogArticle(
-            {
-              id: blogId,
-              expected_revision: item.expected_revision,
-              ...item.updates
-            },
-            callerIp
-          );
-
-          results.push({
-            id: blogId,
-            title: outcome.blog.title,
-            status: outcome.blog.status,
-            mode: 'saved_and_verified',
-            technical_seo_score: outcome.technicalSeo.totalScore,
-            evidence_score: outcome.evidenceReport.overallScore,
-            content_revision: outcome.blog.content_revision,
-            scheduled_at: outcome.blog.scheduled_at,
-            published_at: outcome.blog.published_at,
-            message: outcome.message
-          });
-        } catch (err: any) {
-          results.push({
-            id: blogId,
-            status: 'failed',
-            error: err?.message || 'Update failed'
-          });
-        }
-      }
-    }
-
-    return {
-      dry_run: isDryRun,
-      processed: results.length,
-      improvementsCount: results.length,
-      results
     };
   }
 
