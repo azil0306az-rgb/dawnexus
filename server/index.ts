@@ -265,7 +265,7 @@ const getIndexHtml = (): string | null => {
 };
 
 // Dynamic SSR meta & canonical injection for frontend routes and crawlers
-export const handlePageHtmlRequest = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+export const handlePageHtmlRequest = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (
     req.path.startsWith('/api') ||
     req.path === '/mcp' ||
@@ -274,6 +274,11 @@ export const handlePageHtmlRequest = (req: express.Request, res: express.Respons
     req.path.startsWith('/oauth')
   ) {
     return next();
+  }
+
+  // Ensure persistent store is hydrated from Supabase for blog post routes
+  if (req.path.startsWith('/blog/')) {
+    await refreshFromPersistentStore().catch(() => {});
   }
 
   const rawHtml = getIndexHtml();
