@@ -79,7 +79,15 @@ export function mcpAuthMiddleware(req: Request, res: Response, next: NextFunctio
   }
 
   const expectedKey = getExpectedMcpKey();
-  const validKeys = Array.from(new Set([expectedKey, DOCUMENTED_MCP_KEY]));
+  const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  const hasCustomKey = Boolean(
+    process.env.MCP_API_KEY &&
+    process.env.MCP_API_KEY.trim().length >= 8 &&
+    process.env.MCP_API_KEY.trim() !== DOCUMENTED_MCP_KEY
+  );
+  const validKeys = (isProd && hasCustomKey)
+    ? [expectedKey]
+    : Array.from(new Set([expectedKey, DOCUMENTED_MCP_KEY]));
 
   if (!providedToken) {
     recordMcpAudit({

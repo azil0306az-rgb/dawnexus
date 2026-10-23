@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import {
@@ -35,8 +36,14 @@ const analyticsLimiter = rateLimit({
 // CRON / AUTOMATED PUBLISHING ENDPOINT
 // ==========================================
 function isAuthorizedCron(req: any): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  return Boolean(cronSecret && req.headers.authorization === `Bearer ${cronSecret}`);
+  const cronSecret = (process.env.CRON_SECRET || '').trim();
+  if (!cronSecret) return false;
+  const authHeader = (req.headers.authorization || '').trim();
+  const expected = `Bearer ${cronSecret}`;
+  const bufAuth = Buffer.from(authHeader);
+  const bufExp = Buffer.from(expected);
+  if (bufAuth.length !== bufExp.length) return false;
+  return crypto.timingSafeEqual(bufAuth, bufExp);
 }
 
 const handleCronPublish = async (req: any, res: any) => {

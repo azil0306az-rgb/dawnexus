@@ -1092,22 +1092,23 @@ export class AnalyticsService {
     purgedSessions: number;
   } {
     const db = getDb();
-    const cutoff = `-${retentionDays} days`;
+    const safeDays = Math.max(1, Math.min(3650, Math.floor(Number(retentionDays) || 90)));
+    const cutoff = `-${safeDays} days`;
 
     // 1. Purge old replay chunks
     const chunksRes = db.prepare(`
-      DELETE FROM analytics_replay_chunks WHERE created_at < datetime('now', '${cutoff}')
-    `).run();
+      DELETE FROM analytics_replay_chunks WHERE created_at < datetime('now', ?)
+    `).run(cutoff);
 
     // 2. Purge old events
     const eventsRes = db.prepare(`
-      DELETE FROM analytics_events WHERE timestamp < datetime('now', '${cutoff}')
-    `).run();
+      DELETE FROM analytics_events WHERE timestamp < datetime('now', ?)
+    `).run(cutoff);
 
     // 3. Purge inactive sessions older than retention period that did not convert
     const sessionsRes = db.prepare(`
-      DELETE FROM analytics_sessions WHERE started_at < datetime('now', '${cutoff}') AND has_converted = 0
-    `).run();
+      DELETE FROM analytics_sessions WHERE started_at < datetime('now', ?) AND has_converted = 0
+    `).run(cutoff);
 
     return {
       purgedEvents: Number(eventsRes.changes),

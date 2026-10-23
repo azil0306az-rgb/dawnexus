@@ -68,19 +68,63 @@ app.use((req, res, next) => {
 app.use(
   helmet({
     contentSecurityPolicy: false, // Vite inline script compatibility
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    frameguard: { action: 'sameorigin' },
+    noSniff: true,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }
   })
 );
 
-// CORS configuration (allow credentials for session cookie)
+// Explicit permissions policy header
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
+// Trusted CORS origins (enforces origin whitelist for credentialed browser fetches)
+const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
+  /^https:\/\/(www\.)?dawnexus\.in$/,
+  /^https:\/\/dawnexus(-[a-z0-9-]+)?\.vercel\.app$/,
+  /^http:\/\/localhost(:[0-9]+)?$/,
+  /^http:\/\/127\.0.0\.1(:[0-9]+)?$/
+];
+
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true; // Server-to-server, curl, non-browser clients
+  try {
+    const url = new URL(origin);
+    const host = `${url.protocol}//${url.host}`;
+    return ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(host));
+  } catch {
+    return false;
+  }
+}
+
+// CORS configuration (allow credentials for session cookie only for trusted origins)
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow localhost dev origins
-      callback(null, true);
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'authorization', 'x-mcp-api-key', 'x-api-key']
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'authorization',
+      'x-mcp-api-key',
+      'x-api-key',
+      'idempotency-key',
+      'x-idempotency-key'
+    ]
   })
 );
 
@@ -343,6 +387,9 @@ app.use('/api', (req, res) => {
 
 // Global error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400) {
+    return res.status(400).json({ error: 'Invalid JSON payload in request body.' });
+  }
   console.error('[Unhandled Server Error]:', err);
   res.status(500).json({
     error: 'Internal server error occurred.'

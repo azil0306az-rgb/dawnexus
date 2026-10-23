@@ -76,6 +76,41 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
+function validateSafeImage(buffer: Buffer): { mimeType: string; extension: string } {
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return { mimeType: 'image/png', extension: 'png' };
+  }
+  if (
+    buffer.length >= 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
+  ) {
+    return { mimeType: 'image/jpeg', extension: 'jpg' };
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return { mimeType: 'image/webp', extension: 'webp' };
+  }
+  if (buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === 'GIF8') {
+    return { mimeType: 'image/gif', extension: 'gif' };
+  }
+  throw new Error('Unsupported or corrupted image format. Only PNG, JPEG, WebP, and GIF images are permitted.');
+}
+
 export const adminRouter = Router();
 
 // Authentication Endpoints
@@ -1034,7 +1069,6 @@ adminRouter.post('/blogs/upload-image', async (req, res) => {
       return res.status(400).json({ error: 'Invalid image format.' });
     }
 
-    const mimeType = matches[1];
     const base64Data = matches[2];
     const buffer = Buffer.from(base64Data, 'base64');
 
@@ -1042,8 +1076,16 @@ adminRouter.post('/blogs/upload-image', async (req, res) => {
       return res.status(413).json({ error: 'Image file size exceeds 5MB limit.' });
     }
 
-    const extension = mimeType.split('/')[1] || 'png';
-    const cleanExt = extension.replace('jpeg', 'jpg');
+    let mimeType: string;
+    let cleanExt: string;
+    try {
+      const validated = validateSafeImage(buffer);
+      mimeType = validated.mimeType;
+      cleanExt = validated.extension;
+    } catch (valErr: any) {
+      return res.status(400).json({ error: valErr.message || 'Invalid image payload.' });
+    }
+
     const safeName = `blog-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -1101,7 +1143,6 @@ adminRouter.post('/clients/upload-image', async (req, res) => {
       return res.status(400).json({ error: 'Invalid image format.' });
     }
 
-    const mimeType = matches[1];
     const base64Data = matches[2];
     const buffer = Buffer.from(base64Data, 'base64');
 
@@ -1109,8 +1150,16 @@ adminRouter.post('/clients/upload-image', async (req, res) => {
       return res.status(413).json({ error: 'Image file size exceeds 5MB limit.' });
     }
 
-    const extension = mimeType.split('/')[1] || 'png';
-    const cleanExt = extension.replace('jpeg', 'jpg');
+    let mimeType: string;
+    let cleanExt: string;
+    try {
+      const validated = validateSafeImage(buffer);
+      mimeType = validated.mimeType;
+      cleanExt = validated.extension;
+    } catch (valErr: any) {
+      return res.status(400).json({ error: valErr.message || 'Invalid image payload.' });
+    }
+
     const safeName = `client-${type}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
 
     const supabaseUrl = process.env.SUPABASE_URL;
