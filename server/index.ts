@@ -184,6 +184,48 @@ ${urlsXml}
 app.get('/sitemap.xml', handleSitemapRequest);
 app.get('/api/sitemap.xml', handleSitemapRequest);
 
+// Explicit robots.txt handler
+app.get('/robots.txt', (req: express.Request, res: express.Response) => {
+  const robotsPath = path.resolve('public', 'robots.txt');
+  const distRobotsPath = path.resolve('dist', 'robots.txt');
+  const target = fs.existsSync(robotsPath) ? robotsPath : distRobotsPath;
+  if (fs.existsSync(target)) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.sendFile(target);
+  }
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  return res.send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/admin/\n\nSitemap: https://www.dawnexus.in/sitemap.xml\n`);
+});
+
+// Explicit llms.txt and llms-full.txt handlers for AI crawlers
+app.get(['/llms.txt', '/.well-known/llms.txt'], (req: express.Request, res: express.Response) => {
+  const candidates = [
+    path.resolve('public', 'llms.txt'),
+    path.resolve('dist', 'llms.txt')
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      return res.sendFile(c);
+    }
+  }
+  return res.status(404).send('# Not Found');
+});
+
+app.get(['/llms-full.txt', '/.well-known/llms-full.txt'], (req: express.Request, res: express.Response) => {
+  const candidates = [
+    path.resolve('public', 'llms-full.txt'),
+    path.resolve('dist', 'llms-full.txt')
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      return res.sendFile(c);
+    }
+  }
+  return res.status(404).send('# Not Found');
+});
+
 
 // Google OAuth 2.0 callback endpoint (needs to be reachable by Google redirection without requiring pre-existing admin cookie)
 app.get('/api/admin/seo-research/google/callback', handleGoogleOAuthCallback);
@@ -264,7 +306,11 @@ export const handlePageHtmlRequest = async (req: express.Request, res: express.R
     req.path === '/mcp' ||
     req.path.startsWith('/mcp/') ||
     req.path.startsWith('/.well-known') ||
-    req.path.startsWith('/oauth')
+    req.path.startsWith('/oauth') ||
+    req.path === '/robots.txt' ||
+    req.path === '/llms.txt' ||
+    req.path === '/llms-full.txt' ||
+    req.path === '/sitemap.xml'
   ) {
     return next();
   }

@@ -1,0 +1,37 @@
+# Dawnexus — Full Documentation & Information Architecture
+
+> Dawnexus is a modern digital engineering and performance marketing agency based in Coimbatore, Tamil Nadu, India.
+
+## About Dawnexus
+Dawnexus helps ambitious businesses scale through custom full-stack web application development, technical search engine optimization (SEO), automated AI video creative pipelines, and performance digital advertising.
+
+- **Website**: https://www.dawnexus.in
+- **Headquarters**: Coimbatore, Tamil Nadu, India
+- **Email**: contact@dawnexus.in
+- **Primary Domain**: Technology & Performance Marketing
+
+## Core Services
+
+### 1. Website Design & Development
+- **URL**: https://www.dawnexus.in/services/website-design
+- **Capabilities**: Custom React/Vite/Next.js development, responsive UI/UX architecture, headless CMS integration, sub-second TTFB, sub-2.5s LCP, Core Web Vitals optimization, and conversion-centered design.
+
+### 2. Search Engine Optimization (SEO)
+- **URL**: https://www.dawnexus.in/services/seo-services
+- **Capabilities**: Full technical SEO audits, Schema.org JSON-LD structured data engineering, crawl budget and internal linking optimization, local Google Business Profile optimization, and long-tail search intent capture.
+
+### 3. AI Video Creation & Marketing
+- **URL**: https://www.dawnexus.in/services/ai-video-creation
+- **Capabilities**: Generative commercial video pipelines, automated product showcase reels, multilingual voiceovers, visual storytelling, and high-CTR social media ad creatives.
+
+### 4. Performance Digital Marketing
+- **URL**: https://www.dawnexus.in/services/digital-marketing
+- **Capabilities**: High-ROI paid traffic campaigns across Google Ads, Meta Ads, and LinkedIn, conversion rate optimization (CRO), custom lead capture funnels, and real-time attribution tracking.
+
+## Interactive Tools
+- **Website Cost Calculator**: https://www.dawnexus.in/website-cost-calculator
+  An interactive, transparent project cost estimation tool providing line-item calculations for web application scope, page counts, backend feature complexity, and custom design tiers in Indian Rupees (₹).
+
+## Insights & Playbooks
+- **Dawnexus Blog**: https://www.dawnexus.in/blog
+  Practical, verified playbooks and engineering insights covering web performance, Core Web Vitals, local SEO strategies, conversion rate optimization, and AI marketing workflows.

@@ -27,30 +27,45 @@ export class JsonLdService {
   static generateOrganizationSchema(): object {
     return {
       '@context': 'https://schema.org',
-      '@type': 'Organization',
-      '@id': `${BASE_URL}/#organization`,
-      name: 'Dawnexus',
-      legalName: 'Dawnexus',
-      url: `${BASE_URL}/`,
-      logo: {
-        '@type': 'ImageObject',
-        '@id': `${BASE_URL}/#logo`,
-        url: DEFAULT_LOGO,
-        caption: 'Dawnexus'
-      },
-      image: DEFAULT_LOGO,
-      description: 'Dawnexus delivers bespoke website design, performance technical SEO, AI video marketing, and digital growth systems for ambitious Indian SMBs and enterprises.',
-      email: 'contact@dawnexus.in',
-      sameAs: [
-        'https://www.linkedin.com/company/dawnexus',
-        'https://github.com/azil0306az-rgb/dawnexus'
-      ],
-      knowsAbout: [
-        'Website Design',
-        'Search Engine Optimization',
-        'Core Web Vitals Optimization',
-        'AI Video Production',
-        'Digital Marketing'
+      '@graph': [
+        {
+          '@type': 'Organization',
+          '@id': `${BASE_URL}/#organization`,
+          name: 'Dawnexus',
+          legalName: 'Dawnexus',
+          url: `${BASE_URL}/`,
+          logo: {
+            '@type': 'ImageObject',
+            '@id': `${BASE_URL}/#logo`,
+            url: DEFAULT_LOGO,
+            caption: 'Dawnexus'
+          },
+          image: DEFAULT_LOGO,
+          description: 'Dawnexus delivers bespoke website design, performance technical SEO, AI video marketing, and digital growth systems for ambitious Indian SMBs and enterprises.',
+          email: 'contact@dawnexus.in',
+          sameAs: [
+            'https://www.linkedin.com/company/dawnexus',
+            'https://github.com/azil0306az-rgb/dawnexus'
+          ],
+          knowsAbout: [
+            'Website Design',
+            'Search Engine Optimization',
+            'Core Web Vitals Optimization',
+            'AI Video Production',
+            'Digital Marketing'
+          ]
+        },
+        {
+          '@type': 'WebSite',
+          '@id': `${BASE_URL}/#website`,
+          name: 'Dawnexus',
+          url: `${BASE_URL}/`,
+          description: 'Professional Web Development, Technical SEO & AI Creative Systems',
+          publisher: {
+            '@id': `${BASE_URL}/#organization`
+          },
+          inLanguage: 'en-IN'
+        }
       ]
     };
   }
@@ -234,7 +249,8 @@ export class JsonLdService {
       };
     }
 
-    const type = schema['@type'] || 'Unknown';
+    const isGraph = Array.isArray(schema['@graph']);
+    const type = isGraph ? 'Graph' : (schema['@type'] || 'Unknown');
 
     // 1. Context check
     if (schema['@context'] !== 'https://schema.org' && schema['@context'] !== 'http://schema.org') {
@@ -242,24 +258,34 @@ export class JsonLdService {
     }
 
     // 2. Type check
-    if (!schema['@type']) {
+    if (!isGraph && !schema['@type']) {
       errors.push("Missing '@type' declaration.");
     }
 
-    // 3. BlogPosting specific validation
-    if (type === 'BlogPosting' || type === 'Article') {
-      if (!schema.headline) errors.push("BlogPosting requires 'headline'.");
-      if (!schema.author) errors.push("BlogPosting requires 'author'.");
-      if (!schema.publisher) errors.push("BlogPosting requires 'publisher'.");
-      if (!schema.datePublished) errors.push("BlogPosting requires 'datePublished'.");
-      if (!schema.image) warnings.push("Missing 'image' attribute on BlogPosting.");
-      if (!schema.mainEntityOfPage) warnings.push("Missing 'mainEntityOfPage' linking to canonical URL.");
-    }
+    const entities = isGraph ? schema['@graph'] : [schema];
 
-    // 4. Organization validation
-    if (type === 'Organization' || type === 'ProfessionalService') {
-      if (!schema.name) errors.push("Organization requires 'name'.");
-      if (!schema.url) errors.push("Organization requires 'url'.");
+    for (const entity of entities) {
+      const eType = entity?.['@type'];
+      if (!eType) {
+        errors.push("Entity missing '@type' declaration.");
+        continue;
+      }
+
+      // 3. BlogPosting specific validation
+      if (eType === 'BlogPosting' || eType === 'Article') {
+        if (!entity.headline) errors.push("BlogPosting requires 'headline'.");
+        if (!entity.author) errors.push("BlogPosting requires 'author'.");
+        if (!entity.publisher) errors.push("BlogPosting requires 'publisher'.");
+        if (!entity.datePublished) errors.push("BlogPosting requires 'datePublished'.");
+        if (!entity.image) warnings.push("Missing 'image' attribute on BlogPosting.");
+        if (!entity.mainEntityOfPage) warnings.push("Missing 'mainEntityOfPage' linking to canonical URL.");
+      }
+
+      // 4. Organization validation
+      if (eType === 'Organization' || eType === 'ProfessionalService') {
+        if (!entity.name) errors.push("Organization requires 'name'.");
+        if (!entity.url) errors.push("Organization requires 'url'.");
+      }
     }
 
     // 5. Fabricated review audit: flag any Review schema not linked to verified records
@@ -278,7 +304,7 @@ export class JsonLdService {
       type,
       errors,
       warnings,
-      entityCount: 1 + (schema.hasPart?.length || 0),
+      entityCount: isGraph ? schema['@graph'].length : (1 + (schema.hasPart?.length || 0)),
       hasFabricatedReviews,
       schemaJson: JSON.stringify(schema, null, 2)
     };

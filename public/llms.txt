@@ -1,0 +1,26 @@
+# Dawnexus
+
+> Dawnexus is a modern digital engineering and performance marketing agency based in Coimbatore, Tamil Nadu, India. We engineer high-performance web applications, technical SEO architectures, AI-driven commercial video assets, and full-funnel digital marketing systems.
+
+Dawnexus builds web and marketing systems that turn organic search visibility and digital engagement into predictable commercial growth for businesses across India and globally.
+
+## Core Services
+
+- [Website Design & Development](https://www.dawnexus.in/services/website-design): Bespoke frontend engineering, single-page application architectures, sub-second page loads, mobile responsiveness, and strict Core Web Vitals optimization.
+- [Search Engine Optimization (SEO)](https://www.dawnexus.in/services/seo-services): Deep technical SEO audits, Schema.org structured data, crawl budget optimization, high-intent keyword ranking strategies, and Google Business Profile local dominance.
+- [AI Video Creation & Marketing](https://www.dawnexus.in/services/ai-video-creation): AI-powered high-converting video generation, programmatic ad creatives, multilingual scriptwriting, and social motion design.
+- [Performance Digital Marketing](https://www.dawnexus.in/services/digital-marketing): Multi-channel paid acquisition campaigns across Google Ads, Meta Ads, and LinkedIn, conversion rate optimization (CRO), and attribution tracking.
+
+## Interactive Tools
+
+- [Website Cost Calculator](https://www.dawnexus.in/website-cost-calculator): Transparent, instant project estimation tool for planning website development budgets in Indian Rupees (₹).
+
+## Insights & Playbooks
+
+- [Dawnexus Insights Blog](https://www.dawnexus.in/blog): Actionable, evidence-backed guides on web engineering, Core Web Vitals, local SEO strategies, conversion rate optimization, and AI creative workflows.
+
+## Technical & Crawl References
+
+- [XML Sitemap](https://www.dawnexus.in/sitemap.xml): Complete, auto-updating index of canonical site URLs and published articles.
+- [Robots.txt](https://www.dawnexus.in/robots.txt): Crawler access rules and sitemap location.
+- [Contact Dawnexus](https://www.dawnexus.in/#contact): Direct engineering and consultation enquiries.

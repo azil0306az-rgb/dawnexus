@@ -144,7 +144,8 @@ export const DigitalMarketingPage: React.FC = () => {
       '@type': 'Service',
       'name': DEFAULT_CONTENT.title,
       'provider': {
-        '@type': 'ProfessionalService',
+        '@type': 'Organization',
+        '@id': 'https://www.dawnexus.in/#organization',
         'name': 'Dawnexus',
         'url': 'https://www.dawnexus.in/'
       },

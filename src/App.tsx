@@ -39,12 +39,46 @@ const HomePageContent: React.FC = () => {
     ogImage: 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
     schema: {
       '@context': 'https://schema.org',
-      '@type': 'ProfessionalService',
-      'name': 'Dawnexus',
-      'url': 'https://www.dawnexus.in/',
-      'logo': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
-      'image': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
-      'description': 'Professional website development, AI video creation, digital advertising, SEO, and Google Business Profile optimization.'
+      '@graph': [
+        {
+          '@type': 'Organization',
+          '@id': 'https://www.dawnexus.in/#organization',
+          'name': 'Dawnexus',
+          'legalName': 'Dawnexus',
+          'url': 'https://www.dawnexus.in/',
+          'logo': {
+            '@type': 'ImageObject',
+            '@id': 'https://www.dawnexus.in/#logo',
+            'url': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
+            'caption': 'Dawnexus'
+          },
+          'image': 'https://www.dawnexus.in/brand/dawnexus-logo-original.png',
+          'description': 'Dawnexus delivers bespoke website design, performance technical SEO, AI video marketing, and digital growth systems for ambitious businesses.',
+          'email': 'contact@dawnexus.in',
+          'sameAs': [
+            'https://www.linkedin.com/company/dawnexus',
+            'https://github.com/azil0306az-rgb/dawnexus'
+          ],
+          'knowsAbout': [
+            'Website Design',
+            'Search Engine Optimization',
+            'Core Web Vitals Optimization',
+            'AI Video Production',
+            'Digital Marketing'
+          ]
+        },
+        {
+          '@type': 'WebSite',
+          '@id': 'https://www.dawnexus.in/#website',
+          'name': 'Dawnexus',
+          'url': 'https://www.dawnexus.in/',
+          'description': 'Professional Web Development, Technical SEO & AI Creative Systems',
+          'publisher': {
+            '@id': 'https://www.dawnexus.in/#organization'
+          },
+          'inLanguage': 'en-IN'
+        }
+      ]
     }
   });
 
