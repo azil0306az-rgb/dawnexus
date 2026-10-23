@@ -31,7 +31,9 @@ import {
   BookOpen,
   HelpCircle,
   Plus,
-  RotateCcw
+  RotateCcw,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { BlogRecord, BlogInput, BlogStatus, CitationAnswerBlockConfig } from '../../types';
 import { SeoWritingAssistant } from './SeoWritingAssistant';
@@ -1243,11 +1245,43 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                           <span className="text-xs font-bold text-[#C7FF4D] uppercase tracking-wider">
                             Answer Block #{idx + 1}
                           </span>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-1">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                if (idx === 0) return;
+                                const updated = [...citationBlocks];
+                                const temp = updated[idx - 1];
+                                updated[idx - 1] = updated[idx];
+                                updated[idx] = temp;
+                                setCitationBlocks(updated);
+                              }}
+                              className="text-[11px] p-1 rounded hover:bg-[#252525] text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition"
+                              title="Move Up"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === citationBlocks.length - 1}
+                              onClick={() => {
+                                if (idx === citationBlocks.length - 1) return;
+                                const updated = [...citationBlocks];
+                                const temp = updated[idx + 1];
+                                updated[idx + 1] = updated[idx];
+                                updated[idx] = temp;
+                                setCitationBlocks(updated);
+                              }}
+                              className="text-[11px] p-1 rounded hover:bg-[#252525] text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition"
+                              title="Move Down"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
-                                const snippet = `\n<div class="dawnexus-citation-block" data-citation-id="${block.id || idx}">\n  <${block.heading_level || 'h2'}>${block.heading_text}</${block.heading_level || 'h2'}>\n  <p><strong>Direct Answer:</strong> ${block.concise_answer}</p>\n</div>\n`;
+                                const snippet = `\n<div class="dawnexus-citation-block" data-citation-id="${block.id || idx}">\n  <${block.heading_level || block.heading_tag || 'h2'}>${block.heading_text || block.question || ''}</${block.heading_level || block.heading_tag || 'h2'}>\n  <p><strong>Direct Answer:</strong> ${block.concise_answer || block.answer || ''}</p>\n</div>\n`;
                                 insertFormatting(snippet);
                               }}
                               className="text-[11px] px-2 py-0.5 rounded bg-[#1f1f1f] hover:bg-[#2a2a2a] text-neutral-300 transition"
@@ -1275,10 +1309,11 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                             </label>
                             <input
                               type="text"
-                              value={block.heading_text}
+                              value={block.heading_text || block.question || ''}
                               onChange={e => {
                                 const updated = [...citationBlocks];
                                 updated[idx].heading_text = e.target.value;
+                                updated[idx].question = e.target.value;
                                 setCitationBlocks(updated);
                               }}
                               placeholder="e.g. How much does a custom business website cost in Coimbatore?"
@@ -1291,10 +1326,12 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                               Heading Level
                             </label>
                             <select
-                              value={block.heading_level || 'h2'}
+                              value={block.heading_level || block.heading_tag || 'h2'}
                               onChange={e => {
                                 const updated = [...citationBlocks];
-                                updated[idx].heading_level = e.target.value as 'h2' | 'h3';
+                                const tag = e.target.value as 'h2' | 'h3';
+                                updated[idx].heading_level = tag;
+                                updated[idx].heading_tag = tag;
                                 setCitationBlocks(updated);
                               }}
                               className="w-full px-3 py-1.5 bg-[#161616] border border-[#282828] focus:border-[#C7FF4D] rounded-lg text-white text-xs focus:outline-none transition"
@@ -1318,10 +1355,11 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                           </div>
                           <textarea
                             rows={3}
-                            value={block.concise_answer}
+                            value={block.concise_answer || block.answer || ''}
                             onChange={e => {
                               const updated = [...citationBlocks];
                               updated[idx].concise_answer = e.target.value;
+                              updated[idx].answer = e.target.value;
                               setCitationBlocks(updated);
                             }}
                             placeholder="Provide a definitive, factual, self-contained answer without fluff or generic filler..."

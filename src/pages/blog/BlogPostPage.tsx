@@ -19,7 +19,7 @@ import { usePageSeo } from '../../utils/seo';
 import { buildArticleJsonLd } from '../../utils/jsonLd';
 import { CitationAnswerBlock } from '../../components/public/CitationAnswerBlock';
 import { ContextualCtaBlock } from '../../components/public/ContextualCtaBlock';
-import { ShieldCheck, Award } from 'lucide-react';
+import { ShieldCheck, Award, CheckCircle2, Info } from 'lucide-react';
 
 interface BlogPostPageProps {
   slug?: string;
@@ -305,14 +305,42 @@ export const BlogPostPage: React.FC<BlogPostPageProps> = ({ slug: propSlug }) =>
               {citationBlocks.map((block, idx) => (
                 <CitationAnswerBlock
                   key={block.id || idx}
-                  question={block.question}
-                  answer={block.answer}
-                  supportingDetails={block.supporting_details}
-                  headingTag={block.heading_tag || 'h3'}
+                  question={block.question || block.heading_text || ''}
+                  answer={block.answer || block.concise_answer || ''}
+                  supportingDetails={block.supporting_details || (Array.isArray(block.supporting_points) ? block.supporting_points.join('\n') : block.supporting_points) || ''}
+                  headingTag={block.heading_tag || block.heading_level || 'h3'}
                   categoryBadge={blog.category}
                 />
               ))}
             </div>
+          </section>
+        )}
+
+        {/* Actionable Implementation Methodology (E-E-A-T Process) */}
+        {blog.implementation_process && blog.implementation_process.trim() && (
+          <section className="my-10 p-6 sm:p-8 rounded-2xl bg-[#0C0C0C] border border-[#222222] space-y-4" aria-label="Implementation Methodology">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-[#C7FF4D]" />
+              <h3 className="text-xl font-bold text-white tracking-tight">
+                Recommended Implementation & Action Steps
+              </h3>
+            </div>
+            <div className="text-sm text-neutral-300 leading-relaxed whitespace-pre-line font-normal">
+              {blog.implementation_process}
+            </div>
+          </section>
+        )}
+
+        {/* Nuance, Caveats & Limitations */}
+        {blog.limitations_lessons && blog.limitations_lessons.trim() && (
+          <section className="my-8 p-5 sm:p-6 rounded-xl bg-[#101010] border border-[#222222] space-y-2" aria-label="Scope & Limitations">
+            <div className="flex items-center gap-2 text-xs font-mono text-amber-400 uppercase tracking-wider">
+              <Info className="w-4 h-4" />
+              <span>Scope, Trade-Offs & Edge Cases</span>
+            </div>
+            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed italic">
+              {blog.limitations_lessons}
+            </p>
           </section>
         )}
 

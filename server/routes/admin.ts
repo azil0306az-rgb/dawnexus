@@ -231,7 +231,22 @@ adminRouter.post('/blogs', async (req, res) => {
       status,
       scheduled_at,
       published_at,
-      admin_notes
+      admin_notes,
+      firsthand_observations,
+      project_examples,
+      case_studies,
+      original_research_data,
+      implementation_process,
+      external_sources,
+      limitations_lessons,
+      author_role,
+      author_bio,
+      author_credentials,
+      reviewer_name,
+      editorial_notes,
+      citation_answer_blocks,
+      review_cycle_days,
+      last_reviewed_at
     } = req.body;
 
     if (!title || typeof title !== 'string' || !title.trim()) {
@@ -260,7 +275,22 @@ adminRouter.post('/blogs', async (req, res) => {
       status: (['Draft', 'Scheduled', 'Published', 'Archived'].includes(status)) ? status : 'Draft',
       scheduled_at: typeof scheduled_at === 'string' && scheduled_at.trim() ? scheduled_at.trim() : null,
       published_at: typeof published_at === 'string' && published_at.trim() ? published_at.trim() : null,
-      admin_notes: typeof admin_notes === 'string' ? admin_notes.trim() : ''
+      admin_notes: typeof admin_notes === 'string' ? admin_notes.trim() : '',
+      firsthand_observations: typeof firsthand_observations === 'string' ? firsthand_observations.trim() : '',
+      project_examples: typeof project_examples === 'string' ? project_examples.trim() : '',
+      case_studies: typeof case_studies === 'string' ? case_studies.trim() : '',
+      original_research_data: typeof original_research_data === 'string' ? original_research_data.trim() : '',
+      implementation_process: typeof implementation_process === 'string' ? implementation_process.trim() : '',
+      external_sources: external_sources !== undefined ? external_sources : [],
+      limitations_lessons: typeof limitations_lessons === 'string' ? limitations_lessons.trim() : '',
+      author_role: typeof author_role === 'string' ? author_role.trim() : 'Technical Architect & SEO Strategist',
+      author_bio: typeof author_bio === 'string' ? author_bio.trim() : '',
+      author_credentials: typeof author_credentials === 'string' ? author_credentials.trim() : '',
+      reviewer_name: typeof reviewer_name === 'string' ? reviewer_name.trim() : '',
+      editorial_notes: typeof editorial_notes === 'string' ? editorial_notes.trim() : '',
+      citation_answer_blocks: citation_answer_blocks !== undefined ? citation_answer_blocks : [],
+      review_cycle_days: Number(review_cycle_days) || 90,
+      last_reviewed_at: typeof last_reviewed_at === 'string' ? last_reviewed_at : null
     });
 
     const { items: allBlogs } = getBlogs({ limit: 100 });
@@ -1515,7 +1545,7 @@ adminRouter.get('/diagnostics', async (req, res) => {
 
     // 5. Database Connectivity
     try {
-      const dbStats = getDatabaseHealthStats();
+      const dbStats = await getDatabaseHealthStats();
       const isHealthy = dbStats.localDbAccessible && dbStats.supabaseConnected;
       checks.push({
         id: 'database-persistence',
@@ -1545,7 +1575,7 @@ adminRouter.get('/diagnostics', async (req, res) => {
         name: 'Blog CMS & Content Inventory',
         category: 'core',
         status: 'Connected and verified',
-        message: `${blogStats.total} total articles (${blogStats.published} published, ${blogStats.draft} drafts, ${blogStats.scheduled} scheduled).`,
+        message: `${blogStats.total} total articles (${blogStats.published} published, ${blogStats.drafts} drafts, ${blogStats.scheduled} scheduled).`,
         lastTested,
         details: blogStats
       });
@@ -1570,7 +1600,7 @@ adminRouter.get('/diagnostics', async (req, res) => {
         status: gsc.isConnected ? 'Connected and verified' : 'Not configured',
         message: gsc.isConnected ? `Authorized for property ${gsc.selectedProperty || 'sc-domain:dawnexus.in'}.` : 'Google Search Console OAuth not connected or refresh token expired.',
         lastTested,
-        details: { property: gsc.selectedProperty, account: gsc.googleEmail, syncStatus: gsc.syncStatus }
+        details: { property: gsc.selectedProperty, account: gsc.googleEmail, connectionStatus: gsc.connectionStatus }
       });
     } catch (e: any) {
       checks.push({
@@ -1591,9 +1621,9 @@ adminRouter.get('/diagnostics', async (req, res) => {
         name: 'Google Analytics 4 Integration',
         category: 'integrations',
         status: ga4.isConnected ? 'Connected and verified' : 'Not configured',
-        message: ga4.isConnected ? `Authorized for GA4 property ${ga4.propertyId}.` : 'Google Analytics 4 not connected.',
+        message: ga4.isConnected ? `Authorized for GA4 property ${ga4.selectedProperty}.` : 'Google Analytics 4 not connected.',
         lastTested,
-        details: { propertyId: ga4.propertyId, account: ga4.authorizedEmail, syncStatus: ga4.syncStatus }
+        details: { propertyId: ga4.selectedProperty, account: ga4.googleEmail, connectionStatus: ga4.connectionStatus }
       });
     } catch (e: any) {
       checks.push({
@@ -1718,7 +1748,7 @@ adminRouter.get('/seo-quality/audit/:id', (req, res) => {
 
     const audit = assessInformationGain(blog);
     const allBlogs = getBlogs();
-    const overlap = detectContentOverlap(blog, allBlogs);
+    const overlap = detectContentOverlap(blog, allBlogs.items);
 
     return res.json({
       blogId: blog.id,

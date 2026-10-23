@@ -21,10 +21,16 @@ export interface QualityCriterionResult {
 
 export interface InformationGainAssessment {
   overallScore: number; // 0 to 100
+  overall_score?: number;
+  score?: number;
+  has_original_data?: boolean;
+  answer_blocks_count?: number;
+  ai_readiness_score?: number;
   criteria: QualityCriterionResult[];
   strengths: string[];
   missingEvidence: string[];
   actionableFixes: string[];
+  recommendations?: string[];
   overlapCheck: {
     hasHighOverlap: boolean;
     similarArticles: Array<{ id: number; title: string; slug: string; matchedKeyword: string }>;
@@ -69,7 +75,9 @@ export class SeoQualityService {
     limitations_lessons?: string;
     author?: string;
     author_role?: string;
+    author_bio?: string;
     author_credentials?: string;
+    citation_answer_blocks?: any;
   }): InformationGainAssessment {
     const rawContent = article.content || '';
     const plainText = rawContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
