@@ -2707,6 +2707,43 @@ export class McpService {
   }
 
   /**
+   * Tool: audit_information_gain
+   * Executes the exact Information Gain & AI readiness audit used by the admin editor.
+   */
+  static async auditInformationGain(args: { id?: number | string; slug?: string; draft?: any }) {
+    await refreshFromPersistentStore();
+    let blog: any = null;
+    if (args.draft) {
+      blog = args.draft;
+    } else if (args.id) {
+      const numId = parseInt(String(args.id).trim(), 10);
+      blog = getBlogById(numId);
+    } else if (args.slug) {
+      blog = getBlogBySlug(args.slug.trim());
+    }
+    if (!blog) {
+      throw new Error(`Article not found for Information Gain audit matching ${args.id ? 'ID #' + args.id : 'slug "' + args.slug + '"'}`);
+    }
+    const assessment = assessInformationGain(blog);
+    return {
+      id: blog.id,
+      title: blog.title,
+      slug: blog.slug,
+      status: blog.status,
+      overall_score: assessment.overallScore,
+      ai_readiness_score: (assessment as any).ai_readiness_score || 0,
+      answer_blocks_count: (assessment as any).answer_blocks_count || 0,
+      has_original_data: (assessment as any).has_original_data || false,
+      criteria: assessment.criteria,
+      strengths: assessment.strengths,
+      missing_evidence: assessment.missingEvidence,
+      actionable_fixes: assessment.actionableFixes,
+      recommendations: assessment.actionableFixes,
+      disclaimer: assessment.disclaimer
+    };
+  }
+
+  /**
    * Tool: bulk_audit_blogs
    * Executes dual audits in controlled batches with pagination.
    */

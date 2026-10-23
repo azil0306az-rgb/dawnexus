@@ -948,6 +948,28 @@ export const MCP_TOOLS: Tool[] = [
     }
   },
   {
+    name: 'audit_information_gain',
+    description: 'Execute the exact Information Gain & AI readiness audit used by the Dawnexus admin editor. Evaluates 8 E-E-A-T criteria: firsthand observations, original research/case studies, implementation process, limitations/lessons, verified sources, citation answer blocks, filler phrasing penalty, and author credentials.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Article ID (integer, e.g. 698)' },
+        slug: { type: 'string', description: 'Article slug' }
+      }
+    }
+  },
+  {
+    name: 'audit_technical_seo',
+    description: 'Run conventional 100-point Technical SEO quality audit against a blog article (alias for run_seo_quality_check).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Article ID (integer, e.g. 698)' },
+        slug: { type: 'string', description: 'Article slug' }
+      }
+    }
+  },
+  {
     name: 'bulk_audit_blogs',
     description: 'Audit multiple blog articles across the CMS for SEO health, missing evidence fields, citation blocks, and E-E-A-T depth.',
     inputSchema: {
@@ -1390,6 +1412,16 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
 
     case 'audit_blog_article':
       return await McpService.auditBlogArticle(toolArgs);
+
+    case 'audit_information_gain': {
+      const argsObj = typeof toolArgs === 'object' && toolArgs !== null ? toolArgs : { id: toolArgs };
+      return await McpService.auditInformationGain(argsObj);
+    }
+
+    case 'audit_technical_seo': {
+      const argsObj = typeof toolArgs === 'object' && toolArgs !== null ? toolArgs : { id: toolArgs };
+      return await McpService.runSeoQualityCheck(argsObj, callerIp);
+    }
 
     case 'bulk_audit_blogs':
       return await McpService.bulkAuditBlogs(toolArgs);
@@ -2176,6 +2208,37 @@ mcpRouter.get('/openapi.json', (req: Request, res: Response) => {
           responses: { '200': { description: 'Audit report' } }
         }
       },
+      '/tools/blogs/information-gain': {
+        get: {
+          operationId: 'audit_information_gain',
+          summary: 'Information Gain & AI Readiness Audit',
+          description: 'Evaluates the 8 E-E-A-T criteria used by the Dawnexus admin editor.',
+          parameters: [
+            { name: 'id', in: 'query', schema: { type: 'integer' }, description: 'Article ID' },
+            { name: 'slug', in: 'query', schema: { type: 'string' }, description: 'Article slug' }
+          ],
+          responses: { '200': { description: 'Information Gain audit report' } }
+        },
+        post: {
+          operationId: 'audit_information_gain_post',
+          summary: 'Information Gain & AI Readiness Audit via POST',
+          description: 'Evaluates the 8 E-E-A-T criteria for an article ID or payload.',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'integer' },
+                    slug: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'Information Gain audit report' } }
+        }
+      },
       '/tools/blogs/bulk-audit': {
         post: {
           operationId: 'bulk_audit_blogs',
@@ -2749,6 +2812,26 @@ mcpRouter.post('/tools/blogs/audit', async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Failed to audit blog article' });
+  }
+});
+
+mcpRouter.get('/tools/blogs/information-gain', async (req: Request, res: Response) => {
+  try {
+    const rawId = req.query.id ? Number(req.query.id) : undefined;
+    const slug = req.query.slug ? String(req.query.slug) : undefined;
+    const result = await McpService.auditInformationGain({ id: rawId, slug });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to audit Information Gain' });
+  }
+});
+
+mcpRouter.post('/tools/blogs/information-gain', async (req: Request, res: Response) => {
+  try {
+    const result = await McpService.auditInformationGain(req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Failed to audit Information Gain' });
   }
 });
 
