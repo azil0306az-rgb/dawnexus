@@ -8,7 +8,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'node:crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createDawnexusMcpServer, MCP_TOOLS } from './mcpServer.js';
+import { createDawnexusMcpServer, MCP_TOOLS, executeMcpTool } from './mcpServer.js';
 import { mcpAuthMiddleware } from './mcpAuth.js';
 import { refreshFromPersistentStore } from './db.js';
 
@@ -120,7 +120,67 @@ mcpStreamableRouter.get('/', (req: Request, res: Response, next: NextFunction) =
 mcpStreamableRouter.post('/', mcpAuthMiddleware, async (req: Request, res: Response) => {
   try {
     await refreshFromPersistentStore();
-    // Normalize Accept header to ensure both application/json and text/event-stream are recognized by SDK
+    const callerIp = req.ip || req.socket.remoteAddress || 'mcp-streamable';
+    const { jsonrpc, id, method, params } = req.body || {};
+
+    // 1. Direct stateless handling for robust Vercel serverless execution
+    if (jsonrpc === '2.0' && method === 'initialize') {
+      const sessionId = (req.headers['mcp-session-id'] as string) || crypto.randomUUID();
+      res.setHeader('mcp-session-id', sessionId);
+      return res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'dawnexus-mcp-server', version: '8.3.0' }
+        }
+      });
+    }
+
+    if (jsonrpc === '2.0' && method === 'notifications/initialized') {
+      return res.status(202).end();
+    }
+
+    if (jsonrpc === '2.0' && method === 'tools/list') {
+      return res.json({
+        jsonrpc: '2.0',
+        id,
+        result: { tools: MCP_TOOLS }
+      });
+    }
+
+    if (jsonrpc === '2.0' && method === 'tools/call') {
+      const toolName = params?.name;
+      const toolArgs = params?.arguments || {};
+      try {
+        const resultData = await executeMcpTool(toolName, toolArgs, callerIp);
+        return res.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(resultData, null, 2)
+              }
+            ]
+          }
+        });
+      } catch (err: any) {
+        const isNotFound = err?.message?.includes('not recognized');
+        return res.status(isNotFound ? 404 : 400).json({
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code: isNotFound ? -32601 : -32602,
+            message: err?.message || `Execution of tool '${toolName}' failed.`
+          }
+        });
+      }
+    }
+
+    // 2. Fallback to Streamable SDK transport for other protocols or custom methods
     const rawAccept = (req.headers['accept'] || '') as string;
     if (!rawAccept.includes('text/event-stream') || !rawAccept.includes('application/json')) {
       req.headers['accept'] = 'application/json, text/event-stream';

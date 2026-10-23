@@ -161,11 +161,80 @@ export const MCP_TOOLS: Tool[] = [
   },
   {
     name: 'update_blog_article',
-    description: 'Update any blog article across Draft, Scheduled, or Published statuses with comprehensive metadata, SEO fields, 15+ evidence fields, and structured citation answer blocks. Enforces status-specific safeguards (preserves scheduled_at for Scheduled articles, preserves published_at, live slug, and canonical URL for Published articles unless explicitly updated). Includes optimistic concurrency support via expected_revision.',
+    description: 'Edit all fields of any blog article across Draft, Scheduled, or Published statuses. Safely updates content, SEO metadata, all 15+ Evidence & E-E-A-T fields, and structured citation answer blocks while strictly preserving publication schedule and timestamp for Scheduled articles.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'number', description: 'Article ID to update' },
+        expected_revision: { type: 'string', description: 'Optional optimistic concurrency revision string' },
+        title: { type: 'string', description: 'Updated title' },
+        category: { type: 'string', description: 'Updated category' },
+        content: { type: 'string', description: 'Updated content' },
+        slug: { type: 'string', description: 'Updated slug' },
+        excerpt: { type: 'string', description: 'Updated excerpt' },
+        primary_keyword: { type: 'string', description: 'Updated primary keyword' },
+        secondary_keywords: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Updated secondary keywords'
+        },
+        target_location: { type: 'string', description: 'Updated target location' },
+        search_intent: { type: 'string', description: 'Updated search intent' },
+        target_audience: { type: 'string', description: 'Updated target audience' },
+        target_questions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Updated target questions'
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Topic tags'
+        },
+        seo_title: { type: 'string', description: 'Updated SEO title' },
+        meta_description: { type: 'string', description: 'Updated meta description' },
+        canonical_url: { type: 'string', description: 'Updated canonical URL' },
+        featured_image: { type: 'string', description: 'Updated featured image URL' },
+        image_alt: { type: 'string', description: 'Updated image alt text' },
+        caption: { type: 'string', description: 'Updated image caption' },
+        firsthand_observations: { type: 'string', description: 'Direct practitioner observations and empirical insights' },
+        project_examples: { description: 'Project examples (Markdown or JSON array)', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+        case_studies: { description: 'Case study evidence with metrics (Markdown or JSON array)', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+        original_research_data: { description: 'Original research data, benchmark statistics, or survey findings', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+        implementation_process: { type: 'string', description: 'Detailed step-by-step methodology and implementation process' },
+        limitations_lessons: { type: 'string', description: 'Trade-offs, limitations, and lessons learned' },
+        external_sources: { description: 'Verified external authoritative sources and citations', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+        citation_answer_blocks: {
+          type: 'array',
+          description: 'Direct AI-discovery citation and answer blocks',
+          items: {
+            type: 'object',
+            properties: {
+              heading_text: { type: 'string', description: 'Section or question heading' },
+              concise_answer: { type: 'string', description: 'Direct 40-60 word quotable answer' },
+              key_takeaways: { type: 'array', items: { type: 'string' }, description: 'Bulleted key takeaways' },
+              heading_level: { type: 'string', description: 'h2, h3, or h4' }
+            }
+          }
+        },
+        author: { type: 'string', description: 'Author name' },
+        author_role: { type: 'string', description: 'Author professional role / title' },
+        author_bio: { type: 'string', description: 'Author background biography' },
+        author_credentials: { type: 'string', description: 'Author qualifications, certifications, industry experience' },
+        reviewer_name: { type: 'string', description: 'Expert technical or editorial reviewer name' },
+        editorial_notes: { type: 'string', description: 'Internal editorial or revision notes' },
+        review_cycle_days: { type: 'number', description: 'Content review frequency in days (default: 90)' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'edit_scheduled_blog',
+    description: 'Edit all fields of a scheduled blog article (including content, SEO metadata, E-E-A-T evidence fields, citation answer blocks, and author credentials) while strictly preserving its publication schedule, scheduled timestamp, and scheduled status.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Article ID to edit' },
         expected_revision: { type: 'string', description: 'Optional optimistic concurrency revision string' },
         title: { type: 'string', description: 'Updated title' },
         category: { type: 'string', description: 'Updated category' },
@@ -855,7 +924,18 @@ export const MCP_TOOLS: Tool[] = [
   },
   {
     name: 'get_blog_post',
-    description: 'Retrieve complete 360-degree article record including all metadata, author credentials, all 15 evidence fields, citation answer blocks, extracted internal/external links, and audit scores.',
+    description: 'Read the complete blog post and all editor fields across Draft, Scheduled, or Published statuses. Returns full content, SEO metadata, author credentials, all 15+ Evidence & E-E-A-T fields, extracted links, and audit scores.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Article ID (integer, e.g. 698)' },
+        slug: { type: 'string', description: 'Article slug (e.g. website-visitors-few-enquiries-conversion-audit)' }
+      }
+    }
+  },
+  {
+    name: 'read_blog_post',
+    description: 'Alias for get_blog_post. Read the complete blog post and all editor fields across Draft, Scheduled, or Published statuses.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -949,7 +1029,18 @@ export const MCP_TOOLS: Tool[] = [
   },
   {
     name: 'audit_information_gain',
-    description: 'Execute the exact Information Gain & AI readiness audit used by the Dawnexus admin editor. Evaluates 8 E-E-A-T criteria: firsthand observations, original research/case studies, implementation process, limitations/lessons, verified sources, citation answer blocks, filler phrasing penalty, and author credentials.',
+    description: 'Run the separate Information Gain & AI audit for a blog article. Evaluates the 8 E-E-A-T criteria: firsthand observations, original research/case studies, implementation process, limitations/lessons, verified sources, citation answer blocks, filler phrasing penalty, and author credentials.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Article ID (integer, e.g. 698)' },
+        slug: { type: 'string', description: 'Article slug' }
+      }
+    }
+  },
+  {
+    name: 'run_information_gain_audit',
+    description: 'Alias for audit_information_gain. Run the separate Information Gain & AI audit for a blog article.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1208,9 +1299,12 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
       return await McpService.updateBlogDraft(id, toolArgs, callerIp);
     }
 
-    case 'update_blog_article': {
+    case 'update_blog_article':
+    case 'edit_scheduled_blog':
+    case 'edit_blog_post':
+    case 'update_blog_post': {
       const id = Number(toolArgs.id);
-      if (!id) throw new Error('Article ID is required for update_blog_article.');
+      if (!id) throw new Error('Article ID is required for updating or editing blog article.');
       return await McpService.updateBlogArticle({ id, ...toolArgs }, callerIp);
     }
 
@@ -1368,7 +1462,10 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
     case 'search_published_blogs':
       return await McpService.searchPublishedBlogs(toolArgs);
 
-    case 'get_blog_post': {
+    case 'get_blog_post':
+    case 'read_blog_post':
+    case 'get_blog_article':
+    case 'read_blog_article': {
       const argsObj = typeof toolArgs === 'object' && toolArgs !== null ? toolArgs : { id: toolArgs };
       return await McpService.getBlogPost(argsObj);
     }
@@ -1413,7 +1510,9 @@ export async function executeMcpTool(name: string, args: any = {}, callerIp: str
     case 'audit_blog_article':
       return await McpService.auditBlogArticle(toolArgs);
 
-    case 'audit_information_gain': {
+    case 'audit_information_gain':
+    case 'run_information_gain_audit':
+    case 'get_information_gain_audit': {
       const argsObj = typeof toolArgs === 'object' && toolArgs !== null ? toolArgs : { id: toolArgs };
       return await McpService.auditInformationGain(argsObj);
     }
