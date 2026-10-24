@@ -867,6 +867,25 @@ export async function pushContactSettingsToSupabase(settings: any): Promise<void
   assertSupabaseSuccess(error, 'Contact settings persistence');
 }
 
+export async function getContactSettingsFromSupabase(): Promise<any | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('contact_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error) {
+      console.warn('[Supabase getContactSettings Notice]:', error.message);
+      return null;
+    }
+    return data || null;
+  } catch (err) {
+    console.warn('[Supabase getContactSettings Error]:', err);
+    return null;
+  }
+}
+
 export async function pushWebsitePageToSupabase(page: any): Promise<void> {
   if (!supabase) return;
   try {

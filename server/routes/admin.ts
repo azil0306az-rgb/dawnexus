@@ -45,6 +45,7 @@ import {
   updateCalculatorPricingConfig,
   persistCalculatorPricingConfig,
   getContactSettings,
+  getContactSettingsAsync,
   updateContactSettings,
   persistContactSettings,
   refreshFromPersistentStore,
@@ -1703,7 +1704,8 @@ adminRouter.put('/calculator/config', async (req, res) => {
 // GET /api/admin/contact-settings
 adminRouter.get('/contact-settings', async (req, res) => {
   try {
-    const settings = getContactSettings();
+    const settings = await getContactSettingsAsync();
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     return res.json({
       success: true,
       settings

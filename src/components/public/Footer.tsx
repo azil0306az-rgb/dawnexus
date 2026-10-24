@@ -13,10 +13,10 @@ export interface ContactSettingsState {
 }
 
 const DEFAULT_CONTACT: ContactSettingsState = {
-  phone: '+91 95669 88995',
-  email: 'contact@dawnexus.in',
-  instagram_url: 'https://www.instagram.com/dawnexus',
-  facebook_url: 'https://www.facebook.com/dawnexus',
+  phone: '+91 9994487810',
+  email: 'dawnexus.exe@gmail.com',
+  instagram_url: 'https://www.instagram.com/dawnexus.exe',
+  facebook_url: 'https://www.facebook.com/people/Dawnexus/61595080180070/',
   linkedin_url: 'https://www.linkedin.com/company/dawnexus',
   address: 'Coimbatore, Tamil Nadu, India'
 };
@@ -28,7 +28,7 @@ export const Footer: React.FC = () => {
     let isMounted = true;
     const fetchContactSettings = async () => {
       try {
-        const res = await fetch('/api/contact-settings');
+        const res = await fetch(`/api/contact-settings?_t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data.settings && isMounted) {

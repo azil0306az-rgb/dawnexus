@@ -20,6 +20,7 @@ import {
   getEnquiries,
   getEnquiryById,
   getCalculatorPricingConfig,
+  getContactSettings,
   getPublicBlogs
 } from './db.js';
 import { isSupabaseActive } from './supabase.js';
@@ -2430,9 +2431,9 @@ export class McpService {
         region: 'Asia/Kolkata'
       },
       contact: {
-        email: 'contact@dawnexus.in',
-        supportEmail: 'vkv@dawnexus.in',
-        phone: '+91 95669 88390',
+        email: getContactSettings().email || 'dawnexus.exe@gmail.com',
+        supportEmail: 'dawnexus.exe@gmail.com',
+        phone: getContactSettings().phone || '+91 9994487810',
         businessHours: 'Monday - Saturday: 9:00 AM - 6:30 PM IST'
       },
       verifiedServices: [

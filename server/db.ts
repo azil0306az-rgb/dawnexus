@@ -16,6 +16,7 @@ import {
   pushSeoConnectionToSupabase,
   pushCalculatorPricingConfigToSupabase,
   pushContactSettingsToSupabase,
+  getContactSettingsFromSupabase,
   isSupabaseActive
 } from './supabase.js';
 import {
@@ -38,10 +39,10 @@ export interface ContactSettings {
 }
 
 export const DEFAULT_CONTACT_SETTINGS: ContactSettings = {
-  phone: '+91 95669 88995',
-  email: 'contact@dawnexus.in',
-  instagram_url: 'https://www.instagram.com/dawnexus',
-  facebook_url: 'https://www.facebook.com/dawnexus',
+  phone: '+91 9994487810',
+  email: 'dawnexus.exe@gmail.com',
+  instagram_url: 'https://www.instagram.com/dawnexus.exe',
+  facebook_url: 'https://www.facebook.com/people/Dawnexus/61595080180070/',
   linkedin_url: 'https://www.linkedin.com/company/dawnexus',
   address: 'Coimbatore, Tamil Nadu, India'
 };
@@ -1002,6 +1003,50 @@ export function getContactSettings(): ContactSettings {
     console.warn('[Get Contact Settings Notice]:', err);
   }
   return { ...DEFAULT_CONTACT_SETTINGS };
+}
+
+export async function getContactSettingsAsync(): Promise<ContactSettings> {
+  if (isSupabaseActive()) {
+    try {
+      const remote = await getContactSettingsFromSupabase();
+      if (remote) {
+        db.prepare(`
+          INSERT INTO contact_settings (id, phone, email, instagram_url, facebook_url, linkedin_url, address, updated_at)
+          VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            phone = excluded.phone,
+            email = excluded.email,
+            instagram_url = excluded.instagram_url,
+            facebook_url = excluded.facebook_url,
+            linkedin_url = excluded.linkedin_url,
+            address = excluded.address,
+            updated_at = excluded.updated_at
+        `).run(
+          remote.phone || DEFAULT_CONTACT_SETTINGS.phone,
+          remote.email || DEFAULT_CONTACT_SETTINGS.email,
+          remote.instagram_url || DEFAULT_CONTACT_SETTINGS.instagram_url,
+          remote.facebook_url || DEFAULT_CONTACT_SETTINGS.facebook_url,
+          remote.linkedin_url || DEFAULT_CONTACT_SETTINGS.linkedin_url,
+          remote.address !== undefined ? remote.address : DEFAULT_CONTACT_SETTINGS.address,
+          remote.updated_at || new Date().toISOString()
+        );
+
+        return {
+          id: 1,
+          phone: remote.phone || DEFAULT_CONTACT_SETTINGS.phone,
+          email: remote.email || DEFAULT_CONTACT_SETTINGS.email,
+          instagram_url: remote.instagram_url || DEFAULT_CONTACT_SETTINGS.instagram_url,
+          facebook_url: remote.facebook_url || DEFAULT_CONTACT_SETTINGS.facebook_url,
+          linkedin_url: remote.linkedin_url || DEFAULT_CONTACT_SETTINGS.linkedin_url,
+          address: remote.address !== undefined ? remote.address : DEFAULT_CONTACT_SETTINGS.address,
+          updated_at: remote.updated_at
+        };
+      }
+    } catch (err) {
+      console.warn('[Get Contact Settings Async Warning]:', err);
+    }
+  }
+  return getContactSettings();
 }
 
 export function updateContactSettings(settings: Partial<ContactSettings>): ContactSettings {

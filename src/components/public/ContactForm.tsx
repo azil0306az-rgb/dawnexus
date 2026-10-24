@@ -67,25 +67,25 @@ export const ContactForm: React.FC = () => {
   const [serverError, setServerError] = useState<string | null>(null);
   const [hasStartedForm, setHasStartedForm] = useState(false);
   const [contactSettings, setContactSettings] = useState({
-    phone: '+91 95669 88995',
-    email: 'contact@dawnexus.in',
-    instagram_url: 'https://www.instagram.com/dawnexus',
-    facebook_url: 'https://www.facebook.com/dawnexus',
+    phone: '+91 9994487810',
+    email: 'dawnexus.exe@gmail.com',
+    instagram_url: 'https://www.instagram.com/dawnexus.exe',
+    facebook_url: 'https://www.facebook.com/people/Dawnexus/61595080180070/',
     linkedin_url: 'https://www.linkedin.com/company/dawnexus',
     address: 'Coimbatore, Tamil Nadu, India'
   });
 
   useEffect(() => {
     let isMounted = true;
-    fetch('/api/contact-settings')
+    fetch(`/api/contact-settings?_t=${Date.now()}`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d && d.settings && isMounted) {
           setContactSettings({
-            phone: d.settings.phone || '+91 95669 88995',
-            email: d.settings.email || 'contact@dawnexus.in',
-            instagram_url: d.settings.instagram_url || 'https://www.instagram.com/dawnexus',
-            facebook_url: d.settings.facebook_url || 'https://www.facebook.com/dawnexus',
+            phone: d.settings.phone || '+91 9994487810',
+            email: d.settings.email || 'dawnexus.exe@gmail.com',
+            instagram_url: d.settings.instagram_url || 'https://www.instagram.com/dawnexus.exe',
+            facebook_url: d.settings.facebook_url || 'https://www.facebook.com/people/Dawnexus/61595080180070/',
             linkedin_url: d.settings.linkedin_url || 'https://www.linkedin.com/company/dawnexus',
             address: d.settings.address !== undefined ? d.settings.address : 'Coimbatore, Tamil Nadu, India'
           });

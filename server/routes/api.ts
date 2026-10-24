@@ -12,6 +12,7 @@ import {
   getShowcaseBySlug,
   getCalculatorPricingConfig,
   getContactSettings,
+  getContactSettingsAsync,
   persistEnquiry,
   refreshFromPersistentStore,
   publishDueScheduledBlogsReliable
@@ -442,10 +443,12 @@ publicRouter.get('/showcases/:slug', async (req, res) => {
 
 // GET /api/contact-settings
 // Returns public contact info and social channels (phone, email, social links, optional address)
-publicRouter.get('/contact-settings', (req, res) => {
+publicRouter.get('/contact-settings', async (req, res) => {
   try {
-    const settings = getContactSettings();
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
+    const settings = await getContactSettingsAsync();
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.json({
       success: true,
       settings

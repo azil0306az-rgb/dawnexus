@@ -2,6 +2,7 @@ import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { 
   getContactSettings, 
+  getContactSettingsAsync,
   updateContactSettings,
   persistContactSettings,
   refreshFromPersistentStore,
@@ -82,7 +83,7 @@ describe('Dawnexus: Dynamic Contact & Social Settings Suite', () => {
   });
 
   test('Cloud Persistence & Serverless Cold-Start: Survives rehydration from Supabase', async () => {
-    const original = getContactSettings();
+    const original = await getContactSettingsAsync();
 
     const uniquePhone = '+91 91234 56789';
     const uniqueEmail = 'test-persistence@dawnexus.in';
