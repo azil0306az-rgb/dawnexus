@@ -119,6 +119,38 @@ export async function ensurePostgresV830Schema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_pg_showcases_order ON showcases(display_order);
     `);
 
+    // 5. Create contact_settings table for dynamic contact and social channels (v8.4.0)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS contact_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        phone TEXT NOT NULL DEFAULT '+91 95669 88995',
+        email TEXT NOT NULL DEFAULT 'contact@dawnexus.in',
+        instagram_url TEXT NOT NULL DEFAULT 'https://www.instagram.com/dawnexus',
+        facebook_url TEXT NOT NULL DEFAULT 'https://www.facebook.com/dawnexus',
+        linkedin_url TEXT NOT NULL DEFAULT 'https://www.linkedin.com/company/dawnexus',
+        address TEXT DEFAULT 'Coimbatore, Tamil Nadu, India',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      INSERT INTO contact_settings (id, phone, email, instagram_url, facebook_url, linkedin_url, address, created_at, updated_at)
+      VALUES (
+        1,
+        '+91 95669 88995',
+        'contact@dawnexus.in',
+        'https://www.instagram.com/dawnexus',
+        'https://www.facebook.com/dawnexus',
+        'https://www.linkedin.com/company/dawnexus',
+        'Coimbatore, Tamil Nadu, India',
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (id) DO NOTHING;
+
+      -- Reload PostgREST schema cache so Supabase JS client immediately detects the new table
+      NOTIFY pgrst, 'reload schema';
+    `);
+
     console.log('[Postgres Migration] v8.3.0 & v8.4.0 schema and columns successfully verified on remote PostgreSQL.');
   } catch (err: any) {
     console.warn('[Postgres Migration Notice]:', err?.message || err);

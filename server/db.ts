@@ -1043,9 +1043,7 @@ export function updateContactSettings(settings: Partial<ContactSettings>): Conta
 
 export async function persistContactSettings(settings: ContactSettings): Promise<void> {
   if (isSupabaseActive()) {
-    await pushContactSettingsToSupabase(settings).catch(err => {
-      console.warn('[Persist Contact Settings Notice]: Failed to push to Supabase:', err);
-    });
+    await pushContactSettingsToSupabase(settings);
   }
 }
 

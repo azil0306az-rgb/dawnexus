@@ -854,23 +854,17 @@ export async function pushCalculatorPricingConfigToSupabase(config: any): Promis
 
 export async function pushContactSettingsToSupabase(settings: any): Promise<void> {
   if (!supabase) return;
-  try {
-    const { error } = await supabase.from('contact_settings').upsert({
-      id: 1,
-      phone: settings.phone,
-      email: settings.email,
-      instagram_url: settings.instagram_url,
-      facebook_url: settings.facebook_url,
-      linkedin_url: settings.linkedin_url,
-      address: settings.address || '',
-      updated_at: settings.updated_at || new Date().toISOString()
-    });
-    if (error) {
-      console.warn('[Supabase pushContactSettings Notice]:', error.message);
-    }
-  } catch (err) {
-    console.warn('[Supabase pushContactSettings Error]:', err);
-  }
+  const { error } = await supabase.from('contact_settings').upsert({
+    id: 1,
+    phone: settings.phone,
+    email: settings.email,
+    instagram_url: settings.instagram_url,
+    facebook_url: settings.facebook_url,
+    linkedin_url: settings.linkedin_url,
+    address: settings.address || '',
+    updated_at: settings.updated_at || new Date().toISOString()
+  });
+  assertSupabaseSuccess(error, 'Contact settings persistence');
 }
 
 export async function pushWebsitePageToSupabase(page: any): Promise<void> {

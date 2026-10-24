@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { 
   getContactSettings, 
   updateContactSettings,
+  persistContactSettings,
+  refreshFromPersistentStore,
   DEFAULT_CONTACT_SETTINGS 
 } from '../db.js';
 
@@ -78,4 +80,37 @@ describe('Dawnexus: Dynamic Contact & Social Settings Suite', () => {
     // Restore
     updateContactSettings(original);
   });
+
+  test('Cloud Persistence & Serverless Cold-Start: Survives rehydration from Supabase', async () => {
+    const original = getContactSettings();
+
+    const uniquePhone = '+91 91234 56789';
+    const uniqueEmail = 'test-persistence@dawnexus.in';
+
+    const updated = updateContactSettings({
+      phone: uniquePhone,
+      email: uniqueEmail,
+      instagram_url: 'https://instagram.com/dawnexus_test',
+      facebook_url: 'https://facebook.com/dawnexus_test',
+      linkedin_url: 'https://linkedin.com/company/dawnexus_test',
+      address: 'Test Address 42, Coimbatore'
+    });
+
+    // Write to Supabase PostgreSQL
+    await persistContactSettings(updated);
+
+    // Simulate serverless cold-start by rehydrating store from Supabase
+    await refreshFromPersistentStore();
+
+    // Verify the data persisted and came back from Supabase!
+    const rehydrated = getContactSettings();
+    assert.equal(rehydrated.phone, uniquePhone, 'Phone must persist in Supabase across cold starts');
+    assert.equal(rehydrated.email, uniqueEmail, 'Email must persist in Supabase across cold starts');
+    assert.equal(rehydrated.address, 'Test Address 42, Coimbatore');
+
+    // Restore original settings
+    const restored = updateContactSettings(original);
+    await persistContactSettings(restored);
+  });
 });
+
