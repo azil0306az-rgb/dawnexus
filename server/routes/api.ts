@@ -11,6 +11,7 @@ import {
   getPublicShowcasesAsync,
   getShowcaseBySlug,
   getCalculatorPricingConfig,
+  getContactSettings,
   persistEnquiry,
   refreshFromPersistentStore,
   publishDueScheduledBlogsReliable
@@ -390,9 +391,9 @@ publicRouter.get('/clients', async (req, res) => {
 // Returns all published & visible showcase products with category filter
 publicRouter.get('/showcases', async (req, res) => {
   try {
-    await refreshFromPersistentStore();
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const items = await getPublicShowcasesAsync({ category });
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
     return res.json({
       success: true,
       showcases: items,
@@ -409,7 +410,6 @@ publicRouter.get('/showcases', async (req, res) => {
 // Returns detail of a published showcase project
 publicRouter.get('/showcases/:slug', async (req, res) => {
   try {
-    await refreshFromPersistentStore();
     const slug = req.params.slug;
     if (!slug || typeof slug !== 'string') {
       return res.status(400).json({ error: 'Slug parameter is required.' });
@@ -424,6 +424,7 @@ publicRouter.get('/showcases/:slug', async (req, res) => {
     const allCategory = getPublicShowcases({ category: item.category });
     const related = allCategory.filter(s => s.id !== item.id).slice(0, 3);
 
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
     return res.json({
       success: true,
       showcase: item,
@@ -432,6 +433,26 @@ publicRouter.get('/showcases/:slug', async (req, res) => {
   } catch (error) {
     console.error('[Public Get Showcase By Slug Error]:', error);
     return res.status(500).json({ error: 'Failed to retrieve showcase project' });
+  }
+});
+
+// ==========================================
+// PUBLIC CONTACT & SOCIAL SETTINGS
+// ==========================================
+
+// GET /api/contact-settings
+// Returns public contact info and social channels (phone, email, social links, optional address)
+publicRouter.get('/contact-settings', (req, res) => {
+  try {
+    const settings = getContactSettings();
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
+    return res.json({
+      success: true,
+      settings
+    });
+  } catch (error) {
+    console.error('[Public Contact Settings Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve contact settings' });
   }
 });
 

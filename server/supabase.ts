@@ -385,6 +385,46 @@ export async function syncFromSupabase(db: any): Promise<void> {
       console.warn('[Supabase Sync Calculator Notice]:', calcErr);
     }
 
+    // 5b. Sync Contact Settings
+    try {
+      const { data: contactData } = await supabase
+        .from('contact_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (contactData) {
+        db.prepare(`
+          INSERT INTO contact_settings (id, phone, email, instagram_url, facebook_url, linkedin_url, address, updated_at)
+          VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            phone = excluded.phone,
+            email = excluded.email,
+            instagram_url = excluded.instagram_url,
+            facebook_url = excluded.facebook_url,
+            linkedin_url = excluded.linkedin_url,
+            address = excluded.address,
+            updated_at = excluded.updated_at
+        `).run(
+          contactData.phone,
+          contactData.email,
+          contactData.instagram_url,
+          contactData.facebook_url,
+          contactData.linkedin_url,
+          contactData.address ?? '',
+          contactData.updated_at || new Date().toISOString()
+        );
+        console.log('[Supabase Sync] Hydrated contact settings.');
+      } else {
+        const localRow = db.prepare('SELECT * FROM contact_settings WHERE id = 1').get() as any;
+        if (localRow) {
+          await pushContactSettingsToSupabase(localRow).catch(() => {});
+        }
+      }
+    } catch (contactErr) {
+      console.warn('[Supabase Sync Contact Notice]:', contactErr);
+    }
+
     // 6. Sync SEO Research Connection
     try {
       const { data: seoConn } = await supabase
@@ -809,6 +849,27 @@ export async function pushCalculatorPricingConfigToSupabase(config: any): Promis
     }
   } catch (err) {
     console.warn('[Supabase pushCalculatorPricingConfig Error]:', err);
+  }
+}
+
+export async function pushContactSettingsToSupabase(settings: any): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.from('contact_settings').upsert({
+      id: 1,
+      phone: settings.phone,
+      email: settings.email,
+      instagram_url: settings.instagram_url,
+      facebook_url: settings.facebook_url,
+      linkedin_url: settings.linkedin_url,
+      address: settings.address || '',
+      updated_at: settings.updated_at || new Date().toISOString()
+    });
+    if (error) {
+      console.warn('[Supabase pushContactSettings Notice]:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase pushContactSettings Error]:', err);
   }
 }
 

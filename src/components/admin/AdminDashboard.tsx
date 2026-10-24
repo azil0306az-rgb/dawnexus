@@ -26,13 +26,15 @@ import {
   BarChart3,
   Shield,
   Mail,
-  Award
+  Award,
+  Phone
 } from 'lucide-react';
 import type { EnquiryRecord, EnquiryStats } from '../../types';
 import { EnquiryDetailModal } from './EnquiryDetailModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BlogManager } from './BlogManager';
 import { NotificationSettings } from './NotificationSettings';
+import { ContactSettingsManager } from './ContactSettingsManager';
 import { ClientShowcaseManager } from './ClientShowcaseManager';
 import { ShowcaseManager } from './ShowcaseManager';
 import { DatabaseHealthDashboard } from './DatabaseHealthDashboard';
@@ -57,6 +59,7 @@ export type AdminTab =
   | 'content-editor'
   | 'calculator'
   | 'notifications'
+  | 'contact-settings'
   | 'db-health'
   | 'diagnostics';
 
@@ -73,6 +76,7 @@ const ALL_ADMIN_TABS: AdminTab[] = [
   'content-editor',
   'calculator',
   'notifications',
+  'contact-settings',
   'db-health',
   'diagnostics'
 ];
@@ -598,6 +602,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
+              onClick={() => handleTabChange('contact-settings')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'contact-settings'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Phone className="w-4 h-4" />
+                <span>Contact &amp; Social</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                CMS
+              </span>
+            </button>
+
+            <button
               onClick={() => handleTabChange('db-health')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'db-health'
@@ -681,6 +702,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <CalculatorSettings />
         ) : activeTab === 'notifications' ? (
           <NotificationSettings />
+        ) : activeTab === 'contact-settings' ? (
+          <ContactSettingsManager />
         ) : activeTab === 'db-health' ? (
           <DatabaseHealthDashboard />
         ) : activeTab === 'diagnostics' ? (

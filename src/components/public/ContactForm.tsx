@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Send, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Send, CheckCircle2, AlertCircle, Loader2, Phone, Mail, MapPin } from 'lucide-react';
+import { InstagramIcon, FacebookIcon, LinkedInIcon } from '../common/BrandSocialIcons';
 import type { EnquiryFormData } from '../../types';
 import { tracker } from '../../utils/tracker';
 import { trackFormStart, trackFormSubmit, trackGenerateLead } from '../../utils/analytics';
@@ -65,6 +66,36 @@ export const ContactForm: React.FC = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [hasStartedForm, setHasStartedForm] = useState(false);
+  const [contactSettings, setContactSettings] = useState({
+    phone: '+91 95669 88995',
+    email: 'contact@dawnexus.in',
+    instagram_url: 'https://www.instagram.com/dawnexus',
+    facebook_url: 'https://www.facebook.com/dawnexus',
+    linkedin_url: 'https://www.linkedin.com/company/dawnexus',
+    address: 'Coimbatore, Tamil Nadu, India'
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/api/contact-settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && d.settings && isMounted) {
+          setContactSettings({
+            phone: d.settings.phone || '+91 95669 88995',
+            email: d.settings.email || 'contact@dawnexus.in',
+            instagram_url: d.settings.instagram_url || 'https://www.instagram.com/dawnexus',
+            facebook_url: d.settings.facebook_url || 'https://www.facebook.com/dawnexus',
+            linkedin_url: d.settings.linkedin_url || 'https://www.linkedin.com/company/dawnexus',
+            address: d.settings.address !== undefined ? d.settings.address : 'Coimbatore, Tamil Nadu, India'
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const notifyFormStart = () => {
     if (!hasStartedForm) {
@@ -260,6 +291,94 @@ export const ContactForm: React.FC = () => {
             <p className="text-[#A5A5A5] text-lg leading-relaxed">
               Tell us about your business and what you want to achieve. We'll help you identify the right digital solutions for your next stage of growth.
             </p>
+
+            {/* Direct Contact & Social Cards */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Phone */}
+                <a
+                  href={`tel:${contactSettings.phone.replace(/\s+/g, '')}`}
+                  className="p-3.5 rounded-xl bg-[#0B0B0B] border border-[#252525] hover:border-[#C7FF4D]/40 transition-colors flex items-center gap-3 group"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-[#C7FF4D]/10 border border-[#C7FF4D]/30 flex items-center justify-center text-[#C7FF4D] shrink-0 group-hover:scale-105 transition-transform">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-mono text-[#888] uppercase">Direct Call</div>
+                    <div className="text-xs font-bold text-white group-hover:text-[#C7FF4D] truncate font-mono">
+                      {contactSettings.phone}
+                    </div>
+                  </div>
+                </a>
+
+                {/* Email */}
+                <a
+                  href={`mailto:${contactSettings.email}`}
+                  className="p-3.5 rounded-xl bg-[#0B0B0B] border border-[#252525] hover:border-[#C7FF4D]/40 transition-colors flex items-center gap-3 group"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-[#C7FF4D]/10 border border-[#C7FF4D]/30 flex items-center justify-center text-[#C7FF4D] shrink-0 group-hover:scale-105 transition-transform">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-mono text-[#888] uppercase">Direct Email</div>
+                    <div className="text-xs font-bold text-white group-hover:text-[#C7FF4D] truncate">
+                      {contactSettings.email}
+                    </div>
+                  </div>
+                </a>
+              </div>
+
+              {/* Optional Address */}
+              {contactSettings.address && contactSettings.address.trim() && (
+                <div className="p-3.5 rounded-xl bg-[#0B0B0B] border border-[#252525] flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-[#C7FF4D]/10 border border-[#C7FF4D]/30 flex items-center justify-center text-[#C7FF4D] shrink-0 mt-0.5">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-mono text-[#888] uppercase">Location</div>
+                    <div className="text-xs text-[#A5A5A5] leading-relaxed whitespace-pre-line">
+                      {contactSettings.address}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Dedicated Social Channels */}
+              <div className="p-3.5 rounded-xl bg-[#0B0B0B] border border-[#252525] flex items-center justify-between gap-3">
+                <span className="text-xs font-mono text-[#A5A5A5] uppercase tracking-wider">
+                  Social Channels:
+                </span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={contactSettings.instagram_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Dawnexus on Instagram"
+                    className="w-8 h-8 rounded-lg bg-[#141414] border border-[#252525] hover:border-[#C7FF4D] hover:text-[#C7FF4D] text-[#A5A5A5] flex items-center justify-center transition-all group"
+                  >
+                    <InstagramIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  </a>
+                  <a
+                    href={contactSettings.facebook_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Dawnexus on Facebook"
+                    className="w-8 h-8 rounded-lg bg-[#141414] border border-[#252525] hover:border-[#C7FF4D] hover:text-[#C7FF4D] text-[#A5A5A5] flex items-center justify-center transition-all group"
+                  >
+                    <FacebookIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  </a>
+                  <a
+                    href={contactSettings.linkedin_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Dawnexus on LinkedIn"
+                    className="w-8 h-8 rounded-lg bg-[#141414] border border-[#252525] hover:border-[#C7FF4D] hover:text-[#C7FF4D] text-[#A5A5A5] flex items-center justify-center transition-all group"
+                  >
+                    <LinkedInIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  </a>
+                </div>
+              </div>
+            </div>
 
             {/* Direct Details Box */}
             <div className="bg-[#0B0B0B] border border-[#252525] rounded-2xl p-6 space-y-4">

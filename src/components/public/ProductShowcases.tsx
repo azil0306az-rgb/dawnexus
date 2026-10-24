@@ -34,14 +34,19 @@ export interface ShowcaseDisplayItem {
 // Convert static fallback items to normalized display items
 const STATIC_FALLBACK_ITEMS: ShowcaseDisplayItem[] = PRODUCT_SHOWCASES_DATA.map(item => ({
   id: item.id,
-  slug: item.id,
+  slug: item.slug || item.id,
   name: item.name,
+  subtitle: item.subtitle,
   category: item.category,
-  status: item.status,
+  badge: item.badge,
+  status: item.status === 'Live' ? 'Demo Available' : item.status,
   shortDescription: item.shortDescription,
   thumbnailUrl: item.thumbnailUrl,
   demoUrl: item.demoUrl,
-  inquiryService: item.inquiryService
+  websiteUrl: item.websiteUrl,
+  inquiryService: item.inquiryService,
+  techStack: item.techStack,
+  isFeatured: item.isFeatured
 }));
 
 export const ProductShowcases: React.FC = () => {
@@ -171,7 +176,7 @@ export const ProductShowcases: React.FC = () => {
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-          {filteredItems.map((item) => (
+          {filteredItems.map((item, index) => (
             <div
               key={item.id}
               className="bg-[#050505] border border-[#252525] rounded-2xl overflow-hidden flex flex-col justify-between hover:border-[#C7FF4D]/40 transition-all duration-300 group shadow-lg"
@@ -185,7 +190,9 @@ export const ProductShowcases: React.FC = () => {
                   <img
                     src={item.thumbnailUrl}
                     alt={`${item.name} concept showcase`}
-                    loading="lazy"
+                    loading={index < 3 ? 'eager' : 'lazy'}
+                    // @ts-expect-error React 18 / 19 fetchPriority compatibility
+                    fetchPriority={index < 3 ? 'high' : 'auto'}
                     decoding="async"
                     width="1376"
                     height="768"

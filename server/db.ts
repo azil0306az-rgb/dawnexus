@@ -15,6 +15,7 @@ import {
   pushNotificationSettingsToSupabase,
   pushSeoConnectionToSupabase,
   pushCalculatorPricingConfigToSupabase,
+  pushContactSettingsToSupabase,
   isSupabaseActive
 } from './supabase.js';
 import {
@@ -23,6 +24,27 @@ import {
 } from './calculatorPricing.js';
 import { DEFAULT_SERVICE_PAGES } from './websiteContent.js';
 import { seedInitialShowcases } from './showcaseSeeds.js';
+
+export interface ContactSettings {
+  id?: number;
+  phone: string;
+  email: string;
+  instagram_url: string;
+  facebook_url: string;
+  linkedin_url: string;
+  address?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const DEFAULT_CONTACT_SETTINGS: ContactSettings = {
+  phone: '+91 95669 88995',
+  email: 'contact@dawnexus.in',
+  instagram_url: 'https://www.instagram.com/dawnexus',
+  facebook_url: 'https://www.facebook.com/dawnexus',
+  linkedin_url: 'https://www.linkedin.com/company/dawnexus',
+  address: 'Coimbatore, Tamil Nadu, India'
+};
 
 // Define the DB path
 const defaultDbPath = process.env.VERCEL
@@ -515,6 +537,44 @@ export function initDatabase() {
   }
 
   // ----------------------------------------------------
+  // CONTACT & SOCIAL SETTINGS
+  // ----------------------------------------------------
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contact_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      phone TEXT NOT NULL DEFAULT '+91 95669 88995',
+      email TEXT NOT NULL DEFAULT 'contact@dawnexus.in',
+      instagram_url TEXT NOT NULL DEFAULT 'https://www.instagram.com/dawnexus',
+      facebook_url TEXT NOT NULL DEFAULT 'https://www.facebook.com/dawnexus',
+      linkedin_url TEXT NOT NULL DEFAULT 'https://www.linkedin.com/company/dawnexus',
+      address TEXT DEFAULT 'Coimbatore, Tamil Nadu, India',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  try {
+    const contactRow = db.prepare('SELECT id FROM contact_settings WHERE id = 1').get();
+    if (!contactRow) {
+      db.prepare(`
+        INSERT INTO contact_settings (id, phone, email, instagram_url, facebook_url, linkedin_url, address, created_at, updated_at)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        DEFAULT_CONTACT_SETTINGS.phone,
+        DEFAULT_CONTACT_SETTINGS.email,
+        DEFAULT_CONTACT_SETTINGS.instagram_url,
+        DEFAULT_CONTACT_SETTINGS.facebook_url,
+        DEFAULT_CONTACT_SETTINGS.linkedin_url,
+        DEFAULT_CONTACT_SETTINGS.address,
+        new Date().toISOString(),
+        new Date().toISOString()
+      );
+    }
+  } catch (err) {
+    console.warn('[Contact Settings Seed Notice]:', err);
+  }
+
+  // ----------------------------------------------------
   // VERSION 6.1.3: DYNAMIC WEBSITE CONTENT & VISITOR BEHAVIOUR INTELLIGENCE
   // ----------------------------------------------------
   db.exec(`
@@ -920,6 +980,73 @@ export function updateCalculatorPricingConfig(newConfig: CalculatorPricingConfig
   `).run(json, nextVersion, now);
 
   return configToSave;
+}
+
+export function getContactSettings(): ContactSettings {
+  try {
+    const row = db.prepare('SELECT * FROM contact_settings WHERE id = 1').get() as any;
+    if (row) {
+      return {
+        id: 1,
+        phone: row.phone || DEFAULT_CONTACT_SETTINGS.phone,
+        email: row.email || DEFAULT_CONTACT_SETTINGS.email,
+        instagram_url: row.instagram_url || DEFAULT_CONTACT_SETTINGS.instagram_url,
+        facebook_url: row.facebook_url || DEFAULT_CONTACT_SETTINGS.facebook_url,
+        linkedin_url: row.linkedin_url || DEFAULT_CONTACT_SETTINGS.linkedin_url,
+        address: row.address !== undefined ? row.address : DEFAULT_CONTACT_SETTINGS.address,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    }
+  } catch (err) {
+    console.warn('[Get Contact Settings Notice]:', err);
+  }
+  return { ...DEFAULT_CONTACT_SETTINGS };
+}
+
+export function updateContactSettings(settings: Partial<ContactSettings>): ContactSettings {
+  const current = getContactSettings();
+  const now = new Date().toISOString();
+  const phone = (settings.phone !== undefined ? settings.phone : current.phone).trim();
+  const email = (settings.email !== undefined ? settings.email : current.email).trim();
+  const instagram_url = (settings.instagram_url !== undefined ? settings.instagram_url : current.instagram_url).trim();
+  const facebook_url = (settings.facebook_url !== undefined ? settings.facebook_url : current.facebook_url).trim();
+  const linkedin_url = (settings.linkedin_url !== undefined ? settings.linkedin_url : current.linkedin_url).trim();
+  const address = settings.address !== undefined ? settings.address.trim() : (current.address || '');
+
+  db.prepare(`
+    INSERT INTO contact_settings (id, phone, email, instagram_url, facebook_url, linkedin_url, address, updated_at)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      phone = excluded.phone,
+      email = excluded.email,
+      instagram_url = excluded.instagram_url,
+      facebook_url = excluded.facebook_url,
+      linkedin_url = excluded.linkedin_url,
+      address = excluded.address,
+      updated_at = excluded.updated_at
+  `).run(phone, email, instagram_url, facebook_url, linkedin_url, address, now);
+
+  const updated: ContactSettings = {
+    id: 1,
+    phone,
+    email,
+    instagram_url,
+    facebook_url,
+    linkedin_url,
+    address,
+    updated_at: now
+  };
+
+  return updated;
+}
+
+export async function persistContactSettings(settings: ContactSettings): Promise<void> {
+  if (isSupabaseActive()) {
+    await pushContactSettingsToSupabase(settings).catch(err => {
+      console.warn('[Persist Contact Settings Notice]: Failed to push to Supabase:', err);
+    });
+  }
 }
 
 export function getEnquiryById(id: number): EnquiryRecord | null {

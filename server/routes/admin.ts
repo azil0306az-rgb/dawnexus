@@ -44,6 +44,9 @@ import {
   getCalculatorPricingConfig,
   updateCalculatorPricingConfig,
   persistCalculatorPricingConfig,
+  getContactSettings,
+  updateContactSettings,
+  persistContactSettings,
   refreshFromPersistentStore,
   persistBlog,
   persistBlogDeletion,
@@ -1690,6 +1693,67 @@ adminRouter.put('/calculator/config', async (req, res) => {
   } catch (err: any) {
     console.error('[Admin Update Calculator Config Error]:', err);
     return res.status(500).json({ error: 'Failed to save calculator settings.' });
+  }
+});
+
+// ======================================================================
+// CONTACT & SOCIAL SETTINGS
+// ======================================================================
+
+// GET /api/admin/contact-settings
+adminRouter.get('/contact-settings', async (req, res) => {
+  try {
+    const settings = getContactSettings();
+    return res.json({
+      success: true,
+      settings
+    });
+  } catch (err: any) {
+    console.error('[Admin Get Contact Settings Error]:', err);
+    return res.status(500).json({ error: 'Failed to retrieve contact settings.' });
+  }
+});
+
+// PUT /api/admin/contact-settings
+adminRouter.put('/contact-settings', async (req, res) => {
+  try {
+    const { phone, email, instagram_url, facebook_url, linkedin_url, address } = req.body;
+
+    if (!phone || typeof phone !== 'string' || !phone.trim()) {
+      return res.status(400).json({ error: 'A valid phone number is required.' });
+    }
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+    if (!instagram_url || typeof instagram_url !== 'string') {
+      return res.status(400).json({ error: 'Instagram URL is required.' });
+    }
+    if (!facebook_url || typeof facebook_url !== 'string') {
+      return res.status(400).json({ error: 'Facebook URL is required.' });
+    }
+    if (!linkedin_url || typeof linkedin_url !== 'string') {
+      return res.status(400).json({ error: 'LinkedIn URL is required.' });
+    }
+
+    const updated = updateContactSettings({
+      phone: phone.trim(),
+      email: email.trim(),
+      instagram_url: instagram_url.trim(),
+      facebook_url: facebook_url.trim(),
+      linkedin_url: linkedin_url.trim(),
+      address: typeof address === 'string' ? address.trim() : ''
+    });
+
+    await persistContactSettings(updated);
+
+    return res.json({
+      success: true,
+      message: 'Contact and social settings updated successfully.',
+      settings: updated
+    });
+  } catch (err: any) {
+    console.error('[Admin Update Contact Settings Error]:', err);
+    return res.status(500).json({ error: 'Failed to update contact settings.' });
   }
 });
 
