@@ -3,7 +3,7 @@
  * Solves raw HTML view-source crawler indexability and social previews
  */
 
-import { getBlogBySlug, getPublishedBlogsForSitemap } from './db.js';
+import { getBlogBySlug, getPublishedBlogsForSitemap, getShowcaseBySlug } from './db.js';
 import { DEFAULT_SERVICE_PAGES } from './websiteContent.js';
 import { JsonLdService } from './jsonLdService.js';
 
@@ -303,6 +303,70 @@ export function resolvePageMetadata(pathname: string): PageMetadata {
         title: 'Article Not Found | Dawnexus',
         description: 'The requested article could not be found or has been moved.',
         canonicalUrl: `${BASE_URL}/blog`,
+        ogImage: DEFAULT_OG_IMAGE,
+        ogType: 'website',
+        status: 404
+      };
+    }
+  }
+
+  // 6. Showcase Detail Page (/showcases/:slug)
+  const showcaseMatch = cleanPath.match(/^\/showcases\/([^/]+)$/);
+  if (showcaseMatch) {
+    const slug = showcaseMatch[1];
+    const showcase = getShowcaseBySlug(slug);
+
+    if (showcase && showcase.publication_status === 'published') {
+      const title = `${showcase.title} | Products & Showcases | Dawnexus`;
+      const description = showcase.description || 'Interactive product showcase by Dawnexus.';
+      const canonicalUrl = `${BASE_URL}/showcases/${showcase.slug}`;
+      const ogImage = showcase.screenshot_url?.startsWith('http')
+        ? showcase.screenshot_url
+        : (showcase.screenshot_url ? `${BASE_URL}${showcase.screenshot_url}` : DEFAULT_OG_IMAGE);
+
+      const bodyHtml = `
+        <header class="py-6 px-4 max-w-7xl mx-auto">
+          <nav aria-label="Breadcrumb Navigation" class="text-sm text-gray-400 mb-4">
+            <a href="/" class="hover:text-white">Home</a> &gt; <a href="/#products-showcases" class="hover:text-white">Products & Showcases</a> &gt; <span class="text-white">${escapeHtml(showcase.title)}</span>
+          </nav>
+        </header>
+        <main class="max-w-4xl mx-auto px-4 py-8">
+          <article>
+            <div class="mb-4 text-[#C7FF4D] text-xs font-mono uppercase tracking-widest">${escapeHtml(showcase.category)}</div>
+            <h1 class="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-[1.15] mb-4">${escapeHtml(showcase.title)}</h1>
+            <p class="text-lg text-gray-300 leading-relaxed mb-6">${escapeHtml(showcase.description)}</p>
+            ${showcase.long_description ? `<div class="prose prose-invert max-w-none text-gray-300 leading-relaxed mb-8">${escapeHtml(showcase.long_description)}</div>` : ''}
+          </article>
+        </main>
+        <footer class="max-w-7xl mx-auto px-4 py-8 border-t border-white/10 text-xs text-gray-500">
+          <div class="flex flex-wrap gap-4">
+            <a href="/" class="hover:text-gray-300">Home</a>
+            <a href="/#products-showcases" class="hover:text-gray-300">Showcases</a>
+            <a href="/#contact" class="hover:text-gray-300">Contact</a>
+          </div>
+        </footer>`;
+
+      return {
+        title,
+        description,
+        canonicalUrl,
+        ogImage,
+        ogType: 'website',
+        schema: {
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: showcase.title,
+          applicationCategory: 'BusinessApplication',
+          description: showcase.description,
+          url: canonicalUrl
+        },
+        bodyHtml
+      };
+    } else {
+      return {
+        title: 'Showcase Not Found | Dawnexus',
+        description: 'The requested product showcase could not be found or is not yet published.',
+        canonicalUrl: `${BASE_URL}/#products-showcases`,
         ogImage: DEFAULT_OG_IMAGE,
         ogType: 'website',
         status: 404

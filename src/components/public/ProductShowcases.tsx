@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
   ArrowRight, 
@@ -7,21 +7,93 @@ import {
   Layers, 
   Clock, 
   CheckCircle2, 
-  Compass 
+  Compass,
+  Eye,
+  Star
 } from 'lucide-react';
 import { PRODUCT_SHOWCASES_DATA, ProductShowcaseItem } from '../../data/productShowcases';
 import { navigateTo } from '../../utils/navigation';
 
+export interface ShowcaseDisplayItem {
+  id: string | number;
+  slug: string;
+  name: string;
+  subtitle?: string;
+  category: string;
+  badge?: string;
+  status: string;
+  shortDescription: string;
+  thumbnailUrl: string;
+  demoUrl?: string;
+  websiteUrl?: string;
+  inquiryService: string;
+  techStack?: string[];
+  isFeatured?: boolean;
+}
+
+// Convert static fallback items to normalized display items
+const STATIC_FALLBACK_ITEMS: ShowcaseDisplayItem[] = PRODUCT_SHOWCASES_DATA.map(item => ({
+  id: item.id,
+  slug: item.id,
+  name: item.name,
+  category: item.category,
+  status: item.status,
+  shortDescription: item.shortDescription,
+  thumbnailUrl: item.thumbnailUrl,
+  demoUrl: item.demoUrl,
+  inquiryService: item.inquiryService
+}));
+
 export const ProductShowcases: React.FC = () => {
+  const [items, setItems] = useState<ShowcaseDisplayItem[]>(STATIC_FALLBACK_ITEMS);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  const categories = ['All', ...Array.from(new Set(PRODUCT_SHOWCASES_DATA.map(p => p.category)))];
+  // Fetch dynamic items from database
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDynamicShowcases = async () => {
+      try {
+        const res = await fetch('/api/showcases');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.showcases) && data.showcases.length > 0 && isMounted) {
+            const dynamicList: ShowcaseDisplayItem[] = data.showcases.map((s: any) => ({
+              id: s.id,
+              slug: s.slug || String(s.id),
+              name: s.title,
+              subtitle: s.subtitle,
+              category: s.category,
+              badge: s.badge,
+              status: s.status === 'Live' ? 'Demo Available' : s.status,
+              shortDescription: s.description,
+              thumbnailUrl: s.screenshot_thumbnail_url || s.screenshot_url || '/showcases/website-quotation-builder.webp',
+              demoUrl: s.demo_url || undefined,
+              websiteUrl: s.website_url || undefined,
+              inquiryService: s.title,
+              techStack: Array.isArray(s.tech_stack) ? s.tech_stack : [],
+              isFeatured: Boolean(s.is_featured)
+            }));
+            setItems(dynamicList);
+          }
+        }
+      } catch {
+        // Graceful fallback to static items if API is unreachable
+      }
+    };
+
+    fetchDynamicShowcases();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const categories = ['All', ...Array.from(new Set(items.map(p => p.category)))];
 
   const filteredItems = selectedCategory === 'All'
-    ? PRODUCT_SHOWCASES_DATA
-    : PRODUCT_SHOWCASES_DATA.filter(p => p.category === selectedCategory);
+    ? items
+    : items.filter(p => p.category === selectedCategory);
 
-  const handleDiscussClick = (product: ProductShowcaseItem) => {
+  const handleDiscussClick = (product: ShowcaseDisplayItem) => {
     navigateTo('/#contact');
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('select-service', { detail: product.inquiryService }));
@@ -32,9 +104,10 @@ export const ProductShowcases: React.FC = () => {
     navigateTo('/#contact');
   };
 
-  const getStatusBadge = (status: ProductShowcaseItem['status']) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Demo Available':
+      case 'Live':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-[#C7FF4D]/15 text-[#C7FF4D] border border-[#C7FF4D]/30 shadow-[0_0_12px_rgba(199,255,77,0.2)]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#C7FF4D] animate-pulse" />
@@ -105,7 +178,10 @@ export const ProductShowcases: React.FC = () => {
             >
               <div>
                 {/* Visual Thumbnail */}
-                <div className="relative aspect-video bg-[#121212] overflow-hidden border-b border-[#252525]">
+                <div 
+                  className="relative aspect-video bg-[#121212] overflow-hidden border-b border-[#252525] cursor-pointer"
+                  onClick={() => navigateTo(`/showcases/${item.slug}`)}
+                >
                   <img
                     src={item.thumbnailUrl}
                     alt={`${item.name} concept showcase`}
@@ -114,7 +190,6 @@ export const ProductShowcases: React.FC = () => {
                     width="1376"
                     height="768"
                     onError={(e) => {
-                      // Graceful fallback to dark branded placeholder if load fails
                       const target = e.currentTarget;
                       target.onerror = null;
                       target.src = '/brand/dawnexus-logo-original.webp';
@@ -136,29 +211,57 @@ export const ProductShowcases: React.FC = () => {
 
                 {/* Content */}
                 <div className="p-6">
-                  <h3 className="text-xl font-bold text-white group-hover:text-[#C7FF4D] transition-colors mb-2.5">
-                    {item.name}
-                  </h3>
-                  <p className="text-sm text-[#A5A5A5] leading-relaxed line-clamp-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <h3 
+                      onClick={() => navigateTo(`/showcases/${item.slug}`)}
+                      className="text-xl font-bold text-white group-hover:text-[#C7FF4D] transition-colors cursor-pointer"
+                    >
+                      {item.name}
+                    </h3>
+                    {item.badge && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#161616] text-[#A5A5A5] border border-[#262626] flex-shrink-0">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-sm text-[#A5A5A5] leading-relaxed line-clamp-3 mb-3">
                     {item.shortDescription}
                   </p>
+
+                  {/* Tech stack badges if present */}
+                  {item.techStack && item.techStack.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {item.techStack.slice(0, 3).map((t, tIdx) => (
+                        <span key={tIdx} className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#111111] text-[#888888] border border-[#202020]">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Action Bar */}
               <div className="px-6 py-4 bg-[#0B0B0B] border-t border-[#252525] flex items-center justify-between gap-3 text-xs">
                 {item.demoUrl ? (
-                  <button
-                    onClick={() => navigateTo(item.demoUrl!)}
+                  <a
+                    href={item.demoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C7FF4D] text-[#050505] font-bold text-xs hover:bg-[#d4ff70] transition-colors"
                   >
-                    <span>Explore Live Demo</span>
+                    <span>Explore Demo</span>
                     <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  </a>
                 ) : (
-                  <span className="text-[11px] font-mono text-[#737373]">
-                    {item.status === 'In Development' ? 'Engineering In Progress' : 'Roadmap Concept'}
-                  </span>
+                  <button
+                    onClick={() => navigateTo(`/showcases/${item.slug}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#141414] hover:bg-[#1f1f1f] text-white border border-[#282828] font-medium text-xs transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-[#C7FF4D]" />
+                    <span>View Details</span>
+                  </button>
                 )}
 
                 <button
@@ -200,4 +303,3 @@ export const ProductShowcases: React.FC = () => {
     </section>
   );
 };
-

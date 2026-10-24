@@ -34,6 +34,7 @@ import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BlogManager } from './BlogManager';
 import { NotificationSettings } from './NotificationSettings';
 import { ClientShowcaseManager } from './ClientShowcaseManager';
+import { ShowcaseManager } from './ShowcaseManager';
 import { DatabaseHealthDashboard } from './DatabaseHealthDashboard';
 import { CalculatorSettings } from './CalculatorSettings';
 import { GscDashboard } from './GscDashboard';
@@ -47,6 +48,7 @@ export type AdminTab =
   | 'overview'
   | 'enquiries'
   | 'clients'
+  | 'showcases'
   | 'blogs'
   | 'advanced-seo'
   | 'gsc'
@@ -62,6 +64,7 @@ const ALL_ADMIN_TABS: AdminTab[] = [
   'overview',
   'enquiries',
   'clients',
+  'showcases',
   'blogs',
   'advanced-seo',
   'gsc',
@@ -448,6 +451,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </button>
 
             <button
+              onClick={() => handleTabChange('showcases')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'showcases'
+                  ? 'bg-[#050505] text-[#C7FF4D] border border-[#252525]'
+                  : 'text-[#A5A5A5] hover:text-white hover:bg-[#050505]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Layers className="w-4 h-4" />
+                <span>Products & Showcases</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#C7FF4D]/10 text-[#C7FF4D]">
+                v8.4
+              </span>
+            </button>
+
+            <button
               onClick={() => handleTabChange('blogs')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 activeTab === 'blogs'
@@ -640,6 +660,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         
         {activeTab === 'clients' ? (
           <ClientShowcaseManager />
+        ) : activeTab === 'showcases' ? (
+          <ShowcaseManager />
         ) : activeTab === 'blogs' ? (
           <BlogManager
             initialBlogId={currentBlogId}

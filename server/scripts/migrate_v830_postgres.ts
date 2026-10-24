@@ -71,7 +71,55 @@ export async function ensurePostgresV830Schema(): Promise<void> {
       );
     `);
 
-    console.log('[Postgres Migration] v8.3.0 schema and columns successfully verified on remote PostgreSQL.');
+    // 4. Create showcases table for Version 8.4.0 Dynamic Products & Showcases CMS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS showcases (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        card_heading TEXT DEFAULT '',
+        full_heading TEXT DEFAULT '',
+        short_description TEXT NOT NULL DEFAULT '',
+        detailed_description TEXT DEFAULT '',
+        category TEXT NOT NULL DEFAULT 'Automation & Operations',
+        tagline TEXT DEFAULT '',
+        display_order INTEGER NOT NULL DEFAULT 0,
+        is_featured INTEGER NOT NULL DEFAULT 0,
+        is_visible INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'In Development',
+        launch_date TEXT DEFAULT '',
+        project_url TEXT DEFAULT '',
+        link_label TEXT DEFAULT 'Explore Live Demo',
+        is_link_enabled INTEGER NOT NULL DEFAULT 1,
+        open_in_new_tab INTEGER NOT NULL DEFAULT 1,
+        inquiry_service TEXT DEFAULT 'Website Design & Development',
+        screenshot_url TEXT NOT NULL DEFAULT '',
+        screenshot_source_url TEXT DEFAULT '',
+        screenshot_captured_at TIMESTAMPTZ DEFAULT NULL,
+        screenshot_alt TEXT DEFAULT '',
+        features TEXT DEFAULT '[]',
+        workflow_steps TEXT DEFAULT '[]',
+        capabilities TEXT DEFAULT '[]',
+        benefits TEXT DEFAULT '[]',
+        tech_stack TEXT DEFAULT '[]',
+        intended_audience TEXT DEFAULT '',
+        use_cases TEXT DEFAULT '[]',
+        project_challenges TEXT DEFAULT '',
+        implementation_approach TEXT DEFAULT '',
+        outcome_results TEXT DEFAULT '',
+        gallery_images TEXT DEFAULT '[]',
+        faq_items TEXT DEFAULT '[]',
+        publication_status TEXT NOT NULL DEFAULT 'Published',
+        published_at TIMESTAMPTZ DEFAULT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_pg_showcases_slug ON showcases(slug);
+      CREATE INDEX IF NOT EXISTS idx_pg_showcases_status ON showcases(status);
+      CREATE INDEX IF NOT EXISTS idx_pg_showcases_order ON showcases(display_order);
+    `);
+
+    console.log('[Postgres Migration] v8.3.0 & v8.4.0 schema and columns successfully verified on remote PostgreSQL.');
   } catch (err: any) {
     console.warn('[Postgres Migration Notice]:', err?.message || err);
   } finally {

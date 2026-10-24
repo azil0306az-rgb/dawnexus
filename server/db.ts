@@ -10,6 +10,8 @@ import {
   deleteBlogFromSupabase,
   pushClientToSupabase,
   deleteClientFromSupabase,
+  pushShowcaseToSupabase,
+  deleteShowcaseFromSupabase,
   pushNotificationSettingsToSupabase,
   pushSeoConnectionToSupabase,
   pushCalculatorPricingConfigToSupabase,
@@ -20,6 +22,7 @@ import {
   DEFAULT_PRICING_CONFIG
 } from './calculatorPricing.js';
 import { DEFAULT_SERVICE_PAGES } from './websiteContent.js';
+import { seedInitialShowcases } from './showcaseSeeds.js';
 
 // Define the DB path
 const defaultDbPath = process.env.VERCEL
@@ -336,6 +339,49 @@ export function initDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    -- Table for Version 8.4.0: Dynamic Products & Showcases CMS
+    CREATE TABLE IF NOT EXISTS showcases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      card_heading TEXT DEFAULT '',
+      full_heading TEXT DEFAULT '',
+      short_description TEXT NOT NULL DEFAULT '',
+      detailed_description TEXT DEFAULT '',
+      category TEXT NOT NULL DEFAULT 'Automation & Operations',
+      tagline TEXT DEFAULT '',
+      display_order INTEGER NOT NULL DEFAULT 0,
+      is_featured INTEGER NOT NULL DEFAULT 0,
+      is_visible INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'In Development',
+      launch_date TEXT DEFAULT '',
+      project_url TEXT DEFAULT '',
+      link_label TEXT DEFAULT 'Explore Live Demo',
+      is_link_enabled INTEGER NOT NULL DEFAULT 1,
+      open_in_new_tab INTEGER NOT NULL DEFAULT 1,
+      inquiry_service TEXT DEFAULT 'Website Design & Development',
+      screenshot_url TEXT NOT NULL DEFAULT '',
+      screenshot_source_url TEXT DEFAULT '',
+      screenshot_captured_at TEXT DEFAULT NULL,
+      screenshot_alt TEXT DEFAULT '',
+      features TEXT DEFAULT '[]',
+      workflow_steps TEXT DEFAULT '[]',
+      capabilities TEXT DEFAULT '[]',
+      benefits TEXT DEFAULT '[]',
+      tech_stack TEXT DEFAULT '[]',
+      intended_audience TEXT DEFAULT '',
+      use_cases TEXT DEFAULT '[]',
+      project_challenges TEXT DEFAULT '',
+      implementation_approach TEXT DEFAULT '',
+      outcome_results TEXT DEFAULT '',
+      gallery_images TEXT DEFAULT '[]',
+      faq_items TEXT DEFAULT '[]',
+      publication_status TEXT NOT NULL DEFAULT 'Published',
+      published_at TEXT DEFAULT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Create indexes for fast lookup and filtering
@@ -350,7 +396,22 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_otp_challenges_email ON notification_otp_challenges(email);
     CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
     CREATE INDEX IF NOT EXISTS idx_clients_order ON clients(display_order);
+    CREATE INDEX IF NOT EXISTS idx_showcases_status ON showcases(status);
+    CREATE INDEX IF NOT EXISTS idx_showcases_slug ON showcases(slug);
+    CREATE INDEX IF NOT EXISTS idx_showcases_order ON showcases(display_order);
+    CREATE INDEX IF NOT EXISTS idx_showcases_publication ON showcases(publication_status);
+    CREATE INDEX IF NOT EXISTS idx_showcases_visible ON showcases(is_visible);
   `);
+
+  // Initial seed for showcases if empty
+  try {
+    const showcasesCount = (db.prepare('SELECT COUNT(*) as c FROM showcases').get() as any)?.c || 0;
+    if (showcasesCount === 0) {
+      seedInitialShowcases(db);
+    }
+  } catch (seedErr: any) {
+    console.warn('[Showcases Seed Warning]:', seedErr?.message || seedErr);
+  }
 
   // Ensure singleton row exists in notification_settings
   db.exec(`
@@ -1861,6 +1922,16 @@ export async function persistClientDeletion(id: number): Promise<void> {
   await deleteClientFromSupabase(id);
 }
 
+export async function persistShowcase(showcase: ShowcaseRecord): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await pushShowcaseToSupabase(showcase);
+}
+
+export async function persistShowcaseDeletion(id: number): Promise<void> {
+  if (!isSupabaseActive()) return;
+  await deleteShowcaseFromSupabase(id);
+}
+
 export async function persistCalculatorPricingConfig(config: CalculatorPricingConfig): Promise<void> {
   if (!isSupabaseActive()) return;
   await pushCalculatorPricingConfigToSupabase(config);
@@ -2717,6 +2788,530 @@ export function reorderClients(orderedIds: number[]): boolean {
   const updateStmt = db.prepare('UPDATE clients SET display_order = ?, updated_at = ? WHERE id = ?');
   const now = new Date().toISOString();
   
+  for (let i = 0; i < orderedIds.length; i++) {
+    updateStmt.run(i, now, orderedIds[i]);
+  }
+  return true;
+}
+
+// ----------------------------------------------------
+// VERSION 8.4.0: DYNAMIC PRODUCTS & SHOWCASES CMS
+// ----------------------------------------------------
+
+export interface ShowcaseRecord {
+  id: number;
+  title: string;
+  slug: string;
+  card_heading: string;
+  full_heading: string;
+  short_description: string;
+  detailed_description: string;
+  category: string;
+  tagline: string;
+  display_order: number;
+  is_featured: number;
+  is_visible: number;
+  status: 'Live' | 'In Development' | 'Coming Soon';
+  launch_date: string;
+  project_url: string;
+  link_label: string;
+  is_link_enabled: number;
+  open_in_new_tab: number;
+  inquiry_service: string;
+  screenshot_url: string;
+  screenshot_source_url: string;
+  screenshot_captured_at: string | null;
+  screenshot_alt: string;
+  features: string;
+  workflow_steps: string;
+  capabilities: string;
+  benefits: string;
+  tech_stack: string;
+  intended_audience: string;
+  use_cases: string;
+  project_challenges: string;
+  implementation_approach: string;
+  outcome_results: string;
+  gallery_images: string;
+  faq_items: string;
+  publication_status: 'Draft' | 'Published' | 'Archived';
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateShowcaseInput {
+  title: string;
+  slug?: string;
+  card_heading?: string;
+  full_heading?: string;
+  short_description: string;
+  detailed_description?: string;
+  category?: string;
+  tagline?: string;
+  display_order?: number;
+  is_featured?: boolean | number;
+  is_visible?: boolean | number;
+  status?: 'Live' | 'In Development' | 'Coming Soon';
+  launch_date?: string;
+  project_url?: string;
+  link_label?: string;
+  is_link_enabled?: boolean | number;
+  open_in_new_tab?: boolean | number;
+  inquiry_service?: string;
+  screenshot_url?: string;
+  screenshot_source_url?: string;
+  screenshot_captured_at?: string | null;
+  screenshot_alt?: string;
+  features?: any[] | string;
+  workflow_steps?: any[] | string;
+  capabilities?: any[] | string;
+  benefits?: any[] | string;
+  tech_stack?: any[] | string;
+  intended_audience?: string;
+  use_cases?: any[] | string;
+  project_challenges?: string;
+  implementation_approach?: string;
+  outcome_results?: string;
+  gallery_images?: any[] | string;
+  faq_items?: any[] | string;
+  publication_status?: 'Draft' | 'Published' | 'Archived';
+}
+
+export type UpdateShowcaseInput = Partial<CreateShowcaseInput>;
+
+function parseJsonSafe<T>(val: any, fallback: T): T {
+  if (Array.isArray(val) || (typeof val === 'object' && val !== null)) {
+    return val as T;
+  }
+  if (typeof val === 'string' && val.trim()) {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+export function normalizeShowcaseRecord(r: any): any {
+  if (!r) return null;
+  const features = parseJsonSafe(r.features, []);
+  const workflow_steps = parseJsonSafe(r.workflow_steps, []);
+  const tech_stack = parseJsonSafe(r.tech_stack, []);
+  const capabilities = parseJsonSafe(r.capabilities, []);
+  const benefits = parseJsonSafe(r.benefits, []);
+  const use_cases = parseJsonSafe(r.use_cases, []);
+  const gallery_images = parseJsonSafe(r.gallery_images, []);
+  const faq_items = parseJsonSafe(r.faq_items, []);
+
+  return {
+    ...r,
+    description: r.short_description || '',
+    long_description: r.detailed_description || '',
+    subtitle: r.card_heading || '',
+    badge: r.tagline || '',
+    website_url: r.project_url || '',
+    demo_url: r.project_url || '',
+    screenshot_thumbnail_url: r.screenshot_url || '',
+    estimated_launch_date: r.launch_date || '',
+    features,
+    workflow_steps,
+    tech_stack,
+    capabilities,
+    benefits,
+    use_cases,
+    tags: capabilities.length > 0 ? capabilities : use_cases,
+    gallery_images,
+    faq_items,
+    is_featured: Boolean(r.is_featured),
+    client_inquiry_enabled: Boolean(r.is_link_enabled),
+    publication_status: r.publication_status ? r.publication_status.toLowerCase() : 'published'
+  };
+}
+
+export function getAllShowcases(params: {
+  search?: string;
+  status?: string;
+  category?: string;
+  publication_status?: string;
+  sortBy?: 'order' | 'updated' | 'title' | string;
+} = {}): ShowcaseRecord[] {
+  let whereClauses: string[] = [];
+  let queryArgs: (string | number)[] = [];
+
+  if (params.status && params.status !== 'All') {
+    whereClauses.push('status = ?');
+    queryArgs.push(params.status);
+  }
+
+  if (params.category && params.category !== 'All') {
+    whereClauses.push('category = ?');
+    queryArgs.push(params.category);
+  }
+
+  if (params.publication_status && params.publication_status !== 'All') {
+    whereClauses.push('LOWER(publication_status) = ?');
+    queryArgs.push(params.publication_status.toLowerCase());
+  }
+
+  if (params.search && params.search.trim()) {
+    const term = `%${params.search.trim().toLowerCase()}%`;
+    whereClauses.push('(LOWER(title) LIKE ? OR LOWER(slug) LIKE ? OR LOWER(short_description) LIKE ? OR LOWER(category) LIKE ?)');
+    queryArgs.push(term, term, term, term);
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+  let orderSql = 'ORDER BY display_order ASC, created_at DESC';
+  if (params.sortBy === 'updated' || params.sortBy === 'newest') {
+    orderSql = 'ORDER BY updated_at DESC';
+  } else if (params.sortBy === 'title') {
+    orderSql = 'ORDER BY title ASC';
+  }
+
+  const stmt = db.prepare(`SELECT * FROM showcases ${whereSql} ${orderSql}`);
+  const rows = stmt.all(...queryArgs) as any[];
+  return rows.map(normalizeShowcaseRecord);
+}
+
+export function getPublicShowcases(params: { category?: string } = {}): ShowcaseRecord[] {
+  let whereSql = "WHERE LOWER(publication_status) = 'published' AND is_visible = 1";
+  let queryArgs: (string | number)[] = [];
+
+  if (params.category && params.category !== 'All') {
+    whereSql += ' AND category = ?';
+    queryArgs.push(params.category);
+  }
+
+  const stmt = db.prepare(`
+    SELECT * FROM showcases ${whereSql} ORDER BY display_order ASC, created_at DESC
+  `);
+  const rows = stmt.all(...queryArgs) as any[];
+  return rows.map(normalizeShowcaseRecord);
+}
+
+export async function getPublicShowcasesAsync(params: { category?: string } = {}): Promise<ShowcaseRecord[]> {
+  const local = getPublicShowcases(params);
+  if (local.length > 0) return local;
+
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      let query = `${supabaseUrl}/rest/v1/showcases?publication_status=eq.Published&is_visible=eq.1&order=display_order.asc,created_at.desc`;
+      if (params.category && params.category !== 'All') {
+        query += `&category=eq.${encodeURIComponent(params.category)}`;
+      }
+      const res = await fetch(query, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      });
+      if (res.ok) {
+        const remote = await res.json();
+        if (Array.isArray(remote) && remote.length > 0) {
+          return remote.map(normalizeShowcaseRecord);
+        }
+      }
+    } catch (err) {
+      console.warn('[getPublicShowcasesAsync Supabase query error]:', err);
+    }
+  }
+
+  return local;
+}
+
+export function getShowcaseById(id: number): ShowcaseRecord | null {
+  const stmt = db.prepare('SELECT * FROM showcases WHERE id = ?');
+  const res = stmt.get(id);
+  return normalizeShowcaseRecord(res);
+}
+
+export function getShowcaseBySlug(slug: string): ShowcaseRecord | null {
+  const norm = slug.trim().toLowerCase();
+  const stmt = db.prepare('SELECT * FROM showcases WHERE LOWER(slug) = ?');
+  const res = stmt.get(norm);
+  return normalizeShowcaseRecord(res);
+}
+
+function generateShowcaseSlug(title: string): string {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'showcase';
+  
+  let candidate = base;
+  let counter = 1;
+  while (true) {
+    const existing = db.prepare('SELECT id FROM showcases WHERE LOWER(slug) = ?').get(candidate);
+    if (!existing) return candidate;
+    counter++;
+    candidate = `${base}-${counter}`;
+  }
+}
+
+export function createShowcase(input: CreateShowcaseInput): ShowcaseRecord {
+  const now = new Date().toISOString();
+  const title = input.title.trim();
+  const baseSlug = (input.slug && input.slug.trim()) ? input.slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') : generateShowcaseSlug(title);
+
+  // Ensure slug uniqueness
+  let slug = baseSlug;
+  let counter = 1;
+  while (true) {
+    const existing = db.prepare('SELECT id FROM showcases WHERE LOWER(slug) = ?').get(slug);
+    if (!existing) break;
+    counter++;
+    slug = `${baseSlug}-${counter}`;
+  }
+
+  let order = input.display_order;
+  if (order === undefined || isNaN(order)) {
+    const maxRow = db.prepare('SELECT MAX(display_order) as maxOrder FROM showcases').get() as { maxOrder: number | null };
+    order = (maxRow?.maxOrder ?? -1) + 1;
+  }
+
+  const isFeatured = input.is_featured ? 1 : 0;
+  const isVisible = input.is_visible !== undefined ? (input.is_visible ? 1 : 0) : 1;
+  const isLinkEnabled = input.is_link_enabled !== undefined
+    ? (input.is_link_enabled ? 1 : 0)
+    : ((input as any).client_inquiry_enabled !== undefined ? ((input as any).client_inquiry_enabled ? 1 : 0) : 1);
+  const openInNewTab = input.open_in_new_tab !== undefined ? (input.open_in_new_tab ? 1 : 0) : 1;
+
+  let pubStatus = input.publication_status || 'Published';
+  if (pubStatus.toLowerCase() === 'published') pubStatus = 'Published';
+  else if (pubStatus.toLowerCase() === 'draft') pubStatus = 'Draft';
+  else if (pubStatus.toLowerCase() === 'archived') pubStatus = 'Archived';
+
+  const publishedAt = pubStatus === 'Published' ? now : null;
+
+  const shortDesc = (input.short_description || (input as any).description || '').trim();
+  const detailedDesc = (input.detailed_description || (input as any).long_description || '').trim();
+  const cardHeading = (input.card_heading || (input as any).subtitle || '').trim();
+  const tagline = (input.tagline || (input as any).badge || '').trim();
+  const projectUrl = (input.project_url || (input as any).website_url || (input as any).demo_url || '').trim();
+  const launchDate = (input.launch_date || (input as any).estimated_launch_date || '').trim();
+  const screenshotUrl = (input.screenshot_url || (input as any).screenshot_thumbnail_url || '').trim();
+
+  const featuresStr = typeof input.features === 'string' ? input.features : JSON.stringify(input.features || []);
+  const workflowStr = typeof input.workflow_steps === 'string' ? input.workflow_steps : JSON.stringify(input.workflow_steps || []);
+  const capabilitiesStr = typeof input.capabilities === 'string' ? input.capabilities : JSON.stringify(input.capabilities || (input as any).tags || []);
+  const benefitsStr = typeof input.benefits === 'string' ? input.benefits : JSON.stringify(input.benefits || []);
+  const techStackStr = typeof input.tech_stack === 'string' ? input.tech_stack : JSON.stringify(input.tech_stack || []);
+  const useCasesStr = typeof input.use_cases === 'string' ? input.use_cases : JSON.stringify(input.use_cases || (input as any).tags || []);
+  const galleryStr = typeof input.gallery_images === 'string' ? input.gallery_images : JSON.stringify(input.gallery_images || []);
+  const faqStr = typeof input.faq_items === 'string' ? input.faq_items : JSON.stringify(input.faq_items || []);
+
+  const stmt = db.prepare(`
+    INSERT INTO showcases (
+      title, slug, card_heading, full_heading, short_description, detailed_description,
+      category, tagline, display_order, is_featured, is_visible, status, launch_date,
+      project_url, link_label, is_link_enabled, open_in_new_tab, inquiry_service,
+      screenshot_url, screenshot_source_url, screenshot_captured_at, screenshot_alt,
+      features, workflow_steps, capabilities, benefits, tech_stack, intended_audience,
+      use_cases, project_challenges, implementation_approach, outcome_results,
+      gallery_images, faq_items, publication_status, published_at, created_at, updated_at
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?
+    )
+  `);
+
+  const info = stmt.run(
+    title,
+    slug,
+    cardHeading,
+    (input.full_heading || '').trim(),
+    shortDesc,
+    detailedDesc,
+    (input.category || 'Automation & Operations').trim(),
+    tagline,
+    order,
+    isFeatured,
+    isVisible,
+    input.status || 'In Development',
+    launchDate,
+    projectUrl,
+    (input.link_label || 'Explore Live Demo').trim(),
+    isLinkEnabled,
+    openInNewTab,
+    (input.inquiry_service || 'Website Design & Development').trim(),
+    screenshotUrl,
+    (input.screenshot_source_url || '').trim(),
+    input.screenshot_captured_at || (screenshotUrl ? now : null),
+    (input.screenshot_alt || `${title} concept showcase`).trim(),
+    featuresStr,
+    workflowStr,
+    capabilitiesStr,
+    benefitsStr,
+    techStackStr,
+    (input.intended_audience || '').trim(),
+    useCasesStr,
+    (input.project_challenges || '').trim(),
+    (input.implementation_approach || '').trim(),
+    (input.outcome_results || '').trim(),
+    galleryStr,
+    faqStr,
+    pubStatus,
+    publishedAt,
+    now,
+    now
+  );
+
+  return getShowcaseById(Number(info.lastInsertRowid))!;
+}
+
+export function updateShowcase(id: number, input: UpdateShowcaseInput): ShowcaseRecord | null {
+  const current = getShowcaseById(id);
+  if (!current) return null;
+
+  const now = new Date().toISOString();
+  const title = input.title !== undefined ? input.title.trim() : current.title;
+  let slug = current.slug;
+  if (input.slug !== undefined && input.slug.trim()) {
+    const desired = input.slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    const existing = db.prepare('SELECT id FROM showcases WHERE LOWER(slug) = ? AND id != ?').get(desired, id);
+    if (!existing) {
+      slug = desired;
+    }
+  }
+
+  const cardHeading = input.card_heading !== undefined
+    ? input.card_heading.trim()
+    : ((input as any).subtitle !== undefined ? ((input as any).subtitle || '').trim() : current.card_heading);
+  const fullHeading = input.full_heading !== undefined ? input.full_heading.trim() : current.full_heading;
+  const shortDesc = input.short_description !== undefined
+    ? input.short_description.trim()
+    : ((input as any).description !== undefined ? ((input as any).description || '').trim() : current.short_description);
+  const detailedDesc = input.detailed_description !== undefined
+    ? input.detailed_description.trim()
+    : ((input as any).long_description !== undefined ? ((input as any).long_description || '').trim() : current.detailed_description);
+  const category = input.category !== undefined ? input.category.trim() : current.category;
+  const tagline = input.tagline !== undefined
+    ? input.tagline.trim()
+    : ((input as any).badge !== undefined ? ((input as any).badge || '').trim() : current.tagline);
+  const displayOrder = input.display_order !== undefined ? Number(input.display_order) : (current.display_order || 0);
+  const isFeatured = input.is_featured !== undefined ? (input.is_featured ? 1 : 0) : (current.is_featured ? 1 : 0);
+  const isVisible = input.is_visible !== undefined ? (input.is_visible ? 1 : 0) : (current.is_visible ? 1 : 0);
+  const status = input.status !== undefined ? input.status : current.status;
+  const launchDate = input.launch_date !== undefined
+    ? input.launch_date.trim()
+    : ((input as any).estimated_launch_date !== undefined ? ((input as any).estimated_launch_date || '').trim() : (current.launch_date || ''));
+  const projectUrl = input.project_url !== undefined
+    ? input.project_url.trim()
+    : ((input as any).website_url !== undefined ? ((input as any).website_url || '').trim() : ((input as any).demo_url !== undefined ? ((input as any).demo_url || '').trim() : (current.project_url || '')));
+  const linkLabel = input.link_label !== undefined ? input.link_label.trim() : (current.link_label || 'Explore Live Demo');
+  const isLinkEnabled = input.is_link_enabled !== undefined
+    ? (input.is_link_enabled ? 1 : 0)
+    : ((input as any).client_inquiry_enabled !== undefined ? ((input as any).client_inquiry_enabled ? 1 : 0) : (current.is_link_enabled ? 1 : 0));
+  const openInNewTab = input.open_in_new_tab !== undefined ? (input.open_in_new_tab ? 1 : 0) : (current.open_in_new_tab ? 1 : 0);
+  const inquiryService = input.inquiry_service !== undefined ? input.inquiry_service.trim() : current.inquiry_service;
+  const screenshotUrl = input.screenshot_url !== undefined
+    ? input.screenshot_url.trim()
+    : ((input as any).screenshot_thumbnail_url !== undefined ? ((input as any).screenshot_thumbnail_url || '').trim() : current.screenshot_url);
+  const screenshotSourceUrl = input.screenshot_source_url !== undefined ? input.screenshot_source_url.trim() : current.screenshot_source_url;
+  const screenshotCapturedAt = input.screenshot_captured_at !== undefined ? input.screenshot_captured_at : current.screenshot_captured_at;
+  const screenshotAlt = input.screenshot_alt !== undefined ? input.screenshot_alt.trim() : current.screenshot_alt;
+
+  const features = input.features !== undefined
+    ? (typeof input.features === 'string' ? input.features : JSON.stringify(input.features))
+    : (typeof current.features === 'string' ? current.features : JSON.stringify(current.features || []));
+  const workflowSteps = input.workflow_steps !== undefined
+    ? (typeof input.workflow_steps === 'string' ? input.workflow_steps : JSON.stringify(input.workflow_steps))
+    : (typeof current.workflow_steps === 'string' ? current.workflow_steps : JSON.stringify(current.workflow_steps || []));
+  const capabilities = input.capabilities !== undefined
+    ? (typeof input.capabilities === 'string' ? input.capabilities : JSON.stringify(input.capabilities))
+    : ((input as any).tags !== undefined ? JSON.stringify((input as any).tags) : (typeof current.capabilities === 'string' ? current.capabilities : JSON.stringify(current.capabilities || [])));
+  const benefits = input.benefits !== undefined
+    ? (typeof input.benefits === 'string' ? input.benefits : JSON.stringify(input.benefits))
+    : (typeof current.benefits === 'string' ? current.benefits : JSON.stringify(current.benefits || []));
+  const techStack = input.tech_stack !== undefined
+    ? (typeof input.tech_stack === 'string' ? input.tech_stack : JSON.stringify(input.tech_stack))
+    : (typeof current.tech_stack === 'string' ? current.tech_stack : JSON.stringify(current.tech_stack || []));
+  const intendedAudience = input.intended_audience !== undefined ? input.intended_audience.trim() : (current.intended_audience || '');
+  const useCases = input.use_cases !== undefined
+    ? (typeof input.use_cases === 'string' ? input.use_cases : JSON.stringify(input.use_cases))
+    : (typeof current.use_cases === 'string' ? current.use_cases : JSON.stringify(current.use_cases || []));
+  const projectChallenges = input.project_challenges !== undefined ? input.project_challenges.trim() : (current.project_challenges || '');
+  const implementationApproach = input.implementation_approach !== undefined ? input.implementation_approach.trim() : (current.implementation_approach || '');
+  const outcomeResults = input.outcome_results !== undefined ? input.outcome_results.trim() : (current.outcome_results || '');
+  const galleryImages = input.gallery_images !== undefined
+    ? (typeof input.gallery_images === 'string' ? input.gallery_images : JSON.stringify(input.gallery_images))
+    : (typeof current.gallery_images === 'string' ? current.gallery_images : JSON.stringify(current.gallery_images || []));
+  const faqItems = input.faq_items !== undefined
+    ? (typeof input.faq_items === 'string' ? input.faq_items : JSON.stringify(input.faq_items))
+    : (typeof current.faq_items === 'string' ? current.faq_items : JSON.stringify(current.faq_items || []));
+
+  let publicationStatus = current.publication_status;
+  let publishedAt = current.published_at;
+  if (input.publication_status !== undefined) {
+    const pLower = input.publication_status.toLowerCase();
+    if (pLower === 'published') publicationStatus = 'Published';
+    else if (pLower === 'draft') publicationStatus = 'Draft';
+    else if (pLower === 'archived') publicationStatus = 'Archived';
+    else publicationStatus = input.publication_status;
+
+    if (pLower === 'published' && !publishedAt) {
+      publishedAt = now;
+    }
+  }
+
+  db.prepare(`
+    UPDATE showcases SET
+      title = ?, slug = ?, card_heading = ?, full_heading = ?, short_description = ?, detailed_description = ?,
+      category = ?, tagline = ?, display_order = ?, is_featured = ?, is_visible = ?, status = ?, launch_date = ?,
+      project_url = ?, link_label = ?, is_link_enabled = ?, open_in_new_tab = ?, inquiry_service = ?,
+      screenshot_url = ?, screenshot_source_url = ?, screenshot_captured_at = ?, screenshot_alt = ?,
+      features = ?, workflow_steps = ?, capabilities = ?, benefits = ?, tech_stack = ?, intended_audience = ?,
+      use_cases = ?, project_challenges = ?, implementation_approach = ?, outcome_results = ?,
+      gallery_images = ?, faq_items = ?, publication_status = ?, published_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    title, slug, cardHeading, fullHeading, shortDesc, detailedDesc,
+    category, tagline, displayOrder, isFeatured, isVisible, status, launchDate,
+    projectUrl, linkLabel, isLinkEnabled, openInNewTab, inquiryService,
+    screenshotUrl, screenshotSourceUrl, screenshotCapturedAt, screenshotAlt,
+    features, workflowSteps, capabilities, benefits, techStack, intendedAudience,
+    useCases, projectChallenges, implementationApproach, outcomeResults,
+    galleryImages, faqItems, publicationStatus, publishedAt, now,
+    id
+  );
+
+  return getShowcaseById(id);
+}
+
+export function deleteShowcase(id: number): boolean {
+  const res = db.prepare('DELETE FROM showcases WHERE id = ?').run(id);
+  return res.changes > 0;
+}
+
+export function duplicateShowcase(id: number): ShowcaseRecord | null {
+  const original = getShowcaseById(id);
+  if (!original) return null;
+
+  const newTitle = `${original.title} (Copy)`;
+  const newSlug = generateShowcaseSlug(newTitle);
+
+  return createShowcase({
+    ...original,
+    title: newTitle,
+    slug: newSlug,
+    publication_status: 'Draft',
+    display_order: original.display_order + 1
+  });
+}
+
+export function reorderShowcases(orderedIds: number[]): boolean {
+  const updateStmt = db.prepare('UPDATE showcases SET display_order = ?, updated_at = ? WHERE id = ?');
+  const now = new Date().toISOString();
+
   for (let i = 0; i < orderedIds.length; i++) {
     updateStmt.run(i, now, orderedIds[i]);
   }

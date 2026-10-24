@@ -156,6 +156,10 @@
       "destination": "/api/index.ts"
     },
     {
+      "source": "/showcases/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
       "source": "/website-cost-calculator",
       "destination": "/api/index.ts"
     },

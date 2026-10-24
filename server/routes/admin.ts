@@ -32,6 +32,15 @@ import {
   updateClient,
   deleteClient,
   reorderClients,
+  getAllShowcases,
+  getShowcaseById,
+  createShowcase,
+  updateShowcase,
+  deleteShowcase,
+  duplicateShowcase,
+  reorderShowcases,
+  persistShowcase,
+  persistShowcaseDeletion,
   getCalculatorPricingConfig,
   updateCalculatorPricingConfig,
   persistCalculatorPricingConfig,
@@ -70,6 +79,8 @@ import { GeminiService } from '../geminiService.js';
 import { assessInformationGain, detectContentOverlap } from '../seoQualityService.js';
 import { auditHtmlPayloads } from '../payloadAudit.js';
 import { generateServerJsonLd, validateJsonLdStructure } from '../jsonLdService.js';
+import { captureWebsiteScreenshot, persistScreenshotBuffer, validateImageBuffer } from '../services/screenshotService.js';
+import { validateSsrfSafeUrl } from '../services/ssrfProtection.js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1196,6 +1207,401 @@ adminRouter.post('/clients/upload-image', async (req, res) => {
   } catch (err: any) {
     console.error('[Client Image Upload Error]:', err);
     return res.status(500).json({ error: 'Failed to process client image upload.' });
+  }
+});
+
+// ======================================================================
+// PRODUCTS & SHOWCASES CMS (VERSION 8.4.0)
+// ======================================================================
+
+// GET /api/admin/showcases - List all showcase items with filtering & sorting
+adminRouter.get('/showcases', async (req, res) => {
+  try {
+    await refreshFromPersistentStore();
+    const { search, status, category, publication_status, sortBy } = req.query;
+    const items = getAllShowcases({
+      search: typeof search === 'string' ? search : undefined,
+      status: typeof status === 'string' ? status : undefined,
+      category: typeof category === 'string' ? category : undefined,
+      publication_status: typeof publication_status === 'string' ? publication_status : undefined,
+      sortBy: typeof sortBy === 'string' ? (sortBy as any) : 'display_order'
+    });
+    return res.json({ success: true, items });
+  } catch (error) {
+    console.error('[Admin Get Showcases Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve showcases' });
+  }
+});
+
+// GET /api/admin/showcases/:id - Get a single showcase by ID
+adminRouter.get('/showcases/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid showcase ID' });
+    }
+    const item = getShowcaseById(id);
+    if (!item) {
+      return res.status(404).json({ error: 'Showcase not found' });
+    }
+    return res.json({ success: true, item });
+  } catch (error) {
+    console.error('[Admin Get Showcase By ID Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve showcase' });
+  }
+});
+
+// POST /api/admin/showcases - Create a new showcase item
+adminRouter.post('/showcases', async (req, res) => {
+  try {
+    const {
+      title,
+      slug,
+      subtitle,
+      category,
+      badge,
+      description,
+      long_description,
+      website_url,
+      demo_url,
+      screenshot_url,
+      screenshot_thumbnail_url,
+      features,
+      workflow_steps,
+      tech_stack,
+      tags,
+      status,
+      publication_status,
+      display_order,
+      estimated_launch_date,
+      is_featured,
+      client_inquiry_enabled
+    } = req.body;
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+    if (!slug || typeof slug !== 'string' || !slug.trim()) {
+      return res.status(400).json({ error: 'Slug is required' });
+    }
+    if (!category || typeof category !== 'string' || !category.trim()) {
+      return res.status(400).json({ error: 'Category is required' });
+    }
+
+    // SSRF validation on destination URLs if provided
+    if (website_url && typeof website_url === 'string' && website_url.trim()) {
+      const ssrfCheck = await validateSsrfSafeUrl(website_url);
+      if (!ssrfCheck.safe) {
+        return res.status(400).json({ error: `Website URL validation failed: ${ssrfCheck.error}` });
+      }
+    }
+    if (demo_url && typeof demo_url === 'string' && demo_url.trim()) {
+      const ssrfCheck = await validateSsrfSafeUrl(demo_url);
+      if (!ssrfCheck.safe) {
+        return res.status(400).json({ error: `Demo URL validation failed: ${ssrfCheck.error}` });
+      }
+    }
+
+    const created = createShowcase({
+      title: title.trim(),
+      slug: slug.trim(),
+      subtitle,
+      category: category.trim(),
+      badge,
+      description: description || '',
+      long_description,
+      website_url,
+      demo_url,
+      screenshot_url,
+      screenshot_thumbnail_url,
+      features,
+      workflow_steps,
+      tech_stack,
+      tags,
+      status: status || 'Live',
+      publication_status: publication_status || 'published',
+      display_order: typeof display_order === 'number' ? display_order : 0,
+      estimated_launch_date,
+      is_featured: typeof is_featured === 'boolean' ? is_featured : false,
+      client_inquiry_enabled: typeof client_inquiry_enabled === 'boolean' ? client_inquiry_enabled : true
+    });
+
+    await persistShowcase(created);
+    return res.status(201).json({ success: true, item: created });
+  } catch (error: any) {
+    console.error('[Admin Create Showcase Error]:', error);
+    return res.status(500).json({ error: error.message || 'Failed to create showcase' });
+  }
+});
+
+// PUT /api/admin/showcases/:id - Update an existing showcase item
+adminRouter.put('/showcases/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid showcase ID' });
+    }
+
+    const existing = getShowcaseById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Showcase not found' });
+    }
+
+    const {
+      title,
+      slug,
+      subtitle,
+      category,
+      badge,
+      description,
+      long_description,
+      website_url,
+      demo_url,
+      screenshot_url,
+      screenshot_thumbnail_url,
+      features,
+      workflow_steps,
+      tech_stack,
+      tags,
+      status,
+      publication_status,
+      display_order,
+      estimated_launch_date,
+      is_featured,
+      client_inquiry_enabled
+    } = req.body;
+
+    // SSRF validation on destination URLs if provided
+    if (website_url && typeof website_url === 'string' && website_url.trim()) {
+      const ssrfCheck = await validateSsrfSafeUrl(website_url);
+      if (!ssrfCheck.safe) {
+        return res.status(400).json({ error: `Website URL validation failed: ${ssrfCheck.error}` });
+      }
+    }
+    if (demo_url && typeof demo_url === 'string' && demo_url.trim()) {
+      const ssrfCheck = await validateSsrfSafeUrl(demo_url);
+      if (!ssrfCheck.safe) {
+        return res.status(400).json({ error: `Demo URL validation failed: ${ssrfCheck.error}` });
+      }
+    }
+
+    const updated = updateShowcase(id, {
+      title,
+      slug,
+      subtitle,
+      category,
+      badge,
+      description,
+      long_description,
+      website_url,
+      demo_url,
+      screenshot_url,
+      screenshot_thumbnail_url,
+      features,
+      workflow_steps,
+      tech_stack,
+      tags,
+      status,
+      publication_status,
+      display_order,
+      estimated_launch_date,
+      is_featured,
+      client_inquiry_enabled
+    });
+
+    if (!updated) {
+      return res.status(500).json({ error: 'Failed to update showcase' });
+    }
+
+    await persistShowcase(updated);
+    return res.json({ success: true, item: updated });
+  } catch (error: any) {
+    console.error('[Admin Update Showcase Error]:', error);
+    return res.status(500).json({ error: error.message || 'Failed to update showcase' });
+  }
+});
+
+// DELETE /api/admin/showcases/:id - Delete a showcase item
+adminRouter.delete('/showcases/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid showcase ID' });
+    }
+
+    const existing = getShowcaseById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Showcase not found' });
+    }
+
+    const deleted = deleteShowcase(id);
+    if (!deleted) {
+      return res.status(500).json({ error: 'Failed to delete showcase' });
+    }
+
+    await persistShowcaseDeletion(id);
+    return res.json({ success: true, message: 'Showcase deleted successfully' });
+  } catch (error) {
+    console.error('[Admin Delete Showcase Error]:', error);
+    return res.status(500).json({ error: 'Failed to delete showcase' });
+  }
+});
+
+// POST /api/admin/showcases/:id/duplicate - Duplicate an existing showcase
+adminRouter.post('/showcases/:id/duplicate', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid showcase ID' });
+    }
+
+    const duplicated = duplicateShowcase(id);
+    if (!duplicated) {
+      return res.status(404).json({ error: 'Showcase not found or failed to duplicate' });
+    }
+
+    await persistShowcase(duplicated);
+    return res.status(201).json({ success: true, item: duplicated });
+  } catch (error: any) {
+    console.error('[Admin Duplicate Showcase Error]:', error);
+    return res.status(500).json({ error: error.message || 'Failed to duplicate showcase' });
+  }
+});
+
+// POST /api/admin/showcases/reorder - Reorder showcase items
+adminRouter.post('/showcases/reorder', async (req, res) => {
+  try {
+    const { items, orderedIds } = req.body;
+    let ids: number[] = [];
+
+    if (Array.isArray(orderedIds)) {
+      ids = orderedIds.map(Number).filter(n => !isNaN(n));
+    } else if (Array.isArray(items)) {
+      ids = items.map((it: any) => (typeof it === 'number' ? it : Number(it?.id))).filter(n => !isNaN(n));
+    }
+
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'Ordered IDs array is required' });
+    }
+
+    reorderShowcases(ids);
+
+    // Persist new display orders to persistent store
+    for (let i = 0; i < ids.length; i++) {
+      const showcase = getShowcaseById(ids[i]);
+      if (showcase) {
+        await persistShowcase(showcase);
+      }
+    }
+
+    return res.json({ success: true, message: 'Showcases reordered successfully' });
+  } catch (error) {
+    console.error('[Admin Reorder Showcases Error]:', error);
+    return res.status(500).json({ error: 'Failed to reorder showcases' });
+  }
+});
+
+// POST /api/admin/showcases/auto-screenshot - Render automated screenshot via external engine
+adminRouter.post('/showcases/auto-screenshot', async (req, res) => {
+  try {
+    const { url, slug } = req.body;
+    if (!url || typeof url !== 'string' || !url.trim()) {
+      return res.status(400).json({ error: 'Target URL is required' });
+    }
+
+    const result = await captureWebsiteScreenshot(url.trim(), typeof slug === 'string' ? slug.trim() : 'showcase');
+    return res.json(result);
+  } catch (error: any) {
+    console.error('[Admin Auto Screenshot Error]:', error);
+    return res.status(400).json({ error: error.message || 'Failed to capture screenshot' });
+  }
+});
+
+// POST /api/admin/showcases/upload-screenshot - Upload manual screenshot image
+adminRouter.post('/showcases/upload-screenshot', async (req, res) => {
+  try {
+    const { image, slug = 'showcase' } = req.body;
+    if (!image || typeof image !== 'string') {
+      return res.status(400).json({ error: 'Image data URL is required' });
+    }
+
+    const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      if (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('/showcases/')) {
+        return res.json({ success: true, url: image });
+      }
+      return res.status(400).json({ error: 'Invalid image format. Expected base64 data URL.' });
+    }
+
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    if (buffer.length > 8 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Image file size exceeds 8MB limit' });
+    }
+
+    let mimeType: string;
+    let cleanExt: string;
+    try {
+      const validated = validateImageBuffer(buffer);
+      mimeType = validated.mimeType;
+      cleanExt = validated.extension;
+    } catch (valErr: any) {
+      return res.status(400).json({ error: valErr.message || 'Invalid image payload' });
+    }
+
+    const publicUrl = await persistScreenshotBuffer(buffer, slug, cleanExt, mimeType);
+    return res.json({ success: true, url: publicUrl });
+  } catch (error: any) {
+    console.error('[Admin Showcase Upload Screenshot Error]:', error);
+    return res.status(500).json({ error: error.message || 'Failed to process screenshot upload' });
+  }
+});
+
+// POST /api/admin/showcases/check-url - SSRF-safe URL reachability tester
+adminRouter.post('/showcases/check-url', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== 'string' || !url.trim()) {
+      return res.status(400).json({ reachable: false, error: 'URL is required' });
+    }
+
+    const ssrfCheck = await validateSsrfSafeUrl(url.trim());
+    if (!ssrfCheck.safe || !ssrfCheck.normalizedUrl) {
+      return res.status(400).json({
+        reachable: false,
+        error: ssrfCheck.error || 'Destination failed SSRF security verification'
+      });
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+
+      const resp = await fetch(ssrfCheck.normalizedUrl, {
+        method: 'HEAD',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) DawnexusShowcaseInspector/1.0'
+        }
+      });
+      clearTimeout(timeout);
+
+      return res.json({
+        reachable: resp.ok,
+        status: resp.status,
+        statusText: resp.statusText,
+        normalizedUrl: ssrfCheck.normalizedUrl
+      });
+    } catch (fetchErr: any) {
+      return res.json({
+        reachable: false,
+        error: fetchErr.name === 'AbortError' ? 'Connection timed out (6s limit)' : fetchErr.message
+      });
+    }
+  } catch (error: any) {
+    console.error('[Admin Check URL Error]:', error);
+    return res.status(500).json({ reachable: false, error: error.message || 'Failed to check URL' });
   }
 });
 

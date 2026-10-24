@@ -23,6 +23,7 @@ const AiVideoCreationPage = React.lazy(() => import('./pages/services/AiVideoCre
 const DigitalMarketingPage = React.lazy(() => import('./pages/services/DigitalMarketingPage').then(m => ({ default: m.DigitalMarketingPage })));
 const BlogListingPage = React.lazy(() => import('./pages/blog/BlogListingPage').then(m => ({ default: m.BlogListingPage })));
 const BlogPostPage = React.lazy(() => import('./pages/blog/BlogPostPage').then(m => ({ default: m.BlogPostPage })));
+const ShowcaseDetailPage = React.lazy(() => import('./pages/showcases/ShowcaseDetailPage').then(m => ({ default: m.ShowcaseDetailPage })));
 const WebsiteCostCalculatorPage = React.lazy(() => import('./pages/calculator/WebsiteCostCalculatorPage').then(m => ({ default: m.WebsiteCostCalculatorPage })));
 
 const RouteLoadingFallback: React.FC = () => (
@@ -192,6 +193,14 @@ export const App: React.FC = () => {
       return (
         <React.Suspense fallback={<RouteLoadingFallback />}>
           <BlogPostPage slug={slug} />
+        </React.Suspense>
+      );
+    }
+    if (currentPath.startsWith('/showcases/')) {
+      const slug = currentPath.replace('/showcases/', '').split('?')[0];
+      return (
+        <React.Suspense fallback={<RouteLoadingFallback />}>
+          <ShowcaseDetailPage slug={slug} />
         </React.Suspense>
       );
     }

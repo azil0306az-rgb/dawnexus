@@ -7,6 +7,9 @@ import {
   getBlogBySlug,
   getPublicClients,
   getPublicClientsAsync,
+  getPublicShowcases,
+  getPublicShowcasesAsync,
+  getShowcaseBySlug,
   getCalculatorPricingConfig,
   persistEnquiry,
   refreshFromPersistentStore,
@@ -376,6 +379,59 @@ publicRouter.get('/clients', async (req, res) => {
   } catch (error) {
     console.error('[Public Get Clients Error]:', error);
     return res.status(500).json({ error: 'Failed to retrieve client showcase' });
+  }
+});
+
+// ==========================================
+// PUBLIC PRODUCTS & SHOWCASES ENDPOINTS (v8.4.0)
+// ==========================================
+
+// GET /api/showcases
+// Returns all published & visible showcase products with category filter
+publicRouter.get('/showcases', async (req, res) => {
+  try {
+    await refreshFromPersistentStore();
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const items = await getPublicShowcasesAsync({ category });
+    return res.json({
+      success: true,
+      showcases: items,
+      items,
+      total: items.length
+    });
+  } catch (error) {
+    console.error('[Public Get Showcases Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve products & showcases' });
+  }
+});
+
+// GET /api/showcases/:slug
+// Returns detail of a published showcase project
+publicRouter.get('/showcases/:slug', async (req, res) => {
+  try {
+    await refreshFromPersistentStore();
+    const slug = req.params.slug;
+    if (!slug || typeof slug !== 'string') {
+      return res.status(400).json({ error: 'Slug parameter is required.' });
+    }
+
+    const item = getShowcaseBySlug(slug.trim());
+    if (!item || item.publication_status?.toLowerCase() !== 'published' || item.is_visible === 0) {
+      return res.status(404).json({ error: 'Showcase project not found or not published.' });
+    }
+
+    // Related showcases in same category
+    const allCategory = getPublicShowcases({ category: item.category });
+    const related = allCategory.filter(s => s.id !== item.id).slice(0, 3);
+
+    return res.json({
+      success: true,
+      showcase: item,
+      related
+    });
+  } catch (error) {
+    console.error('[Public Get Showcase By Slug Error]:', error);
+    return res.status(500).json({ error: 'Failed to retrieve showcase project' });
   }
 });
 

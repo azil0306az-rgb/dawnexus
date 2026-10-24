@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { seedInitialShowcases } from './showcaseSeeds.js';
 
 // Resolve environment variables
 const supabaseUrl = process.env.SUPABASE_URL?.trim();
@@ -168,6 +169,131 @@ export async function syncFromSupabase(db: any): Promise<void> {
         throw error;
       }
       console.log(`[Supabase Sync] Hydrated ${clients.length} clients.`);
+    }
+
+    // 2b. Sync Showcases (Dynamic Products & Showcases CMS)
+    try {
+      const { data: remoteShowcases, error: showcaseErr } = await supabase
+        .from('showcases')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (remoteShowcases && remoteShowcases.length >= 11) {
+        db.exec('BEGIN TRANSACTION');
+        try {
+          db.prepare('DELETE FROM showcases').run();
+          const insertStmt = db.prepare(`
+            INSERT INTO showcases (
+              id, title, slug, card_heading, full_heading, short_description, detailed_description,
+              category, tagline, display_order, is_featured, is_visible, status, launch_date,
+              project_url, link_label, is_link_enabled, open_in_new_tab, inquiry_service,
+              screenshot_url, screenshot_source_url, screenshot_captured_at, screenshot_alt,
+              features, workflow_steps, capabilities, benefits, tech_stack, intended_audience,
+              use_cases, project_challenges, implementation_approach, outcome_results,
+              gallery_images, faq_items, publication_status, published_at, created_at, updated_at
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?
+            )
+          `);
+
+          for (const s of remoteShowcases) {
+            insertStmt.run(
+              s.id, s.title, s.slug, s.card_heading || '', s.full_heading || '',
+              s.short_description || '', s.detailed_description || '', s.category || '',
+              s.tagline || '', s.display_order || 0, s.is_featured ? 1 : 0,
+              s.is_visible !== undefined ? (s.is_visible ? 1 : 0) : 1, s.status || 'In Development',
+              s.launch_date || '', s.project_url || '', s.link_label || 'Explore Live Demo',
+              s.is_link_enabled !== undefined ? (s.is_link_enabled ? 1 : 0) : 1,
+              s.open_in_new_tab !== undefined ? (s.open_in_new_tab ? 1 : 0) : 1,
+              s.inquiry_service || '', s.screenshot_url || '', s.screenshot_source_url || '',
+              s.screenshot_captured_at || null, s.screenshot_alt || '',
+              typeof s.features === 'string' ? s.features : JSON.stringify(s.features || []),
+              typeof s.workflow_steps === 'string' ? s.workflow_steps : JSON.stringify(s.workflow_steps || []),
+              typeof s.capabilities === 'string' ? s.capabilities : JSON.stringify(s.capabilities || []),
+              typeof s.benefits === 'string' ? s.benefits : JSON.stringify(s.benefits || []),
+              typeof s.tech_stack === 'string' ? s.tech_stack : JSON.stringify(s.tech_stack || []),
+              s.intended_audience || '',
+              typeof s.use_cases === 'string' ? s.use_cases : JSON.stringify(s.use_cases || []),
+              s.project_challenges || '', s.implementation_approach || '', s.outcome_results || '',
+              typeof s.gallery_images === 'string' ? s.gallery_images : JSON.stringify(s.gallery_images || []),
+              typeof s.faq_items === 'string' ? s.faq_items : JSON.stringify(s.faq_items || []),
+              s.publication_status || 'Published', s.published_at || null,
+              s.created_at || new Date().toISOString(), s.updated_at || new Date().toISOString()
+            );
+          }
+          db.exec('COMMIT');
+          console.log(`[Supabase Sync] Hydrated ${remoteShowcases.length} showcases.`);
+        } catch (txErr) {
+          db.exec('ROLLBACK');
+          throw txErr;
+        }
+      } else {
+        // Remote table has fewer than 11 seed showcases or is empty.
+        // First ensure initial showcase seeds exist locally
+        seedInitialShowcases(db);
+
+        // If remote has any records, upsert them locally
+        if (remoteShowcases && remoteShowcases.length > 0) {
+          for (const s of remoteShowcases) {
+            db.prepare(`
+              INSERT INTO showcases (
+                id, title, slug, card_heading, full_heading, short_description, detailed_description,
+                category, tagline, display_order, is_featured, is_visible, status, launch_date,
+                project_url, link_label, is_link_enabled, open_in_new_tab, inquiry_service,
+                screenshot_url, screenshot_source_url, screenshot_captured_at, screenshot_alt,
+                features, workflow_steps, capabilities, benefits, tech_stack, intended_audience,
+                use_cases, project_challenges, implementation_approach, outcome_results,
+                gallery_images, faq_items, publication_status, published_at, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(slug) DO UPDATE SET
+                title = excluded.title,
+                short_description = excluded.short_description,
+                detailed_description = excluded.detailed_description,
+                category = excluded.category,
+                status = excluded.status,
+                publication_status = excluded.publication_status,
+                updated_at = excluded.updated_at
+            `).run(
+              s.id, s.title, s.slug, s.card_heading || '', s.full_heading || '',
+              s.short_description || '', s.detailed_description || '', s.category || '',
+              s.tagline || '', s.display_order || 0, s.is_featured ? 1 : 0,
+              s.is_visible !== undefined ? (s.is_visible ? 1 : 0) : 1, s.status || 'In Development',
+              s.launch_date || '', s.project_url || '', s.link_label || 'Explore Live Demo',
+              s.is_link_enabled !== undefined ? (s.is_link_enabled ? 1 : 0) : 1,
+              s.open_in_new_tab !== undefined ? (s.open_in_new_tab ? 1 : 0) : 1,
+              s.inquiry_service || '', s.screenshot_url || '', s.screenshot_source_url || '',
+              s.screenshot_captured_at || null, s.screenshot_alt || '',
+              typeof s.features === 'string' ? s.features : JSON.stringify(s.features || []),
+              typeof s.workflow_steps === 'string' ? s.workflow_steps : JSON.stringify(s.workflow_steps || []),
+              typeof s.capabilities === 'string' ? s.capabilities : JSON.stringify(s.capabilities || []),
+              typeof s.benefits === 'string' ? s.benefits : JSON.stringify(s.benefits || []),
+              typeof s.tech_stack === 'string' ? s.tech_stack : JSON.stringify(s.tech_stack || []),
+              s.intended_audience || '',
+              typeof s.use_cases === 'string' ? s.use_cases : JSON.stringify(s.use_cases || []),
+              s.project_challenges || '', s.implementation_approach || '', s.outcome_results || '',
+              typeof s.gallery_images === 'string' ? s.gallery_images : JSON.stringify(s.gallery_images || []),
+              typeof s.faq_items === 'string' ? s.faq_items : JSON.stringify(s.faq_items || []),
+              s.publication_status || 'Published', s.published_at || null,
+              s.created_at || new Date().toISOString(), s.updated_at || new Date().toISOString()
+            );
+          }
+        }
+
+        // Now push all local showcases to remote Supabase PostgreSQL so it gets fully populated with all 11+ items!
+        const localShowcases = db.prepare('SELECT * FROM showcases ORDER BY display_order ASC').all() as any[];
+        console.log(`[Supabase Sync] Syncing ${localShowcases.length} local showcases to remote Supabase PostgreSQL...`);
+        for (const s of localShowcases) {
+          await pushShowcaseToSupabase(s).catch(() => {});
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Supabase Sync Notice]: Showcases hydration skipped:', err?.message || err);
     }
 
     // 3. Sync Notification Settings
@@ -556,6 +682,57 @@ export async function deleteClientFromSupabase(id: number): Promise<void> {
   if (!supabase) throw new Error('Supabase is not configured for client deletion.');
   const { error } = await supabase.from('clients').delete().eq('id', id);
   assertSupabaseSuccess(error, 'Client deletion');
+}
+
+export async function pushShowcaseToSupabase(showcase: any): Promise<void> {
+  if (!supabase) throw new Error('Supabase is not configured for showcase persistence.');
+  const { error } = await supabase.from('showcases').upsert({
+    title: showcase.title,
+    slug: showcase.slug,
+    card_heading: showcase.card_heading || showcase.subtitle || '',
+    full_heading: showcase.full_heading || '',
+    short_description: showcase.short_description || showcase.description || '',
+    detailed_description: showcase.detailed_description || showcase.long_description || '',
+    category: showcase.category || 'Automation & Operations',
+    tagline: showcase.tagline || showcase.badge || '',
+    display_order: showcase.display_order || 0,
+    is_featured: showcase.is_featured ? 1 : 0,
+    is_visible: showcase.is_visible !== undefined ? (showcase.is_visible ? 1 : 0) : 1,
+    status: showcase.status || 'In Development',
+    launch_date: showcase.launch_date || showcase.estimated_launch_date || '',
+    project_url: showcase.project_url || showcase.website_url || showcase.demo_url || '',
+    link_label: showcase.link_label || 'Explore Live Demo',
+    is_link_enabled: showcase.is_link_enabled !== undefined ? (showcase.is_link_enabled ? 1 : 0) : 1,
+    open_in_new_tab: showcase.open_in_new_tab !== undefined ? (showcase.open_in_new_tab ? 1 : 0) : 1,
+    inquiry_service: showcase.inquiry_service || 'Website Design & Development',
+    screenshot_url: showcase.screenshot_url || showcase.screenshot_thumbnail_url || '',
+    screenshot_source_url: showcase.screenshot_source_url || '',
+    screenshot_captured_at: showcase.screenshot_captured_at || null,
+    screenshot_alt: showcase.screenshot_alt || `${showcase.title} concept showcase`,
+    features: typeof showcase.features === 'string' ? showcase.features : JSON.stringify(showcase.features || []),
+    workflow_steps: typeof showcase.workflow_steps === 'string' ? showcase.workflow_steps : JSON.stringify(showcase.workflow_steps || []),
+    capabilities: typeof showcase.capabilities === 'string' ? showcase.capabilities : JSON.stringify(showcase.capabilities || []),
+    benefits: typeof showcase.benefits === 'string' ? showcase.benefits : JSON.stringify(showcase.benefits || []),
+    tech_stack: typeof showcase.tech_stack === 'string' ? showcase.tech_stack : JSON.stringify(showcase.tech_stack || []),
+    intended_audience: showcase.intended_audience || '',
+    use_cases: typeof showcase.use_cases === 'string' ? showcase.use_cases : JSON.stringify(showcase.use_cases || []),
+    project_challenges: showcase.project_challenges || '',
+    implementation_approach: showcase.implementation_approach || '',
+    outcome_results: showcase.outcome_results || '',
+    gallery_images: typeof showcase.gallery_images === 'string' ? showcase.gallery_images : JSON.stringify(showcase.gallery_images || []),
+    faq_items: typeof showcase.faq_items === 'string' ? showcase.faq_items : JSON.stringify(showcase.faq_items || []),
+    publication_status: showcase.publication_status || 'Published',
+    published_at: showcase.published_at || null,
+    created_at: showcase.created_at || new Date().toISOString(),
+    updated_at: showcase.updated_at || new Date().toISOString()
+  }, { onConflict: 'slug' });
+  assertSupabaseSuccess(error, 'Showcase persistence');
+}
+
+export async function deleteShowcaseFromSupabase(id: number): Promise<void> {
+  if (!supabase) throw new Error('Supabase is not configured for showcase deletion.');
+  const { error } = await supabase.from('showcases').delete().eq('id', id);
+  assertSupabaseSuccess(error, 'Showcase deletion');
 }
 
 export async function pushNotificationSettingsToSupabase(settings: any): Promise<void> {
