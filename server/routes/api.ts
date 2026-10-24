@@ -10,6 +10,7 @@ import {
   getPublicShowcases,
   getPublicShowcasesAsync,
   getShowcaseBySlug,
+  getShowcaseBySlugAsync,
   getCalculatorPricingConfig,
   getContactSettings,
   getContactSettingsAsync,
@@ -392,9 +393,10 @@ publicRouter.get('/clients', async (req, res) => {
 // Returns all published & visible showcase products with category filter
 publicRouter.get('/showcases', async (req, res) => {
   try {
+    await refreshFromPersistentStore().catch(() => {});
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const items = await getPublicShowcasesAsync({ category });
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     return res.json({
       success: true,
       showcases: items,
@@ -416,16 +418,17 @@ publicRouter.get('/showcases/:slug', async (req, res) => {
       return res.status(400).json({ error: 'Slug parameter is required.' });
     }
 
-    const item = getShowcaseBySlug(slug.trim());
+    await refreshFromPersistentStore().catch(() => {});
+    const item = await getShowcaseBySlugAsync(slug.trim());
     if (!item || item.publication_status?.toLowerCase() !== 'published' || item.is_visible === 0) {
       return res.status(404).json({ error: 'Showcase project not found or not published.' });
     }
 
     // Related showcases in same category
-    const allCategory = getPublicShowcases({ category: item.category });
+    const allCategory = await getPublicShowcasesAsync({ category: item.category });
     const related = allCategory.filter(s => s.id !== item.id).slice(0, 3);
 
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     return res.json({
       success: true,
       showcase: item,

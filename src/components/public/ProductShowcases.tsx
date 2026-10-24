@@ -39,7 +39,7 @@ const STATIC_FALLBACK_ITEMS: ShowcaseDisplayItem[] = PRODUCT_SHOWCASES_DATA.map(
   subtitle: item.subtitle,
   category: item.category,
   badge: item.badge,
-  status: item.status === 'Live' ? 'Demo Available' : item.status,
+  status: item.status,
   shortDescription: item.shortDescription,
   thumbnailUrl: item.thumbnailUrl,
   demoUrl: item.demoUrl,
@@ -58,7 +58,13 @@ export const ProductShowcases: React.FC = () => {
     let isMounted = true;
     const fetchDynamicShowcases = async () => {
       try {
-        const res = await fetch('/api/showcases');
+        const res = await fetch(`/api/showcases?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data.showcases) && data.showcases.length > 0 && isMounted) {
@@ -69,7 +75,7 @@ export const ProductShowcases: React.FC = () => {
               subtitle: s.subtitle,
               category: s.category,
               badge: s.badge,
-              status: s.status === 'Live' ? 'Demo Available' : s.status,
+              status: s.status || 'In Development',
               shortDescription: s.description,
               thumbnailUrl: s.screenshot_thumbnail_url || s.screenshot_url || '/showcases/website-quotation-builder.webp',
               demoUrl: s.demo_url || undefined,
@@ -98,6 +104,22 @@ export const ProductShowcases: React.FC = () => {
     ? items
     : items.filter(p => p.category === selectedCategory);
 
+  const isLiveOrPrototype = (status: string) => {
+    const s = (status || '').toLowerCase();
+    return s === 'live' || s.includes('prototype') || s.includes('demo') || s.includes('ready');
+  };
+
+  // Sort Live / Prototype Available items first to the top of the grid
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    const aLive = isLiveOrPrototype(a.status);
+    const bLive = isLiveOrPrototype(b.status);
+    if (aLive && !bLive) return -1;
+    if (!aLive && bLive) return 1;
+    if (a.isFeatured && !b.isFeatured) return -1;
+    if (!a.isFeatured && b.isFeatured) return 1;
+    return 0;
+  });
+
   const handleDiscussClick = (product: ShowcaseDisplayItem) => {
     navigateTo('/#contact');
     setTimeout(() => {
@@ -110,31 +132,28 @@ export const ProductShowcases: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Demo Available':
-      case 'Live':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-[#C7FF4D]/15 text-[#C7FF4D] border border-[#C7FF4D]/30 shadow-[0_0_12px_rgba(199,255,77,0.2)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#C7FF4D] animate-pulse" />
-            <span>Demo Available</span>
-          </span>
-        );
-      case 'In Development':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30">
-            <Clock className="w-3 h-3" />
-            <span>In Development</span>
-          </span>
-        );
-      case 'Coming Soon':
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium bg-zinc-800 text-zinc-300 border border-zinc-700">
-            <Compass className="w-3 h-3" />
-            <span>Coming Soon</span>
-          </span>
-        );
+    if (isLiveOrPrototype(status)) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-[#C7FF4D]/15 text-[#C7FF4D] border border-[#C7FF4D]/30 shadow-[0_0_12px_rgba(199,255,77,0.25)]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#C7FF4D] animate-pulse" />
+          <span>Prototype Available</span>
+        </span>
+      );
     }
+    if (status === 'In Development') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30">
+          <Clock className="w-3 h-3" />
+          <span>In Development</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium bg-zinc-800 text-zinc-300 border border-zinc-700">
+        <Compass className="w-3 h-3" />
+        <span>Coming Soon</span>
+      </span>
+    );
   };
 
   return (
@@ -176,7 +195,7 @@ export const ProductShowcases: React.FC = () => {
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-          {filteredItems.map((item, index) => (
+          {sortedItems.map((item, index) => (
             <div
               key={item.id}
               className="bg-[#050505] border border-[#252525] rounded-2xl overflow-hidden flex flex-col justify-between hover:border-[#C7FF4D]/40 transition-all duration-300 group shadow-lg"
@@ -251,7 +270,27 @@ export const ProductShowcases: React.FC = () => {
 
               {/* Action Bar */}
               <div className="px-6 py-4 bg-[#0B0B0B] border-t border-[#252525] flex items-center justify-between gap-3 text-xs">
-                {item.demoUrl ? (
+                {isLiveOrPrototype(item.status) ? (
+                  item.demoUrl ? (
+                    <a
+                      href={item.demoUrl}
+                      target={item.demoUrl.startsWith('http') ? '_blank' : '_self'}
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#C7FF4D] text-[#050505] font-bold text-xs hover:bg-[#d4ff70] shadow-[0_0_12px_rgba(199,255,77,0.3)] transition-all hover:scale-105"
+                    >
+                      <span>Explore Prototype</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => navigateTo(`/showcases/${item.slug}`)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#C7FF4D] text-[#050505] font-bold text-xs hover:bg-[#d4ff70] shadow-[0_0_12px_rgba(199,255,77,0.3)] transition-all hover:scale-105"
+                    >
+                      <span>Explore Prototype</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )
+                ) : item.demoUrl ? (
                   <a
                     href={item.demoUrl}
                     target="_blank"

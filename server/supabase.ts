@@ -178,7 +178,7 @@ export async function syncFromSupabase(db: any): Promise<void> {
         .select('*')
         .order('display_order', { ascending: true });
 
-      if (remoteShowcases && remoteShowcases.length >= 11) {
+      if (remoteShowcases && remoteShowcases.length > 0) {
         db.exec('BEGIN TRANSACTION');
         try {
           db.prepare('DELETE FROM showcases').run();
@@ -208,7 +208,7 @@ export async function syncFromSupabase(db: any): Promise<void> {
               s.short_description || '', s.detailed_description || '', s.category || '',
               s.tagline || '', s.display_order || 0, s.is_featured ? 1 : 0,
               s.is_visible !== undefined ? (s.is_visible ? 1 : 0) : 1, s.status || 'In Development',
-              s.launch_date || '', s.project_url || '', s.link_label || 'Explore Live Demo',
+              s.launch_date || '', s.project_url || '', s.link_label || 'Explore Prototype',
               s.is_link_enabled !== undefined ? (s.is_link_enabled ? 1 : 0) : 1,
               s.open_in_new_tab !== undefined ? (s.open_in_new_tab ? 1 : 0) : 1,
               s.inquiry_service || '', s.screenshot_url || '', s.screenshot_source_url || '',
@@ -223,7 +223,7 @@ export async function syncFromSupabase(db: any): Promise<void> {
               s.project_challenges || '', s.implementation_approach || '', s.outcome_results || '',
               typeof s.gallery_images === 'string' ? s.gallery_images : JSON.stringify(s.gallery_images || []),
               typeof s.faq_items === 'string' ? s.faq_items : JSON.stringify(s.faq_items || []),
-              s.publication_status || 'Published', s.published_at || null,
+              s.publication_status || 'published', s.published_at || null,
               s.created_at || new Date().toISOString(), s.updated_at || new Date().toISOString()
             );
           }
@@ -234,7 +234,7 @@ export async function syncFromSupabase(db: any): Promise<void> {
           throw txErr;
         }
       } else {
-        // Remote table has fewer than 11 seed showcases or is empty.
+        // Remote table has 0 showcases.
         // First ensure initial showcase seeds exist locally
         seedInitialShowcases(db);
 

@@ -3161,22 +3161,20 @@ export function getPublicShowcases(params: { category?: string } = {}): Showcase
 }
 
 export async function getPublicShowcasesAsync(params: { category?: string } = {}): Promise<ShowcaseRecord[]> {
-  const local = getPublicShowcases(params);
-  if (local.length > 0) return local;
-
   const supabaseUrl = process.env.SUPABASE_URL?.trim();
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
 
   if (supabaseUrl && supabaseKey) {
     try {
-      let query = `${supabaseUrl}/rest/v1/showcases?publication_status=eq.Published&is_visible=eq.1&order=display_order.asc,created_at.desc`;
+      let query = `${supabaseUrl}/rest/v1/showcases?publication_status=ilike.published&is_visible=eq.1&order=display_order.asc,created_at.desc`;
       if (params.category && params.category !== 'All') {
         query += `&category=eq.${encodeURIComponent(params.category)}`;
       }
       const res = await fetch(query, {
         headers: {
           'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Cache-Control': 'no-cache'
         }
       });
       if (res.ok) {
@@ -3190,7 +3188,7 @@ export async function getPublicShowcasesAsync(params: { category?: string } = {}
     }
   }
 
-  return local;
+  return getPublicShowcases(params);
 }
 
 export function getShowcaseById(id: number): ShowcaseRecord | null {
@@ -3204,6 +3202,36 @@ export function getShowcaseBySlug(slug: string): ShowcaseRecord | null {
   const stmt = db.prepare('SELECT * FROM showcases WHERE LOWER(slug) = ?');
   const res = stmt.get(norm);
   return normalizeShowcaseRecord(res);
+}
+
+export async function getShowcaseBySlugAsync(slug: string): Promise<ShowcaseRecord | null> {
+  const norm = slug.trim().toLowerCase();
+
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const query = `${supabaseUrl}/rest/v1/showcases?slug=ilike.${encodeURIComponent(norm)}&limit=1`;
+      const res = await fetch(query, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+      if (res.ok) {
+        const remote = await res.json();
+        if (Array.isArray(remote) && remote.length > 0) {
+          return normalizeShowcaseRecord(remote[0]);
+        }
+      }
+    } catch (err) {
+      console.warn('[getShowcaseBySlugAsync Supabase query error]:', err);
+    }
+  }
+
+  return getShowcaseBySlug(slug);
 }
 
 function generateShowcaseSlug(title: string): string {

@@ -93,7 +93,13 @@ export const ShowcaseDetailPage: React.FC<ShowcaseDetailPageProps> = ({ slug: pr
       setIsLoading(true);
       setNotFound(false);
       try {
-        const res = await fetch(`/api/showcases/${currentSlug}`);
+        const res = await fetch(`/api/showcases/${currentSlug}?_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
         if (!res.ok) {
           setNotFound(true);
           return;
@@ -222,7 +228,7 @@ export const ShowcaseDetailPage: React.FC<ShowcaseDetailPageProps> = ({ slug: pr
                 </span>
               )}
               <span className={`px-2.5 py-1 rounded-full text-xs font-mono border ${statusColor}`}>
-                {showcase.status}
+                {showcase.status === 'Live' ? 'Prototype Available' : showcase.status}
               </span>
               {showcase.is_featured && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#C7FF4D] text-[#050505] text-xs font-bold font-mono">
@@ -306,9 +312,9 @@ export const ShowcaseDetailPage: React.FC<ShowcaseDetailPageProps> = ({ slug: pr
               {/* Status Overlay Badge */}
               <div className="absolute top-4 right-4 bg-[#050505]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#252525] text-xs font-mono">
                 {showcase.status === 'Live' ? (
-                  <span className="text-emerald-400 flex items-center gap-1.5 font-bold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Verified Live
+                  <span className="text-[#C7FF4D] flex items-center gap-1.5 font-bold">
+                    <span className="w-2 h-2 rounded-full bg-[#C7FF4D] animate-pulse" />
+                    Prototype Available
                   </span>
                 ) : (
                   <span className="text-amber-400 flex items-center gap-1.5 font-medium">
