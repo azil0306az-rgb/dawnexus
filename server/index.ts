@@ -303,8 +303,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     brand: 'Dawnexus',
-    version: '8.3.0',
-    release: '8.3.0 — Advanced SEO, AI Discovery & Conversion Optimization',
+    version: '8.4.0',
+    release: '8.4.0 — Dynamic Products & Showcases CMS',
     timestamp: new Date().toISOString()
   });
 });
