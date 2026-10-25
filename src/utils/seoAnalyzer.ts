@@ -26,6 +26,38 @@ export interface SeoAnalysisInput {
   citation_answer_blocks?: any[] | string;
 }
 
+export function matchKeywordFlexibly(content: string, keyword: string): { matches: boolean; count: number } {
+  if (!keyword || !keyword.trim()) return { matches: false, count: 0 };
+  const text = (content || '').toLowerCase();
+  const kw = keyword.toLowerCase().trim();
+
+  // 1. Exact match
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const exactRegex = new RegExp(`\\b${escaped}\\b`, 'gi');
+  const exactMatches = text.match(exactRegex);
+  if (exactMatches && exactMatches.length > 0) {
+    return { matches: true, count: exactMatches.length };
+  }
+
+  // 2. Stemmed / core words match for multi-word keywords
+  const stopWords = new Set(['when', 'to', 'how', 'a', 'an', 'the', 'or', 'and', 'for', 'in', 'of', 'on', 'with', 'by']);
+  const words = kw.split(/\s+/).filter(Boolean);
+  const coreWords = words.filter(w => !stopWords.has(w));
+
+  if (coreWords.length >= 2) {
+    const presentWords = coreWords.filter(w => {
+      const wRegex = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      return wRegex.test(text);
+    });
+
+    if (presentWords.length >= Math.ceil(coreWords.length * 0.75)) {
+      return { matches: true, count: presentWords.length };
+    }
+  }
+
+  return { matches: false, count: 0 };
+}
+
 export function analyzeSeo(input: SeoAnalysisInput): SeoAuditResult {
   const checks: SeoCheck[] = [];
   const warnings: string[] = [];
@@ -77,10 +109,14 @@ export function analyzeSeo(input: SeoAnalysisInput): SeoAuditResult {
     const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
     const matches = plainText.match(regex);
     primaryOccurrences = matches ? matches.length : 0;
+    if (primaryOccurrences === 0) {
+      const flex = matchKeywordFlexibly(rawContent, primaryKeyword);
+      if (flex.matches) primaryOccurrences = flex.count;
+    }
 
-    const inTitle = seoTitle.toLowerCase().includes(primaryKeyword) || title.toLowerCase().includes(primaryKeyword);
-    const inHeading = allHeadingsText.includes(primaryKeyword);
-    const inIntro = introWords.includes(primaryKeyword);
+    const inTitle = seoTitle.toLowerCase().includes(primaryKeyword) || title.toLowerCase().includes(primaryKeyword) || matchKeywordFlexibly(seoTitle + ' ' + title, primaryKeyword).matches;
+    const inHeading = allHeadingsText.includes(primaryKeyword) || matchKeywordFlexibly(allHeadingsText, primaryKeyword).matches;
+    const inIntro = introWords.includes(primaryKeyword) || matchKeywordFlexibly(introWords, primaryKeyword).matches;
 
     keywordCounts.push({
       keyword: input.primary_keyword,

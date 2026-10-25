@@ -85,6 +85,7 @@ import { auditHtmlPayloads } from '../payloadAudit.js';
 import { generateServerJsonLd, validateJsonLdStructure } from '../jsonLdService.js';
 import { captureWebsiteScreenshot, persistScreenshotBuffer, validateImageBuffer } from '../services/screenshotService.js';
 import { validateSsrfSafeUrl } from '../services/ssrfProtection.js';
+import { McpService } from '../mcpService.js';
 
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -390,6 +391,95 @@ adminRouter.patch('/blogs/:id', async (req, res) => {
       return res.status(400).json({ error: 'Invalid blog ID' });
     }
 
+    const existing = getBlogById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Blog not found' });
+    }
+
+    // If scheduling, validate all required parameters and SEO score threshold
+    if (req.body.status === 'Scheduled') {
+      const scheduledAtCandidate = req.body.scheduled_at || existing.scheduled_at;
+      if (!scheduledAtCandidate) {
+        return res.status(400).json({ error: 'Cannot schedule article without a scheduled publication date & time (IST).' });
+      }
+
+      let parsedDate: Date;
+      try {
+        parsedDate = McpService.parseKolkataScheduleDate(scheduledAtCandidate);
+      } catch (err: any) {
+        return res.status(400).json({ error: `Invalid scheduled date format: ${err.message}` });
+      }
+
+      if (parsedDate.getTime() <= Date.now() + 60000) {
+        return res.status(400).json({ error: 'Scheduled publication time must be in the future (at least 1 minute from now in Asia/Kolkata IST).' });
+      }
+
+      // Check required article metadata & content
+      const mergedTitle = typeof req.body.title === 'string' ? req.body.title : existing.title;
+      const mergedContent = typeof req.body.content === 'string' ? req.body.content : existing.content;
+      const mergedCategory = typeof req.body.category === 'string' ? req.body.category : existing.category;
+      const mergedPrimaryKeyword = typeof req.body.primary_keyword === 'string' ? req.body.primary_keyword : existing.primary_keyword;
+      const mergedFeaturedImage = typeof req.body.featured_image === 'string' ? req.body.featured_image : existing.featured_image;
+      const mergedImageAlt = typeof req.body.image_alt === 'string' ? req.body.image_alt : existing.image_alt;
+
+      if (!mergedTitle || !mergedTitle.trim()) {
+        return res.status(400).json({ error: 'Cannot schedule article: Title is required.' });
+      }
+      if (!mergedContent || mergedContent.trim().length < 500) {
+        return res.status(400).json({ error: 'Cannot schedule article: Minimum 500 characters of content required.' });
+      }
+      if (!mergedCategory) {
+        return res.status(400).json({ error: 'Cannot schedule article: Category is required.' });
+      }
+      if (!mergedPrimaryKeyword || !mergedPrimaryKeyword.trim()) {
+        return res.status(400).json({ error: 'Cannot schedule article: Primary target keyword is required.' });
+      }
+      if (!mergedFeaturedImage || !mergedFeaturedImage.trim()) {
+        return res.status(400).json({ error: 'Cannot schedule article: Featured image is missing. Please attach a featured image.' });
+      }
+      if (!mergedImageAlt || !mergedImageAlt.trim()) {
+        return res.status(400).json({ error: 'Cannot schedule article: Featured image alt text is missing.' });
+      }
+
+      const { items: allBlogs } = getBlogs({ limit: 100 });
+      const publishedSlugs = allBlogs.filter(b => b.status === 'Published' && b.id !== id).map(b => b.slug);
+
+      const seoCandidate = {
+        title: mergedTitle,
+        slug: req.body.slug ?? existing.slug,
+        content: mergedContent,
+        excerpt: req.body.excerpt ?? existing.excerpt,
+        category: mergedCategory,
+        primary_keyword: mergedPrimaryKeyword,
+        secondary_keywords: req.body.secondary_keywords ?? existing.secondary_keywords,
+        search_intent: req.body.search_intent ?? existing.search_intent,
+        target_audience: req.body.target_audience ?? existing.target_audience,
+        seo_title: req.body.seo_title ?? existing.seo_title,
+        meta_description: req.body.meta_description ?? existing.meta_description ?? existing.excerpt,
+        canonical_url: req.body.canonical_url ?? existing.canonical_url ?? (existing.slug ? `https://www.dawnexus.in/blog/${existing.slug}` : ''),
+        featured_image: mergedFeaturedImage,
+        image_alt: mergedImageAlt
+      };
+
+      const seoReport = normalizeSeoReport(calculateSeoScore(seoCandidate, publishedSlugs, 90, id));
+
+      if (seoReport.totalScore < 90 || !seoReport.meetsThreshold || (Array.isArray(seoReport.mandatoryFailures) && seoReport.mandatoryFailures.length > 0)) {
+        const mandatoryList = Array.isArray(seoReport.mandatoryFailures) ? seoReport.mandatoryFailures : [];
+        const recList = Array.isArray(seoReport.recommendations) ? seoReport.recommendations : [];
+        let errorMessage: string;
+        if (mandatoryList.length > 0 && seoReport.totalScore >= 90) {
+          errorMessage = `Quality check failed: Article meets numerical score requirement (${seoReport.totalScore}/100), but has mandatory structural failure(s): ${mandatoryList.join('; ')}`;
+        } else if (mandatoryList.length > 0) {
+          errorMessage = `Quality check failed: Article SEO score is ${seoReport.totalScore}/100 (minimum 90/100 required for scheduling). Mandatory failures: ${mandatoryList.join('; ')}. Recommendations: ${recList.slice(0, 3).join('; ')}`;
+        } else {
+          errorMessage = `Quality check failed: Article SEO score is ${seoReport.totalScore}/100 (minimum 90/100 required for scheduling). Issues to resolve: ${recList.slice(0, 3).join('; ')}`;
+        }
+        return res.status(400).json({ error: errorMessage, seoReport });
+      }
+
+      req.body.scheduled_at = parsedDate.toISOString();
+    }
+
     const updated = updateBlog(id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'Blog not found' });
@@ -423,13 +513,84 @@ adminRouter.patch('/blogs/:id', async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Article updated successfully',
+      message: req.body.status === 'Scheduled' ? 'Article scheduled successfully' : 'Article updated successfully',
       blog: finalUpdated,
       seoReport
     });
   } catch (error) {
     console.error('[Admin Update Blog Error]:', error);
     return res.status(500).json({ error: 'Failed to update blog article' });
+  }
+});
+
+// POST /api/admin/blogs/:id/schedule
+adminRouter.post('/blogs/:id/schedule', async (req, res) => {
+  try {
+    await refreshFromPersistentStore();
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid blog ID' });
+    }
+
+    const { scheduled_at, approved = true } = req.body;
+    if (!scheduled_at) {
+      return res.status(400).json({ error: 'Scheduled publication date & time is required.' });
+    }
+
+    const callerIp = req.ip || req.socket.remoteAddress || 'admin-dashboard';
+    const result = await McpService.scheduleBlogDraft({
+      id,
+      scheduled_at,
+      approved
+    }, callerIp);
+
+    return res.json({
+      success: true,
+      message: result.message,
+      blog: result.blog,
+      seoReport: result.seoReport
+    });
+  } catch (error: any) {
+    console.error('[Admin Schedule Blog Error]:', error);
+    return res.status(400).json({ error: error.message || 'Failed to schedule blog draft' });
+  }
+});
+
+// POST /api/admin/blogs/bulk-schedule
+adminRouter.post('/blogs/bulk-schedule', async (req, res) => {
+  try {
+    await refreshFromPersistentStore();
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No blogs provided for bulk scheduling' });
+    }
+
+    const callerIp = req.ip || req.socket.remoteAddress || 'admin-dashboard';
+    const results = [];
+    const errors = [];
+
+    for (const item of items) {
+      try {
+        const resSchedule = await McpService.scheduleBlogDraft({
+          id: item.id,
+          scheduled_at: item.scheduled_at || item.scheduledAt,
+          approved: item.approved !== false
+        }, callerIp);
+        results.push(resSchedule.blog);
+      } catch (err: any) {
+        errors.push({ id: item.id, error: err.message || 'Failed to schedule draft' });
+      }
+    }
+
+    return res.json({
+      success: errors.length === 0,
+      scheduledCount: results.length,
+      scheduledBlogs: results,
+      errors
+    });
+  } catch (error: any) {
+    console.error('[Admin Bulk Schedule Error]:', error);
+    return res.status(500).json({ error: error.message || 'Bulk scheduling failed' });
   }
 });
 

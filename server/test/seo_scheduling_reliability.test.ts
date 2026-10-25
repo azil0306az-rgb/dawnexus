@@ -513,4 +513,72 @@ Enterprise web architecture in India requires ongoing security patching, uptime 
     // Clean up
     deleteBlog(post.id);
   });
+
+  // Test 18: scheduleBlogDraft rejects when featured image is missing with specific message
+  test('18. scheduleBlogDraft rejects when featured image or alt text is missing', async () => {
+    const draftWithoutImage = createBlog({
+      title: 'Missing Image Test Article',
+      slug: `no-image-test-${Date.now()}`,
+      content: 'This is a long content test that has more than five hundred characters to satisfy the content length check. '.repeat(6),
+      category: 'Website Design',
+      primary_keyword: 'Missing image test',
+      featured_image: '',
+      image_alt: ''
+    });
+
+    try {
+      await persistBlog(draftWithoutImage);
+    } catch {}
+
+    await assert.rejects(
+      async () => {
+        await McpService.scheduleBlogDraft({
+          id: draftWithoutImage.id,
+          scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+          approved: true
+        });
+      },
+      /Featured image is missing/
+    );
+
+    // Clean up
+    deleteBlog(draftWithoutImage.id);
+    try {
+      await persistBlogDeletion(draftWithoutImage.id);
+    } catch {}
+  });
+
+  // Test 19: scheduleBlogDraft rejects when SEO score < 90 with precise feedback
+  test('19. scheduleBlogDraft rejects when SEO score is below 90 with informative feedback', async () => {
+    const weakDraft = createBlog({
+      title: 'Short Article with Weak Optimization',
+      slug: `weak-draft-test-${Date.now()}`,
+      content: 'This is a very short article with barely 500 characters. '.repeat(10),
+      category: 'Digital Strategy',
+      primary_keyword: 'Short article keyword',
+      featured_image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f',
+      image_alt: 'A placeholder image for the weak draft'
+    });
+
+    try {
+      await persistBlog(weakDraft);
+    } catch {}
+
+    await assert.rejects(
+      async () => {
+        await McpService.scheduleBlogDraft({
+          id: weakDraft.id,
+          scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+          approved: true
+        });
+      },
+      /Quality check failed: Article SEO score is \d+\/100 \(minimum 90\/100 required for scheduling\)/
+    );
+
+    // Clean up
+    deleteBlog(weakDraft.id);
+    try {
+      await persistBlogDeletion(weakDraft.id);
+    } catch {}
+  });
 });

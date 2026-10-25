@@ -261,7 +261,7 @@ export const BlogManager: React.FC<BlogManagerProps> = ({
   };
 
   // Save Blog Handler
-  const handleSave = async (data: BlogInput, id?: number): Promise<boolean> => {
+  const handleSave = async (data: BlogInput, id?: number): Promise<{ success: boolean; error?: string } | boolean> => {
     try {
       const url = id ? `/api/admin/blogs/${id}` : '/api/admin/blogs';
       const method = id ? 'PATCH' : 'POST';
@@ -282,12 +282,15 @@ export const BlogManager: React.FC<BlogManagerProps> = ({
         fetchStats();
         fetchBlogs();
         fetchCalendarBlogs();
-        return true;
+        return { success: true };
       }
-      return false;
-    } catch (err) {
+
+      const errData = await res.json().catch(() => ({}));
+      const errorMsg = errData.error || errData.message || `Server returned error (${res.status})`;
+      return { success: false, error: errorMsg };
+    } catch (err: any) {
       console.error('Error saving blog:', err);
-      return false;
+      return { success: false, error: err?.message || 'Network error saving blog' };
     }
   };
 

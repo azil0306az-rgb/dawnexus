@@ -40,7 +40,7 @@ import { SeoWritingAssistant } from './SeoWritingAssistant';
 
 interface BlogEditorProps {
   initialBlog?: BlogRecord | null;
-  onSave: (data: BlogInput, id?: number) => Promise<boolean>;
+  onSave: (data: BlogInput, id?: number) => Promise<{ success: boolean; error?: string } | boolean>;
   onCancel: () => void;
   onDelete?: (id: number) => Promise<void>;
   onDuplicate?: (id: number) => Promise<void>;
@@ -121,14 +121,16 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
   // Status & Scheduling
   const [status, setStatus] = useState<BlogStatus>(initialBlog?.status || 'Draft');
   
-  // Format existing scheduled_at to IST datetime-local input string
+  // Format existing scheduled_at to IST datetime-local input string (Asia/Kolkata: UTC+5:30)
   const getInitialScheduledIst = () => {
     if (!initialBlog?.scheduled_at) return '';
     try {
       const date = new Date(initialBlog.scheduled_at);
-      // Format as YYYY-MM-DDTHH:mm in local browser/IST
+      if (isNaN(date.getTime())) return '';
+      // Shift to UTC+5:30
+      const istTime = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
       const pad = (n: number) => (n < 10 ? '0' + n : n);
-      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      return `${istTime.getUTCFullYear()}-${pad(istTime.getUTCMonth() + 1)}-${pad(istTime.getUTCDate())}T${pad(istTime.getUTCHours())}:${pad(istTime.getUTCMinutes())}`;
     } catch {
       return '';
     }
@@ -345,26 +347,34 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
       if (!scheduledAtIst) {
         setFeedback({
           type: 'error',
-          message: 'Please choose a future date and time for scheduled publication.'
+          message: 'Please choose a future date and time (IST) for scheduled publication.'
         });
         setActiveTab('schedule');
         return;
       }
-      const selectedDate = new Date(scheduledAtIst);
+      // Parse timestamp as Asia/Kolkata (+05:30)
+      const cleanIst = scheduledAtIst.trim();
+      const istString = cleanIst.includes('+') || cleanIst.endsWith('Z') ? cleanIst : `${cleanIst}:00+05:30`;
+      const selectedDate = new Date(istString);
       if (isNaN(selectedDate.getTime())) {
         setFeedback({ type: 'error', message: 'Invalid publication date selected.' });
         return;
       }
-      if (selectedDate.getTime() <= Date.now()) {
+      if (selectedDate.getTime() <= Date.now() + 60000) {
         setFeedback({
           type: 'error',
-          message: 'Scheduled publication time must be in the future.'
+          message: 'Scheduled publication time must be in the future (Asia/Kolkata IST).'
         });
         return;
       }
       scheduledUtc = selectedDate.toISOString();
     } else if (scheduledAtIst) {
-      scheduledUtc = new Date(scheduledAtIst).toISOString();
+      const cleanIst = scheduledAtIst.trim();
+      const istString = cleanIst.includes('+') || cleanIst.endsWith('Z') ? cleanIst : `${cleanIst}:00+05:30`;
+      const parsed = new Date(istString);
+      if (!isNaN(parsed.getTime())) {
+        scheduledUtc = parsed.toISOString();
+      }
     }
 
     setIsSubmitting(true);
@@ -427,15 +437,18 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
     };
 
     try {
-      const ok = await onSave(inputData, initialBlog?.id);
-      if (ok) {
+      const result = await onSave(inputData, initialBlog?.id);
+      const isOk = typeof result === 'boolean' ? result : Boolean(result?.success);
+      const errorMsg = (typeof result === 'object' && result?.error) ? result.error : 'Failed to save article. Please try again.';
+
+      if (isOk) {
         setFeedback({
           type: 'success',
           message: `Article successfully ${resolvedStatus === 'Published' ? 'published' : resolvedStatus === 'Scheduled' ? 'scheduled' : 'saved'}!`
         });
         setStatus(resolvedStatus);
       } else {
-        setFeedback({ type: 'error', message: 'Failed to save article. Please try again.' });
+        setFeedback({ type: 'error', message: errorMsg });
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err?.message || 'Server error saving article' });
@@ -517,8 +530,15 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={() => {
-              setActiveTab('schedule');
-              handleSubmit('Scheduled');
+              if (!scheduledAtIst) {
+                setActiveTab('schedule');
+                setFeedback({
+                  type: 'error',
+                  message: 'Please choose a publication date & time (IST) in the Schedule tab below.'
+                });
+              } else {
+                handleSubmit('Scheduled');
+              }
             }}
             className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 text-cyan-300 text-xs font-medium transition disabled:opacity-50"
           >
@@ -1633,6 +1653,33 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({
                   </p>
                 </div>
               </div>
+
+              {scheduledAtIst && (() => {
+                const clean = scheduledAtIst.trim();
+                const istStr = clean.includes('+') || clean.endsWith('Z') ? clean : `${clean}:00+05:30`;
+                const d = new Date(istStr);
+                if (isNaN(d.getTime())) return null;
+                return (
+                  <div className="p-3 bg-cyan-950/30 border border-cyan-800/40 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="text-xs">
+                      <span className="text-neutral-400">Target Publication: </span>
+                      <span className="text-cyan-300 font-semibold">
+                        {d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full', timeStyle: 'short' })} IST
+                      </span>
+                      <span className="text-neutral-500 text-[10px] ml-2">({d.toISOString()})</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleSubmit('Scheduled')}
+                      className="self-start sm:self-auto flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition shadow-sm"
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Schedule Article Now (IST)</span>
+                    </button>
+                  </div>
+                );
+              })()}
 
               {initialBlog?.publication_error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs">

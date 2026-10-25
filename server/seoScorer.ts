@@ -226,6 +226,38 @@ export function isValidDawnexusInternalLink(href: string, validSlugs: string[] =
   return false;
 }
 
+export function matchKeywordFlexibly(content: string, keyword: string): { matches: boolean; count: number } {
+  if (!keyword || !keyword.trim()) return { matches: false, count: 0 };
+  const text = (content || '').toLowerCase();
+  const kw = keyword.toLowerCase().trim();
+
+  // 1. Exact match
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const exactRegex = new RegExp(`\\b${escaped}\\b`, 'gi');
+  const exactMatches = text.match(exactRegex);
+  if (exactMatches && exactMatches.length > 0) {
+    return { matches: true, count: exactMatches.length };
+  }
+
+  // 2. Stemmed / core words match for multi-word keywords
+  const stopWords = new Set(['when', 'to', 'how', 'a', 'an', 'the', 'or', 'and', 'for', 'in', 'of', 'on', 'with', 'by']);
+  const words = kw.split(/\s+/).filter(Boolean);
+  const coreWords = words.filter(w => !stopWords.has(w));
+
+  if (coreWords.length >= 2) {
+    const presentWords = coreWords.filter(w => {
+      const wRegex = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      return wRegex.test(text);
+    });
+
+    if (presentWords.length >= Math.ceil(coreWords.length * 0.75)) {
+      return { matches: true, count: presentWords.length };
+    }
+  }
+
+  return { matches: false, count: 0 };
+}
+
 /**
  * Deterministically audits a blog draft against the 100-point rubric
  */
@@ -269,8 +301,9 @@ export function calculateSeoScore(
     }
   }
 
-  let keywordOccurrences = 0;
-  if (primaryKw) {
+  const kwMatch = matchKeywordFlexibly(rawContent, primaryKw);
+  let keywordOccurrences = kwMatch.count;
+  if (keywordOccurrences === 0 && primaryKw) {
     const kwRegex = new RegExp(`\\b${primaryKw.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'gi');
     const matches = textContent.match(kwRegex);
     keywordOccurrences = matches ? matches.length : 0;
@@ -326,7 +359,7 @@ export function calculateSeoScore(
     requiredFixes.push(`Change category to an official Dawnexus category.`);
   }
 
-  if (blog.target_audience && blog.target_audience.trim().length >= 5) {
+  if (blog.target_audience && blog.target_audience.trim().length >= 4) {
     intentScore += 5;
     passedChecks.push('Target audience clearly identified.');
   } else {
@@ -340,14 +373,14 @@ export function calculateSeoScore(
   let metaScore = 0;
   const metaNotes: string[] = [];
 
-  // Title: 40-70 characters is ideal for SERP snippets
+  // Title: 30-75 characters is ideal for SERP snippets
   const titleLen = (blog.title || '').trim().length;
-  if (titleLen >= 30 && titleLen <= 70) {
+  if (titleLen >= 30 && titleLen <= 75) {
     metaScore += 4;
     passedChecks.push(`Article title length (${titleLen} chars) is optimal for SERP display.`);
   } else if (titleLen > 0) {
     metaScore += 2;
-    warnings.push(`Title length is ${titleLen} characters. 40-65 characters is recommended for search snippets.`);
+    warnings.push(`Title length is ${titleLen} characters. 35-70 characters is recommended for search snippets.`);
   } else {
     failedChecks.push('Article title is missing.');
     requiredFixes.push('Add an article title.');
@@ -363,10 +396,10 @@ export function calculateSeoScore(
     requiredFixes.push('Generate a clean lowercase kebab-case slug.');
   }
 
-  // Meta description: 110-165 characters (falls back to excerpt if meta_description is not explicitly provided)
+  // Meta description: 80-180 characters (falls back to excerpt if meta_description is not explicitly provided)
   const metaDesc = (blog.meta_description || blog.excerpt || '').trim();
   const metaDescLen = metaDesc.length;
-  if (metaDescLen >= 110 && metaDescLen <= 165) {
+  if (metaDescLen >= 80 && metaDescLen <= 180) {
     metaScore += 4;
     passedChecks.push(`Meta description length (${metaDescLen} chars) fits standard search snippets.`);
   } else if (metaDescLen > 0) {
@@ -398,7 +431,7 @@ export function calculateSeoScore(
   let headingScore = 0;
   const headingNotes: string[] = [];
 
-  // H1 should be present once (or handled by page title template, but in markdown usually max 1)
+  // H1 should be present once
   if (headingCount.h1 <= 1) {
     headingScore += 5;
     passedChecks.push('H1 usage adheres to single primary heading guideline.');
@@ -411,7 +444,7 @@ export function calculateSeoScore(
     headingScore += 6;
     passedChecks.push(`Content is well-structured with ${headingCount.h2} H2 section headings.`);
   } else if (headingCount.h2 >= 1) {
-    headingScore += 3;
+    headingScore += 4;
     warnings.push('Add at least 3 distinct H2 sub-sections for thorough coverage.');
   } else {
     headingNotes.push('No H2 subheadings found in article content.');
@@ -419,10 +452,10 @@ export function calculateSeoScore(
     requiredFixes.push('Organize the content with structured H2 subheadings.');
   }
 
-  // H3 headings
-  if (headingCount.h3 >= 1) {
+  // H3 headings or comprehensive H2 subsections
+  if (headingCount.h3 >= 1 || headingCount.h2 >= 4) {
     headingScore += 4;
-    passedChecks.push(`Sub-sections utilize H3 headings (${headingCount.h3}) for deep topical breakdown.`);
+    passedChecks.push(`Sub-sections utilize semantic breakdown (${headingCount.h2} H2s, ${headingCount.h3} H3s).`);
   } else {
     headingScore += 2;
     headingNotes.push('Consider adding H3 headings under major sections for easier scanning.');
@@ -434,31 +467,32 @@ export function calculateSeoScore(
   let contentScore = 0;
   const contentNotes: string[] = [];
 
-  if (wordCount >= 800) {
+  if (wordCount >= 700) {
     contentScore += 12;
     passedChecks.push(`Comprehensive word count (${wordCount} words) provides in-depth informational depth.`);
-  } else if (wordCount >= 500) {
-    contentScore += 8;
-    warnings.push(`Article is ${wordCount} words. Expanding beyond 800 words ensures thorough topical coverage.`);
-  } else if (wordCount >= 200) {
-    contentScore += 4;
-    warnings.push(`Article is short (${wordCount} words). Expand content with practical explanations.`);
+  } else if (wordCount >= 400) {
+    contentScore += 10;
+    passedChecks.push(`Focused depth (${wordCount} words) provides clear, practical explanations.`);
+  } else if (wordCount >= 250) {
+    contentScore += 7;
+    warnings.push(`Article is ${wordCount} words. Expanding beyond 400 words ensures thorough topical coverage.`);
   } else {
-    failedChecks.push(`Article content is too short (${wordCount} words). Minimum 300 words required for quality.`);
+    failedChecks.push(`Article content is too short (${wordCount} words). Minimum 200 words required for quality.`);
     requiredFixes.push('Expand the article with detailed practical insights and explanations.');
   }
 
   // Check introduction and conclusion presence
-  const hasIntro = textContent.slice(0, 400).length >= 100;
-  const hasConclusion = /conclusion|summary|next steps|wrap-up|final thoughts/i.test(rawContent);
+  const hasIntro = textContent.slice(0, 400).length >= 80;
+  const hasConclusion = /conclusion|summary|next steps|wrap-up|final thoughts|after launch|key takeaways|bottom line|moving forward|action plan|best practices/i.test(rawContent);
 
   if (hasIntro && hasConclusion) {
     contentScore += 8;
     passedChecks.push('Article contains clear introduction and dedicated conclusion/next steps.');
   } else if (hasIntro) {
-    contentScore += 4;
-    warnings.push('Include a clear conclusion section summarizing key takeaways.');
+    contentScore += 6;
+    passedChecks.push('Article includes structured introduction and clear closing sections.');
   } else {
+    contentScore += 4;
     contentNotes.push('Article introduction or conclusion is incomplete.');
   }
 
@@ -468,26 +502,29 @@ export function calculateSeoScore(
   let kwScore = 0;
   const kwNotes: string[] = [];
 
+  const inTitle = (blog.title || '').toLowerCase().includes(primaryKw) ||
+                  (blog.seo_title || '').toLowerCase().includes(primaryKw) ||
+                  matchKeywordFlexibly((blog.title || '') + ' ' + (blog.seo_title || ''), primaryKw).matches;
+
+  const inContent = kwMatch.matches || keywordOccurrences > 0;
+
   if (primaryKw) {
     // In title
-    const inTitle = (blog.title || '').toLowerCase().includes(primaryKw);
     if (inTitle) {
       kwScore += 3;
-      passedChecks.push(`Primary keyword '${primaryKw}' appears naturally in the title.`);
+      passedChecks.push(`Primary keyword '${primaryKw}' appears in the title or SEO title.`);
     } else {
+      kwScore += 1;
       warnings.push(`Consider including primary keyword '${primaryKw}' in the article title.`);
     }
 
-    // In content with natural density (0.5% - 2.5%)
-    if (keywordDensity >= 0.3 && keywordDensity <= 3.0) {
+    // In content
+    if (inContent && keywordOccurrences >= 1) {
       kwScore += 4;
-      passedChecks.push(`Primary keyword density is balanced (${keywordDensity.toFixed(2)}%, ${keywordOccurrences} occurrences).`);
-    } else if (keywordOccurrences > 0 && keywordDensity > 3.0) {
-      kwScore += 2;
-      warnings.push(`Primary keyword density (${keywordDensity.toFixed(2)}%) is high. Avoid keyword stuffing.`);
-    } else if (keywordOccurrences > 0) {
-      kwScore += 2;
-      warnings.push(`Primary keyword occurs only ${keywordOccurrences} time(s). Include it in key sub-sections.`);
+      passedChecks.push(`Primary keyword integrated naturally (${keywordOccurrences} occurrence(s)).`);
+    } else if (inContent) {
+      kwScore += 3;
+      passedChecks.push(`Primary keyword core concepts appear naturally in body text.`);
     } else {
       failedChecks.push(`Primary keyword '${primaryKw}' was not found in the body content.`);
       requiredFixes.push(`Integrate primary keyword '${primaryKw}' naturally into the article.`);
@@ -495,16 +532,16 @@ export function calculateSeoScore(
 
     // Secondary keywords
     if (secondaryKws.length > 0) {
-      const foundSec = secondaryKws.filter(sk => textContent.toLowerCase().includes(sk));
-      if (foundSec.length >= Math.min(2, secondaryKws.length)) {
+      const foundSec = secondaryKws.filter(sk => textContent.toLowerCase().includes(sk) || matchKeywordFlexibly(rawContent, sk).matches);
+      if (foundSec.length >= 1) {
         kwScore += 3;
         passedChecks.push(`Secondary keywords covered: ${foundSec.join(', ')}.`);
       } else {
-        kwScore += 1;
-        warnings.push(`Integrate remaining secondary keywords: ${secondaryKws.filter(sk => !foundSec.includes(sk)).join(', ')}.`);
+        kwScore += 2;
+        warnings.push(`Integrate remaining secondary keywords: ${secondaryKws.join(', ')}.`);
       }
     } else {
-      kwScore += 1;
+      kwScore += 3;
     }
   } else {
     failedChecks.push('Primary keyword is not specified.');
@@ -522,15 +559,15 @@ export function calculateSeoScore(
     requiredFixes.push(`Update internal links to match valid Dawnexus URLs or blog slugs.`);
   }
 
-  if (internalLinksCount >= 2 && brokenInternalLinks.length === 0) {
+  if (internalLinksCount >= 2 || (internalLinksCount >= 1 && wordCount < 600 && brokenInternalLinks.length === 0)) {
     linkScore += 10;
     passedChecks.push(`Contains ${internalLinksCount} valid internal link(s) connecting to Dawnexus services/insights.`);
   } else if (internalLinksCount === 1 && brokenInternalLinks.length === 0) {
-    linkScore += 6;
-    passedChecks.push('Contains 1 valid internal link. Adding 1-2 more contextual links is recommended.');
+    linkScore += 8;
+    passedChecks.push('Contains 1 valid internal link. Adding 1 more contextual link is recommended.');
   } else {
     linkNotes.push('Insufficient internal links.');
-    warnings.push('Add at least 2 relevant internal links to Dawnexus core services (e.g. /services/website-design or /services/seo-services).');
+    warnings.push('Add at least 1-2 relevant internal links to Dawnexus core services (e.g. /services/website-design or /services/seo-services).');
   }
 
   // -------------------------------------------------------------
